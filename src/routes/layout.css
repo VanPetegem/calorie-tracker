@@ -1,1 +1,129 @@
 @import 'tailwindcss';
+
+/*
+ * Color tokens per theme. Values must match src/lib/design/tokens.ts
+ * (tokens.spec.ts enforces this). Dark is also the fallback when no
+ * data-theme attribute has been set yet.
+ */
+:root,
+:root[data-theme='dark'] {
+	color-scheme: dark;
+	--kc-bg: #09090b;
+	--kc-surface: #131316;
+	--kc-surface-raised: #1c1c21;
+	--kc-border: #27272a;
+	--kc-text: #fafafa;
+	--kc-text-muted: #a1a1aa;
+	--kc-brand: #818cf8;
+	--kc-brand-solid: #4f46e5;
+	--kc-on-brand: #ffffff;
+	--kc-success: #22c55e;
+	--kc-warning: #f59e0b;
+	--kc-danger: #ef4444;
+	--kc-protein: #38bdf8;
+	--kc-carbs: #fbbf24;
+	--kc-fat: #f472b6;
+}
+
+:root[data-theme='light'] {
+	color-scheme: light;
+	--kc-bg: #fafafa;
+	--kc-surface: #ffffff;
+	--kc-surface-raised: #ffffff;
+	--kc-border: #e4e4e7;
+	--kc-text: #09090b;
+	--kc-text-muted: #52525b;
+	--kc-brand: #4f46e5;
+	--kc-brand-solid: #4f46e5;
+	--kc-on-brand: #ffffff;
+	--kc-success: #15803d;
+	--kc-warning: #b45309;
+	--kc-danger: #dc2626;
+	--kc-protein: #0369a1;
+	--kc-carbs: #b45309;
+	--kc-fat: #be185d;
+}
+
+/* Tailwind default color, type, radius and shadow scales are removed; only the tokens below exist. */
+@theme inline {
+	--color-*: initial;
+	--text-*: initial;
+	--radius-*: initial;
+	--shadow-*: initial;
+
+	--color-bg: var(--kc-bg);
+	--color-surface: var(--kc-surface);
+	--color-surface-raised: var(--kc-surface-raised);
+	--color-border: var(--kc-border);
+	--color-text: var(--kc-text);
+	--color-text-muted: var(--kc-text-muted);
+	--color-brand: var(--kc-brand);
+	--color-brand-solid: var(--kc-brand-solid);
+	--color-on-brand: var(--kc-on-brand);
+	--color-success: var(--kc-success);
+	--color-warning: var(--kc-warning);
+	--color-danger: var(--kc-danger);
+	--color-protein: var(--kc-protein);
+	--color-carbs: var(--kc-carbs);
+	--color-fat: var(--kc-fat);
+
+	--font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+
+	/* Type scale: 11, 13, 15, 18, 22, 28, 36, 48 px, in rem so user font size settings apply. */
+	--text-xs: 0.6875rem;
+	--text-xs--line-height: 1.2;
+	--text-sm: 0.8125rem;
+	--text-sm--line-height: 1.2;
+	--text-base: 0.9375rem;
+	--text-base--line-height: 1.5;
+	--text-lg: 1.125rem;
+	--text-lg--line-height: 1.5;
+	--text-2xl: 1.375rem;
+	--text-2xl--line-height: 1.2;
+	--text-3xl: 1.75rem;
+	--text-3xl--line-height: 1.2;
+	--text-4xl: 2.25rem;
+	--text-4xl--line-height: 1.2;
+	--text-5xl: 3rem;
+	--text-5xl--line-height: 1.2;
+
+	--radius-sm: 6px;
+	--radius-md: 10px;
+	--radius-lg: 16px;
+	--radius-full: 9999px;
+
+	/* Layered: ambient plus direct light. */
+	--shadow-sm: 0 1px 2px rgb(0 0 0 / 0.08), 0 1px 1px rgb(0 0 0 / 0.06);
+	--shadow-md: 0 2px 4px rgb(0 0 0 / 0.08), 0 4px 12px rgb(0 0 0 / 0.1);
+	--shadow-lg: 0 4px 8px rgb(0 0 0 / 0.1), 0 12px 32px rgb(0 0 0 / 0.16);
+
+	--ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+	--ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+	--ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+@layer base {
+	html {
+		color-scheme: light dark;
+	}
+
+	body {
+		@apply bg-bg font-sans text-base text-text;
+		font-variant-numeric: tabular-nums;
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	:focus-visible {
+		outline: 2px solid var(--kc-brand);
+		outline-offset: 2px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		transition-duration: 0ms !important;
+		animation-duration: 0ms !important;
+	}
+}
