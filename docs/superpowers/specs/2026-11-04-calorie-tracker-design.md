@@ -202,8 +202,8 @@ designmotionhq patterns. Documented on a `/design` route that renders every comp
 ## 11. Repository
 
 Public GitHub repo `calorie-tracker`. `.env` is gitignored (secrets: Better Auth secret, Cloudflare
-token, OFF contact), `.env.example` documents keys. `AGENTS.md` holds agent instructions; `CLAUDE.md`
-references it. `docs/` contains this spec, `docs/decisions.md` (living decision log); `docs/architecture.md` is added in phase 1.
+token, OFF contact), `.env.example` documents keys. `AGENTS.md` is the single file for agent
+instructions (no `CLAUDE.md`). `docs/` contains this spec, `docs/decisions.md` (living decision log); `docs/architecture.md` is added in phase 1.
 
 ## 12. Build phases
 
