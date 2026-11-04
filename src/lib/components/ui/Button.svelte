@@ -8,7 +8,7 @@
 		size?: 'sm' | 'md' | 'lg';
 		loading?: boolean;
 		disabled?: boolean;
-		/** Why the button is disabled. Read out through aria-describedby and shown while focused. */
+		/** Why the button is disabled. Read out through aria-describedby and shown while focused and for a few seconds after a tap. */
 		disabledReason?: string;
 		href?: string;
 		type?: 'button' | 'submit' | 'reset';
@@ -34,6 +34,10 @@
 
 	const hintId = $props.id();
 	let focused = $state(false);
+	// iOS Safari does not focus a button on tap, so a tap on a disabled button reveals the reason too.
+	let tapped = $state(false);
+	let tappedTimer: ReturnType<typeof setTimeout> | undefined;
+	const REVEAL_MS = 4000;
 
 	const inactive = $derived(disabled || loading);
 	const hint = $derived(disabled ? disabledReason : undefined);
@@ -74,9 +78,22 @@
 	]);
 	const iconSize = $derived(size === 'sm' ? 16 : 20);
 
+	function reveal() {
+		tapped = true;
+		clearTimeout(tappedTimer);
+		tappedTimer = setTimeout(() => (tapped = false), REVEAL_MS);
+	}
+
+	function hide() {
+		focused = false;
+		tapped = false;
+		clearTimeout(tappedTimer);
+	}
+
 	function handleClick(event: MouseEvent) {
 		if (inactive) {
 			event.preventDefault();
+			if (hint) reveal();
 			return;
 		}
 		onclick?.(event);
@@ -109,7 +126,7 @@
 			aria-describedby={hint ? hintId : undefined}
 			onclick={handleClick}
 			onfocus={() => (focused = true)}
-			onblur={() => (focused = false)}
+			onblur={hide}
 		>
 			{@render face()}
 		</a>
@@ -123,7 +140,7 @@
 			aria-describedby={hint ? hintId : undefined}
 			onclick={handleClick}
 			onfocus={() => (focused = true)}
-			onblur={() => (focused = false)}
+			onblur={hide}
 		>
 			{@render face()}
 		</button>
@@ -131,7 +148,7 @@
 	{#if hint}
 		<span
 			id={hintId}
-			class={focused
+			class={focused || tapped
 				? 'absolute top-full left-0 z-10 mt-1 text-xs whitespace-nowrap text-text-muted'
 				: 'sr-only'}
 		>
