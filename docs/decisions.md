@@ -6,6 +6,8 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 - **Hosting on Cloudflare Workers + D1 (free plan).** Single user load is far below free limits; keeps
   the overloaded Hetzner box out of the picture.
+- **SvelteKit 3 from the start.** Stable since October 2026 (3.1.1); adapter-cloudflare 8 and Better Auth
+  support it, so no later 2 to 3 migration.
 - **SvelteKit + Svelte 5 + Tailwind 4 + Drizzle.** Known stack, light runtime on phones; React offers
   no advantage here.
 - **Better Auth with passkeys, not Cloudflare Access.** Access logs in on an external domain, which

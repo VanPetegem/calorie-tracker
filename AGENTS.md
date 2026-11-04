@@ -9,7 +9,7 @@ Personal calorie tracker for weight gain. SvelteKit PWA on Cloudflare Workers + 
 
 ## Stack
 
-SvelteKit 2, Svelte 5 runes, TypeScript strict, Tailwind CSS 4, Drizzle ORM on Cloudflare D1, Better
+SvelteKit 3, Svelte 5 runes, Vite 8, TypeScript 6 strict, Tailwind CSS 4, Drizzle ORM on Cloudflare D1, Better
 Auth (passkeys), Vitest, Playwright. Package manager: pnpm.
 
 ## Rules

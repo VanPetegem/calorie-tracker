@@ -1,6 +1,6 @@
 # Calorie Tracker: Design Spec
 
-Date: 2026-11-04. Status: awaiting review.
+Date: 2026-11-04. Status: approved.
 
 ## 1. Intent
 
@@ -21,10 +21,10 @@ social features, multiple users, full offline logging.
 
 | Concern  | Decision |
 | -------- | -------- |
-| App      | SvelteKit 2, Svelte 5 (runes), TypeScript strict |
+| App      | SvelteKit 3.1, Svelte 5 (runes), Vite 8, TypeScript 6 strict, Node >= 22.17 |
 | Styling  | Tailwind CSS 4 with semantic tokens in `@theme` |
 | Data     | Cloudflare D1 (SQLite) via Drizzle ORM; migrations with drizzle-kit, applied with wrangler |
-| Hosting  | Cloudflare Workers (adapter-cloudflare, static assets), free plan |
+| Hosting  | Cloudflare Workers (adapter-cloudflare 8, static assets), free plan |
 | Domain   | `kcal.avp.software` (custom domain on the Worker) |
 | Auth     | Better Auth with passkey plugin, 1 year sessions, sign up closed once the account exists |
 | Scanner  | `barcode-detector` (zxing-wasm polyfill), formats ean_13, ean_8, upc_a, upc_e |
