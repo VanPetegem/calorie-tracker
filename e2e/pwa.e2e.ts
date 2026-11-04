@@ -67,6 +67,52 @@ test.describe('installable PWA', () => {
 		await context.setOffline(false);
 	});
 
+	test('a page visited online while controlled is available offline', async ({ page, context }) => {
+		await page.goto('/');
+		await page.evaluate(() => navigator.serviceWorker.ready);
+		await expect
+			.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null))
+			.toBe(true);
+		// `/weight` is not precached, so only the navigation handler can have stored it.
+		await page.goto('/weight');
+		await expect(page.getByRole('heading', { level: 1, name: 'Weight' })).toBeVisible();
+		await expect
+			.poll(() =>
+				page.evaluate(async () => {
+					for (const name of await caches.keys()) {
+						if (await (await caches.open(name)).match('/weight')) return true;
+					}
+					return false;
+				})
+			)
+			.toBe(true);
+
+		await context.setOffline(true);
+		await page.reload();
+		await expect(page.getByRole('heading', { level: 1, name: 'Weight' })).toBeVisible();
+		await context.setOffline(false);
+	});
+
+	test('a page never visited shows an offline notice, not the Today page', async ({
+		page,
+		context
+	}) => {
+		await page.goto('/');
+		await page.evaluate(() => navigator.serviceWorker.ready);
+		await expect
+			.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null))
+			.toBe(true);
+
+		await context.setOffline(true);
+		const response = await page.goto('/recipes');
+		expect(response?.status()).toBe(503);
+		await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+			'This page is unavailable offline'
+		);
+		await expect(page.getByRole('heading', { name: 'Today' })).toHaveCount(0);
+		await context.setOffline(false);
+	});
+
 	test('the worker never caches api calls or non GET requests', async ({ page }) => {
 		await page.goto('/');
 		await page.evaluate(() => navigator.serviceWorker.ready);

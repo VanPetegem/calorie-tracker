@@ -7,7 +7,8 @@ import { assets, immutable } from '$app/manifest';
  * connection and to speed up repeat loads:
  *  - Build files and static files are precached and served cache first.
  *  - Page navigations go network first. Each good response is cached so the page can be reopened offline;
- *    when the network fails, that URL's cached page is used, then the cached `/`.
+ *    when the network fails, that URL's cached page is used; only `/` falls back to the cached home page, any
+ *    other URL gets a small 503 "unavailable offline" page.
  *  - `/api/*` and anything that is not a same origin GET is never touched.
  */
 
@@ -72,12 +73,24 @@ async function networkFirst(request: Request, event: ExtendableEvent) {
 		if (cacheable(response)) event.waitUntil(cache.put(request, response.clone()));
 		return response;
 	} catch {
-		return (
-			(await cache.match(request, { ignoreVary: true })) ??
-			(await cache.match('/', { ignoreVary: true })) ??
-			Response.error()
-		);
+		const cached = await cache.match(request, { ignoreVary: true });
+		if (cached) return cached;
+		// Only the home page may fall back to the cached `/`: SvelteKit would hydrate Today's content under any
+		// other path. Everything else gets a plain "unavailable offline" page.
+		if (new URL(request.url).pathname === '/') {
+			const home = await cache.match('/', { ignoreVary: true });
+			if (home) return home;
+		}
+		return offlinePage();
 	}
+}
+
+function offlinePage() {
+	const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>Offline · kcal</title></head><body style="font-family: system-ui, sans-serif; padding: 2rem; max-width: 32rem; margin: 0 auto"><h1 style="font-size: 1.375rem">This page is unavailable offline</h1><p>Reconnect and try again, or <a href="/">open Today</a>.</p></body></html>`;
+	return new Response(html, {
+		status: 503,
+		headers: { 'content-type': 'text/html; charset=utf-8' }
+	});
 }
 
 async function cacheFirst(request: Request, pathname: string) {
