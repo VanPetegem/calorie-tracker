@@ -24,6 +24,7 @@
 	--kc-protein: #38bdf8;
 	--kc-carbs: #fbbf24;
 	--kc-fat: #f472b6;
+	--kc-scrim: #000000b3;
 }
 
 :root[data-theme='light'] {
@@ -44,6 +45,7 @@
 	--kc-protein: #0369a1;
 	--kc-carbs: #b45309;
 	--kc-fat: #be185d;
+	--kc-scrim: #09090b73;
 }
 
 /* Width transition for progress fills; Tailwind has no built-in utility for it. */
@@ -76,6 +78,7 @@
 	--color-protein: var(--kc-protein);
 	--color-carbs: var(--kc-carbs);
 	--color-fat: var(--kc-fat);
+	--color-scrim: var(--kc-scrim);
 
 	--font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 

@@ -18,7 +18,8 @@ export type ColorToken =
 	| 'danger'
 	| 'protein'
 	| 'carbs'
-	| 'fat';
+	| 'fat'
+	| 'scrim';
 
 export const themes: Record<'dark' | 'light', Record<ColorToken, string>> = {
 	dark: {
@@ -37,7 +38,8 @@ export const themes: Record<'dark' | 'light', Record<ColorToken, string>> = {
 		danger: '#EF4444',
 		protein: '#38BDF8',
 		carbs: '#FBBF24',
-		fat: '#F472B6'
+		fat: '#F472B6',
+		scrim: '#000000B3'
 	},
 	light: {
 		bg: '#FAFAFA',
@@ -55,6 +57,7 @@ export const themes: Record<'dark' | 'light', Record<ColorToken, string>> = {
 		danger: '#DC2626',
 		protein: '#0369A1',
 		carbs: '#B45309',
-		fat: '#BE185D'
+		fat: '#BE185D',
+		scrim: '#09090B73'
 	}
 };

@@ -79,6 +79,7 @@ test('Sheet is a bottom sheet on a phone and a centered dialog on a wide screen'
 	const dialog = page.getByRole('dialog', { name: 'Delete this entry?' });
 	await expect(dialog).toBeVisible();
 	await expect(dialog).toHaveCSS('transform', 'none');
+	await expect(page.locator('html')).toHaveCSS('overflow', 'hidden');
 	const box = (await dialog.boundingBox())!;
 	const viewport = page.viewportSize()!;
 	if (viewport.width < 640) {

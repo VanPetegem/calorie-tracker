@@ -3,6 +3,15 @@
 	import X from '@lucide/svelte/icons/x';
 	import IconButton from './IconButton.svelte';
 
+	/**
+	 * A modal sheet on a native `<dialog>`: a bottom sheet below 640 px, a centered dialog above.
+	 *
+	 * Focus: the element focused when the sheet opens is remembered and focused again after it closes, if it is still
+	 * in the page. Safari does not focus a button on click or tap, so after a touch open there is no opener to
+	 * restore and focus falls back to the browser default (the page body).
+	 * Scroll: the page behind is locked with `overflow: hidden` on the root while a sheet is modal, because
+	 * `overscroll-behavior` alone does not stop iOS scrolling the page behind a sheet that does not overflow.
+	 */
 	type Props = {
 		open: boolean;
 		title: string;
@@ -25,6 +34,7 @@
 
 	let closing = $state(false);
 	let pressedOutside = false;
+	let opener: HTMLElement | null = null;
 
 	// `open` is the single source of truth. Every way of closing (Escape, backdrop, close button, parent) sets it to
 	// false, and this attachment, which reruns when `open` changes, plays the exit transition before the native close.
@@ -35,7 +45,10 @@
 
 	function show(el: HTMLDialogElement) {
 		closing = false;
-		if (!el.open) el.showModal();
+		if (el.open) return;
+		const active = document.activeElement;
+		opener = active instanceof HTMLElement && active !== document.body ? active : null;
+		el.showModal();
 	}
 
 	async function hide(el: HTMLDialogElement) {
@@ -73,6 +86,9 @@
 	function handleClose() {
 		closing = false;
 		open = false;
+		// The browser restores focus itself, but not in every case (see the doc comment on Props).
+		if (opener?.isConnected) opener.focus();
+		opener = null;
 		onclose?.();
 	}
 
@@ -102,6 +118,7 @@
 	onclose={handleClose}
 	onpointerdown={handlePointerDown}
 	onclick={handleClick}
+	data-sheet
 	class="sheet rounded-t-lg border-t border-border bg-surface-raised text-text shadow-lg duration-300 ease-out data-closing:duration-200 data-closing:ease-in sm:rounded-lg sm:border"
 >
 	<div
@@ -136,6 +153,12 @@
 	 * @starting-style. Durations and easings come from the utilities on the element: 300 ms ease-out in, 200 ms
 	 * ease-in out. The global reduced motion rule sets them to 0 ms.
 	 */
+	/* Page scroll lock. Global because the rule targets the root, which this component does not render. */
+	:global(html:has(dialog[data-sheet]:modal)) {
+		overflow: hidden;
+		scrollbar-gutter: stable;
+	}
+
 	.sheet {
 		width: 100%;
 		max-width: none;
@@ -164,17 +187,17 @@
 	.sheet::backdrop {
 		overflow: hidden;
 		overscroll-behavior: contain;
-		background-color: rgb(0 0 0 / 0);
+		background-color: transparent;
 		transition-property: background-color;
 		transition-duration: inherit;
 		transition-timing-function: inherit;
 	}
 
 	.sheet:modal:not([data-closing])::backdrop {
-		background-color: rgb(0 0 0 / 0.55);
+		background-color: var(--kc-scrim);
 
 		@starting-style {
-			background-color: rgb(0 0 0 / 0);
+			background-color: transparent;
 		}
 	}
 
