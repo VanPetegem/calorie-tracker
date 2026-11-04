@@ -28,6 +28,8 @@
 		type ThemePreference
 	} from '#lib/design/theme.ts';
 	import { themes, type ColorToken } from '#lib/design/tokens.ts';
+	import Sidebar from '#lib/components/shell/Sidebar.svelte';
+	import TabBar from '#lib/components/shell/TabBar.svelte';
 	import Section from './Section.svelte';
 
 	const colorTokens = Object.keys(themes.dark) as ColorToken[];
@@ -123,7 +125,7 @@
 	<title>Design system · kcal</title>
 </svelte:head>
 
-<main class="mx-auto flex max-w-3xl flex-col gap-14 px-4 py-8 sm:px-6">
+<div class="flex flex-col gap-14 pb-8">
 	<header class="flex flex-col gap-4">
 		<div class="flex flex-col gap-1">
 			<h1 class="text-4xl font-semibold tracking-tight text-text">Design system</h1>
@@ -534,4 +536,25 @@
 			</div>
 		</div>
 	</Section>
-</main>
+
+	<Section
+		name="TabBar"
+		description="Primary navigation below 1024 px, fixed to the bottom and padded by the home indicator inset. Four tabs, each at least 44 px tall. The active tab uses the brand color, a top marker and aria-current."
+	>
+		<div class="flex flex-col gap-3">
+			<div class="overflow-hidden rounded-lg border border-border">
+				<TabBar pathname="/" label="TabBar preview, Today active" preview />
+			</div>
+			<div class="overflow-hidden rounded-lg border border-border">
+				<TabBar pathname="/weight" label="TabBar preview, Weight active" preview />
+			</div>
+		</div>
+	</Section>
+
+	<Section
+		name="Sidebar"
+		description="Replaces the tab bar from 1024 px. Fixed to the left edge, 240 px wide. Items are 44 px tall; the active one has a raised background and the brand color."
+	>
+		<Sidebar pathname="/recipes" label="Sidebar preview, Recipes active" preview />
+	</Section>
+</div>

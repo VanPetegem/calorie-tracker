@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { componentNames } from '../src/lib/components/ui/names';
+import { gotoHydrated } from './helpers';
 
 test('/design has a section heading for every component', async ({ page }) => {
-	await page.goto('/design');
+	await gotoHydrated(page, '/design');
 	for (const name of componentNames) {
 		await expect(page.locator(`h2#${name}`), name).toBeVisible();
 		await expect(page.locator(`h2#${name}`)).toHaveText(name);
@@ -10,7 +11,7 @@ test('/design has a section heading for every component', async ({ page }) => {
 });
 
 test('every visible button and radio is at least 44 px tall', async ({ page }) => {
-	await page.goto('/design');
+	await gotoHydrated(page, '/design');
 	const targets = page.locator('button:visible, [role="radio"]:visible');
 	expect(await targets.count()).toBeGreaterThan(10);
 	const heights = await targets.evaluateAll((els) =>
@@ -25,7 +26,7 @@ test('every visible button and radio is at least 44 px tall', async ({ page }) =
 
 test('the theme control switches the theme and stores the preference', async ({ page }) => {
 	await page.emulateMedia({ colorScheme: 'dark' });
-	await page.goto('/design');
+	await gotoHydrated(page, '/design');
 	await page.getByRole('radio', { name: 'Light' }).click();
 	await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 	expect(await page.evaluate(() => localStorage.getItem('kcal-theme'))).toBe('light');
@@ -34,7 +35,7 @@ test('the theme control switches the theme and stores the preference', async ({ 
 });
 
 test('the page does not scroll sideways', async ({ page }) => {
-	await page.goto('/design');
+	await gotoHydrated(page, '/design');
 	const overflow = await page.evaluate(
 		() => document.documentElement.scrollWidth - document.documentElement.clientWidth
 	);
@@ -42,7 +43,7 @@ test('the page does not scroll sideways', async ({ page }) => {
 });
 
 test('NumberInput accepts a decimal comma on the page', async ({ page }) => {
-	await page.goto('/design');
+	await gotoHydrated(page, '/design');
 	const input = page.getByLabel('Body weight');
 	await input.fill('72,5');
 	await input.blur();
@@ -50,7 +51,7 @@ test('NumberInput accepts a decimal comma on the page', async ({ page }) => {
 });
 
 test('Sheet opens, closes on Escape and returns focus to its trigger', async ({ page }) => {
-	await page.goto('/design');
+	await gotoHydrated(page, '/design');
 	const trigger = page.getByRole('button', { name: 'Open confirmation' });
 	// Open from the keyboard: Safari does not focus a button on click, so only a focused opener can get focus back.
 	await trigger.focus();
@@ -63,7 +64,7 @@ test('Sheet opens, closes on Escape and returns focus to its trigger', async ({ 
 });
 
 test('Sheet closes when the backdrop is clicked', async ({ page }) => {
-	await page.goto('/design');
+	await gotoHydrated(page, '/design');
 	await page.getByRole('button', { name: 'Open confirmation' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Delete this entry?' });
 	await expect(dialog).toBeVisible();
@@ -74,7 +75,7 @@ test('Sheet closes when the backdrop is clicked', async ({ page }) => {
 test('Sheet is a bottom sheet on a phone and a centered dialog on a wide screen', async ({
 	page
 }) => {
-	await page.goto('/design');
+	await gotoHydrated(page, '/design');
 	await page.getByRole('button', { name: 'Open confirmation' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Delete this entry?' });
 	await expect(dialog).toBeVisible();
@@ -92,7 +93,7 @@ test('Sheet is a bottom sheet on a phone and a centered dialog on a wide screen'
 });
 
 test('deleting a meal offers Undo, which restores it', async ({ page }) => {
-	await page.goto('/design');
+	await gotoHydrated(page, '/design');
 	await page.getByRole('button', { name: 'Delete Protein shake' }).click();
 	await expect(page.getByText('Deleted Protein shake')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Delete Protein shake' })).toHaveCount(0);

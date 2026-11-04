@@ -4,6 +4,14 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-04
 
+- **Service worker caches same origin GET navigations, never `/api/*` or non GET.** `/` is server
+  rendered, so it is not in the build or static file lists; caching each good navigation response lets the
+  installed app open offline. Redirected responses are never cached (a redirected response cannot answer a
+  navigation). The worker claims clients on activate but does not skip waiting, so an update takes over
+  once the old app is fully closed.
+- **Service worker lives in `src/service-worker/` with its own tsconfig.** SvelteKit 3 recommends this so
+  the worker gets WebWorker types instead of DOM types.
+
 - **Barcode lookups are global, never filtered by country.** 5 of 5 Lidl Switzerland test products were
   in Open Food Facts with full macros, but 4 were tagged only for other countries.
 
