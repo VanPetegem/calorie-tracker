@@ -15,5 +15,7 @@ export const componentNames = [
 	'MacroBar',
 	'Skeleton',
 	'EmptyState',
-	'ListItem'
+	'ListItem',
+	'Sheet',
+	'Toaster'
 ] as const;

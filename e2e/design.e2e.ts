@@ -48,3 +48,54 @@ test('NumberInput accepts a decimal comma on the page', async ({ page }) => {
 	await input.blur();
 	await expect(page.getByText('Value: 72.5')).toBeVisible();
 });
+
+test('Sheet opens, closes on Escape and returns focus to its trigger', async ({ page }) => {
+	await page.goto('/design');
+	const trigger = page.getByRole('button', { name: 'Open confirmation' });
+	// Open from the keyboard: Safari does not focus a button on click, so only a focused opener can get focus back.
+	await trigger.focus();
+	await page.keyboard.press('Enter');
+	const dialog = page.getByRole('dialog', { name: 'Delete this entry?' });
+	await expect(dialog).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(dialog).toBeHidden();
+	await expect(trigger).toBeFocused();
+});
+
+test('Sheet closes when the backdrop is clicked', async ({ page }) => {
+	await page.goto('/design');
+	await page.getByRole('button', { name: 'Open confirmation' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Delete this entry?' });
+	await expect(dialog).toBeVisible();
+	await page.mouse.click(4, 4);
+	await expect(dialog).toBeHidden();
+});
+
+test('Sheet is a bottom sheet on a phone and a centered dialog on a wide screen', async ({
+	page
+}) => {
+	await page.goto('/design');
+	await page.getByRole('button', { name: 'Open confirmation' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Delete this entry?' });
+	await expect(dialog).toBeVisible();
+	await expect(dialog).toHaveCSS('transform', 'none');
+	const box = (await dialog.boundingBox())!;
+	const viewport = page.viewportSize()!;
+	if (viewport.width < 640) {
+		expect(box.width).toBeCloseTo(viewport.width, 0);
+		expect(box.y + box.height).toBeCloseTo(viewport.height, 0);
+	} else {
+		expect(box.width).toBeLessThanOrEqual(480);
+		expect(box.x + box.width / 2).toBeCloseTo(viewport.width / 2, 0);
+	}
+});
+
+test('deleting a meal offers Undo, which restores it', async ({ page }) => {
+	await page.goto('/design');
+	await page.getByRole('button', { name: 'Delete Protein shake' }).click();
+	await expect(page.getByText('Deleted Protein shake')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Delete Protein shake' })).toHaveCount(0);
+	await page.getByRole('button', { name: 'Undo' }).click();
+	await expect(page.getByRole('button', { name: 'Delete Protein shake' })).toBeVisible();
+	await expect(page.getByText('Deleted Protein shake')).toBeHidden();
+});

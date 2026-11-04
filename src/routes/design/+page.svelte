@@ -18,8 +18,10 @@
 		NumberInput,
 		ProgressBar,
 		SegmentedControl,
+		Sheet,
 		Skeleton
 	} from '#lib/components/ui/index.ts';
+	import { toasts, withUndo } from '#lib/stores/toasts.svelte.ts';
 	import {
 		getThemePreference,
 		setThemePreference,
@@ -84,6 +86,32 @@
 	let parentError = $state<number | null>(null);
 	let clicks = $state(0);
 	let loading = $state(false);
+
+	let sheetOpen = $state(false);
+	let longSheetOpen = $state(false);
+
+	const initialMeals = [
+		{ id: 'oats', name: 'Oats with banana', kcal: 480 },
+		{ id: 'rice', name: 'Chicken and rice', kcal: 720 },
+		{ id: 'shake', name: 'Protein shake', kcal: 310 }
+	];
+	let meals = $state(initialMeals);
+
+	function deleteMeal(id: string) {
+		const index = meals.findIndex((meal) => meal.id === id);
+		const meal = meals[index];
+		if (!meal) return;
+		withUndo({
+			message: `Deleted ${meal.name}`,
+			apply: () => (meals = meals.filter((m) => m.id !== id)),
+			revert: () => {
+				// Put the meal back in its original position.
+				const next = [...meals];
+				next.splice(index, 0, meal);
+				meals = next;
+			}
+		});
+	}
 
 	function simulateSave() {
 		loading = true;
@@ -397,6 +425,113 @@
 					<span class="text-base text-text">420 kcal</span>
 				{/snippet}
 			</ListItem>
+		</div>
+	</Section>
+
+	<Section
+		name="Sheet"
+		description="A bottom sheet below 640 px and a centered dialog above. Escape, a tap on the backdrop or the close button dismisses it."
+	>
+		<div class="flex flex-wrap items-center gap-3">
+			<Button variant="secondary" onclick={() => (sheetOpen = true)}>Open confirmation</Button>
+			<Button variant="secondary" onclick={() => (longSheetOpen = true)}>Open long content</Button>
+		</div>
+		<Sheet
+			bind:open={sheetOpen}
+			title="Delete this entry?"
+			description="It will be removed from today. You can undo it for a few seconds."
+		>
+			<p class="text-base text-text">Oats with banana, 480 kcal</p>
+			{#snippet footer()}
+				<Button variant="secondary" onclick={() => (sheetOpen = false)}>Keep it</Button>
+				<Button
+					variant="destructive"
+					onclick={() => {
+						sheetOpen = false;
+						toasts.show({ message: 'Entry deleted', tone: 'success' });
+					}}
+				>
+					Delete
+				</Button>
+			{/snippet}
+		</Sheet>
+		<Sheet
+			bind:open={longSheetOpen}
+			title="Long content"
+			description="The body scrolls, the header and footer stay put."
+		>
+			<ul class="flex flex-col gap-3">
+				{#each Array.from({ length: 24 }, (_, i) => i + 1) as n (n)}
+					<li class="rounded-md border border-border bg-surface p-3 text-base text-text">
+						Row {n}
+					</li>
+				{/each}
+			</ul>
+			{#snippet footer()}
+				<Button onclick={() => (longSheetOpen = false)}>Done</Button>
+			{/snippet}
+		</Sheet>
+	</Section>
+
+	<Section
+		name="Toaster"
+		description="At most three toasts, each gone after five seconds. A toast with an action stays at least five seconds."
+	>
+		<div class="flex flex-col gap-5">
+			<div class="flex flex-col gap-2">
+				<span class="text-sm text-text-muted">Delete with undo</span>
+				{#if meals.length > 0}
+					<div
+						class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface"
+					>
+						{#each meals as meal (meal.id)}
+							<ListItem title={meal.name} subtitle="{meal.kcal} kcal">
+								{#snippet trailing()}
+									<IconButton
+										label="Delete {meal.name}"
+										icon={Trash2}
+										onclick={() => deleteMeal(meal.id)}
+									/>
+								{/snippet}
+							</ListItem>
+						{/each}
+					</div>
+				{:else}
+					<Card>
+						<EmptyState
+							icon={UtensilsCrossed}
+							title="All meals deleted"
+							body="Use Undo in the toast to bring the last one back, or reset the list."
+						/>
+					</Card>
+				{/if}
+				<div>
+					<Button variant="secondary" size="sm" onclick={() => (meals = initialMeals)}>
+						Reset list
+					</Button>
+				</div>
+			</div>
+
+			<div class="flex flex-col gap-2">
+				<span class="text-sm text-text-muted">Tones</span>
+				<div class="flex flex-wrap items-center gap-3">
+					<Button variant="secondary" onclick={() => toasts.show({ message: 'Weight saved' })}>
+						Neutral
+					</Button>
+					<Button
+						variant="secondary"
+						onclick={() => toasts.show({ message: 'Meal logged', tone: 'success' })}
+					>
+						Success
+					</Button>
+					<Button
+						variant="secondary"
+						onclick={() => toasts.show({ message: 'Could not save. Try again.', tone: 'danger' })}
+					>
+						Danger
+					</Button>
+				</div>
+			</div>
 		</div>
 	</Section>
 </main>

@@ -10,5 +10,7 @@ export { default as MacroBar } from './MacroBar.svelte';
 export { default as Skeleton } from './Skeleton.svelte';
 export { default as EmptyState } from './EmptyState.svelte';
 export { default as ListItem } from './ListItem.svelte';
+export { default as Sheet } from './Sheet.svelte';
+export { default as Toaster } from './Toaster.svelte';
 export type { IconComponent } from './types';
 export { componentNames } from './names';
