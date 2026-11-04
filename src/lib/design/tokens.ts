@@ -7,6 +7,7 @@ export type ColorToken =
 	| 'surface'
 	| 'surface-raised'
 	| 'border'
+	| 'border-strong'
 	| 'text'
 	| 'text-muted'
 	| 'brand'
@@ -25,6 +26,7 @@ export const themes: Record<'dark' | 'light', Record<ColorToken, string>> = {
 		surface: '#131316',
 		'surface-raised': '#1C1C21',
 		border: '#27272A',
+		'border-strong': '#71717A',
 		text: '#FAFAFA',
 		'text-muted': '#A1A1AA',
 		brand: '#818CF8',
@@ -42,6 +44,7 @@ export const themes: Record<'dark' | 'light', Record<ColorToken, string>> = {
 		surface: '#FFFFFF',
 		'surface-raised': '#FFFFFF',
 		border: '#E4E4E7',
+		'border-strong': '#85858F',
 		text: '#09090B',
 		'text-muted': '#52525B',
 		brand: '#4F46E5',

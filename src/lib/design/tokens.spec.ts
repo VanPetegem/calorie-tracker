@@ -35,6 +35,11 @@ describe.each(themeNames)('%s theme', (name) => {
 		expect(contrastRatio(theme[token], theme.surface)).toBeGreaterThanOrEqual(3);
 	});
 
+	// WCAG 1.4.11: the boundary of an input or control must reach 3:1 against what it sits on.
+	it.each(textBackgrounds)('border-strong is at least 3:1 on %s', (bg) => {
+		expect(contrastRatio(theme['border-strong'], theme[bg])).toBeGreaterThanOrEqual(3);
+	});
+
 	it('matches the values in layout.css', () => {
 		// Prettier lowercases hex in CSS, so compare case-insensitively.
 		const block = themeBlock(name).toLowerCase();

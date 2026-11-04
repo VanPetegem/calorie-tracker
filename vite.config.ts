@@ -16,6 +16,9 @@ export default defineConfig({
 			adapter: adapter()
 		})
 	],
+	// Svelte component libraries must not be pre-bundled, or they get a second copy of the Svelte runtime
+	// (seen as "Cannot read properties of undefined (reading 'call')" in browser component tests).
+	optimizeDeps: { exclude: ['@lucide/svelte'] },
 	test: {
 		passWithNoTests: true,
 		expect: { requireAssertions: true },
@@ -29,6 +32,7 @@ export default defineConfig({
 						provider: playwright(),
 						instances: [{ browser: 'chromium', headless: true }]
 					},
+					setupFiles: ['src/vitest-setup-client.ts'],
 					include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
 					exclude: ['src/lib/server/**']
 				}

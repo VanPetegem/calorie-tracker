@@ -12,6 +12,7 @@
 	--kc-surface: #131316;
 	--kc-surface-raised: #1c1c21;
 	--kc-border: #27272a;
+	--kc-border-strong: #71717a;
 	--kc-text: #fafafa;
 	--kc-text-muted: #a1a1aa;
 	--kc-brand: #818cf8;
@@ -31,6 +32,7 @@
 	--kc-surface: #ffffff;
 	--kc-surface-raised: #ffffff;
 	--kc-border: #e4e4e7;
+	--kc-border-strong: #85858f;
 	--kc-text: #09090b;
 	--kc-text-muted: #52525b;
 	--kc-brand: #4f46e5;
@@ -44,6 +46,13 @@
 	--kc-fat: #be185d;
 }
 
+/* Width transition for progress fills; Tailwind has no built-in utility for it. */
+@utility transition-width {
+	transition-property: width;
+	transition-duration: var(--tw-duration, 200ms);
+	transition-timing-function: var(--tw-ease, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
 /* Tailwind default color, type, radius and shadow scales are removed; only the tokens below exist. */
 @theme inline {
 	--color-*: initial;
@@ -55,6 +64,7 @@
 	--color-surface: var(--kc-surface);
 	--color-surface-raised: var(--kc-surface-raised);
 	--color-border: var(--kc-border);
+	--color-border-strong: var(--kc-border-strong);
 	--color-text: var(--kc-text);
 	--color-text-muted: var(--kc-text-muted);
 	--color-brand: var(--kc-brand);
