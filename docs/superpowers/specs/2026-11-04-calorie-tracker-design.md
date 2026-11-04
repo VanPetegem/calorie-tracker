@@ -60,8 +60,9 @@ OFF rules: User-Agent `kcal-avp/<version> (<contact email from env>)`; limits ar
 every hit is stored in `foods` permanently (refresh when older than 180 days on access).
 
 Lidl coverage: OFF holds about 9,700 products tagged Lidl and about 4,000 Milbona products worldwide,
-but only 485 tagged as sold in Switzerland. Barcode lookup is global, so shared EANs still match. Before
-building the scanner, test 10 to 15 real Lidl Switzerland barcodes from the user to measure the hit rate.
+but only 485 tagged as sold in Switzerland. Barcode lookup is global, so shared EANs still match. Test on 2026-11-04 with 5 real Lidl Switzerland
+products (photos decoded with zxing-wasm): 5 of 5 found with full macros, but only 1 tagged Switzerland.
+Therefore lookups must never filter by country.
 
 Barcode miss flow: a bottom sheet opens with the barcode prefilled. The user enters name and kcal,
 protein, carbs, fat (fiber optional) per 100 g, optionally a serving size. Phase 5 adds "photograph
@@ -213,4 +214,3 @@ instructions (no `CLAUDE.md`). `docs/` contains this spec, `docs/decisions.md` (
 4. Weight tracking, targets, adaptive TDEE, onboarding.
 5. Nutrition label photo fallback, OFF contribution, weekly R2 backup.
 
-Open item before phase 2: Lidl barcode hit rate test with 10 to 15 real products.

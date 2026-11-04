@@ -4,6 +4,9 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-04
 
+- **Barcode lookups are global, never filtered by country.** 5 of 5 Lidl Switzerland test products were
+  in Open Food Facts with full macros, but 4 were tagged only for other countries.
+
 - **Hosting on Cloudflare Workers + D1 (free plan).** Single user load is far below free limits; keeps
   the overloaded Hetzner box out of the picture.
 - **SvelteKit 3 from the start.** Stable since October 2026 (3.1.1); adapter-cloudflare 8 and Better Auth
