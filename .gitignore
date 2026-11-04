@@ -38,3 +38,6 @@ design-system-blueprint.pdf
 
 # Data import scratch (large downloads)
 data/raw/
+
+# Claude Code local settings
+.claude/settings.local.json
