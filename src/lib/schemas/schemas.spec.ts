@@ -1,7 +1,13 @@
 import * as v from 'valibot';
 import { describe, expect, it } from 'vitest';
 import { FoodInput } from './food.ts';
-import { EditAmountInput, LogFoodInput, QuickInput } from './log.ts';
+import {
+	EditAmountInput,
+	EditQuickInput,
+	LogFoodInput,
+	QuickInput,
+	RestoreEntryInput
+} from './log.ts';
 import { ManualTargetInput } from './settings.ts';
 
 const foodId = '019a5b2e-8f3c-7d4a-9b1e-2c3d4e5f6a7b';
@@ -88,6 +94,56 @@ describe('EditAmountInput', () => {
 		expect(v.safeParse(EditAmountInput, { id: foodId, amount: 5001, unit: 'ml' }).success).toBe(
 			false
 		);
+	});
+});
+
+describe('EditQuickInput', () => {
+	it('takes the quick fields and an id, without a date', () => {
+		expect(v.parse(EditQuickInput, { id: foodId, kcal: '700', fat: '' })).toEqual({
+			id: foodId,
+			label: null,
+			kcal: 700,
+			protein: null,
+			carbs: null,
+			fat: null
+		});
+		expect(v.safeParse(EditQuickInput, { id: foodId, kcal: 700, date: '2026-11-05' }).success).toBe(
+			false
+		);
+	});
+});
+
+describe('RestoreEntryInput', () => {
+	const quick = {
+		id: foodId,
+		date: '2026-11-05',
+		loggedAt: '2026-11-05T10:30:00.000Z',
+		kind: 'quick',
+		foodId: null,
+		batchId: null,
+		amount: null,
+		unit: null,
+		grams: null,
+		label: 'Restaurant',
+		kcal: 650,
+		protein: 0,
+		carbs: 0,
+		fat: 0,
+		fiber: null
+	};
+	const foodEntry = { ...quick, kind: 'food', foodId, amount: 2, unit: 'serving', grams: 80 };
+
+	it('accepts a deleted quick or food entry as returned', () => {
+		expect(v.safeParse(RestoreEntryInput, quick).success).toBe(true);
+		expect(v.safeParse(RestoreEntryInput, foodEntry).success).toBe(true);
+	});
+
+	it('rejects mixed kinds, negative nutrition and unknown keys', () => {
+		expect(v.safeParse(RestoreEntryInput, { ...quick, foodId }).success).toBe(false);
+		expect(v.safeParse(RestoreEntryInput, { ...foodEntry, grams: null }).success).toBe(false);
+		expect(v.safeParse(RestoreEntryInput, { ...quick, kcal: -1 }).success).toBe(false);
+		expect(v.safeParse(RestoreEntryInput, { ...quick, extra: 1 }).success).toBe(false);
+		expect(v.safeParse(RestoreEntryInput, { ...quick, kind: 'batch' }).success).toBe(false);
 	});
 });
 

@@ -42,3 +42,43 @@ export const QuickInput = v.strictObject({
 });
 
 export type QuickInput = v.InferOutput<typeof QuickInput>;
+
+/** Changes a quick entry's label and nutrition. The entry stays on its day. */
+export const EditQuickInput = v.strictObject({ id, ...v.omit(QuickInput, ['date']).entries });
+
+export type EditQuickInput = v.InferOutput<typeof EditQuickInput>;
+
+const nutrient = v.pipe(v.number(), v.finite(), v.minValue(0));
+const isoTime = v.pipe(v.string(), v.isoTimestamp('Enter a time as an ISO timestamp'));
+
+/**
+ * A deleted entry sent back by Undo, exactly as `removeEntry` returned it, so it is re-inserted with the same id.
+ * Food entries carry their food, amount, unit and grams; quick entries carry none of them.
+ */
+export const RestoreEntryInput = v.pipe(
+	v.strictObject({
+		id,
+		date: isoDate,
+		loggedAt: isoTime,
+		kind: v.picklist(['food', 'quick']),
+		foodId: v.nullable(id),
+		batchId: v.null(),
+		amount: v.nullable(v.pipe(v.number(), v.finite(), v.gtValue(0))),
+		unit: v.nullable(logUnit),
+		grams: v.nullable(v.pipe(v.number(), v.finite(), v.gtValue(0))),
+		label: v.nullable(text(200)),
+		kcal: nutrient,
+		protein: nutrient,
+		carbs: nutrient,
+		fat: nutrient,
+		fiber: v.nullable(nutrient)
+	}),
+	v.check((entry) => {
+		const foodFields = [entry.foodId, entry.amount, entry.unit, entry.grams];
+		return entry.kind === 'food'
+			? foodFields.every((field) => field !== null)
+			: foodFields.every((field) => field === null);
+	}, 'Food entries need a food, amount, unit and grams; quick entries have none')
+);
+
+export type RestoreEntryInput = v.InferOutput<typeof RestoreEntryInput>;
