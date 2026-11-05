@@ -4,6 +4,13 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-05
 
+- **Passkey sign in runs its own client flow (`src/lib/passkey-sign-in.ts`), not `authClient.signIn.passkey`.**
+  Better Auth fetches the challenge after the tap, and iOS Safari can drop the tap's user activation across that
+  fetch, so the ceremony failed on the iPhone. The login page prefetches the challenge on load and the tap calls
+  WebAuthn directly. The same options also drive passkey autofill (`autocomplete="username webauthn"`), since
+  the server keeps one challenge cookie per browser.
+- **The email and password fields are always visible on /login.** In a closed `<details>`, 1Password on iOS
+  found no login form.
 - **CI deploys on push to `main`.** The `verify` job runs the full gate on every push and pull request; the
   `deploy` job needs it, runs only on `main`, and builds, then runs `db:migrate:remote` and `wrangler deploy`
   under a `deploy` concurrency group so two merges never deploy at once. One user, one environment, no staging:

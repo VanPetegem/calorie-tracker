@@ -14,6 +14,9 @@ importers:
       '@lucide/svelte':
         specifier: ^1.68.0
         version: 1.68.0(svelte@5.57.3(@typescript-eslint/types@8.72.1))
+      '@simplewebauthn/browser':
+        specifier: 13.3.0
+        version: 13.3.0
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1

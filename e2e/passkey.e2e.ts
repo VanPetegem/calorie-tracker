@@ -39,8 +39,18 @@ test('add a passkey, sign in with it, then delete it', async ({ page, context })
 	await expect(list.getByRole('listitem')).toContainText(name);
 	await expect(list.getByRole('listitem')).toContainText(/Added /);
 
-	// A new browser session: no cookies, only the passkey on the authenticator.
+	// A new browser session: no cookies, only the passkey on the authenticator. The virtual authenticator
+	// answers the autofill (conditional) request by itself, so /login signs in without a tap.
 	await context.clearCookies();
+	await page.goto('/login');
+	await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
+	expect((await context.cookies()).some((c) => c.name.includes('session_token'))).toBe(true);
+
+	// Without autofill support the button signs in, with the challenge fetched before the tap.
+	await context.clearCookies();
+	await page.addInitScript(() => {
+		PublicKeyCredential.isConditionalMediationAvailable = async () => false;
+	});
 	await gotoHydrated(page, '/login');
 	await page.getByRole('button', { name: 'Sign in with passkey' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
