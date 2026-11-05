@@ -4,6 +4,14 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-05
 
+- **`/design` shows the parts of containers that call remote functions, not the containers.** `DayView`,
+  `FoodSearch` and `EditEntrySheet` read or write through remote functions (delete, undo, edit, library and Open Food
+  Facts search, `loadFood`), so a static section would either send real requests from a style guide or need those
+  calls stubbed, which would no longer show the component as shipped. Their parts are on `/design`: `DateSwitcher`,
+  `DayHero` and `EntryRow` for the day view; `FoodRow` and `Input` for search; `AmountStep`, `FoodForm`,
+  `QuickAddForm` and `Sheet` for the edit sheet. `FoodSearch` itself is live on `/design` through the AddSheet
+  section's button. Behavior is covered by the component specs (`DayView.svelte.spec.ts`, `AddSheet.svelte.spec.ts`)
+  and the log e2e tests.
 - **The BLV generics ship as 15 migrations of about 60 KB, not one of 873 KB.** `wrangler d1 migrations apply
 --remote` sends a migration file as one request, which D1 limits to about 100 KB, and the first deploy would have
   hit that. `scripts/import-blv.ts` fills `0003_blv_foods_01` to `0017_blv_foods_15`; `0018_log_entries_deleted_at`

@@ -72,11 +72,13 @@ add sheet / forms / edit sheet -> remote command (foods.remote.ts, log.remote.ts
 ### Open Food Facts
 
 All OFF calls go through the server (`src/lib/server/off/client.ts`) with the User-Agent
-`kcal/<version> (<OFF_CONTACT_EMAIL>)`, a 5 second timeout and no exceptions: the client returns
+`kcal-avp/<version> (<OFF_CONTACT_EMAIL>)`, a 5 second timeout and no exceptions: the client returns
 `{ ok: false, reason: 'rate_limited' | 'unavailable' }`. Product reads use `OFF_BASE_URL` (v2 API); text search uses
 `OFF_SEARCH_URL` (search-a-licious). Results that pass validation are upserted into `foods` (`source = off`,
-`fetched_at`) and refreshed after 180 days unless the user edited them (`edited_at`). The library wins when a barcode
-already exists. Typing searches the library only; OFF is searched when the person submits.
+`fetched_at`). The library wins when a barcode already exists: `resolveOffPick` returns that food without calling
+OFF. `upsertOffFood` can refresh an unedited OFF food older than 180 days, but in phase 2a nothing reaches that
+branch, because the library lookup comes first; the refresh arrives with the barcode lookup in 2b. Typing searches
+the library only; OFF is searched when the person submits.
 
 ### Rate limits
 
