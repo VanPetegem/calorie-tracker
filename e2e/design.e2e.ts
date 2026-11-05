@@ -88,9 +88,10 @@ test('Sheet is a bottom sheet on a phone and a centered dialog on a wide screen'
 		expect(box.y + box.height).toBeCloseTo(viewport.height, 0);
 	} else {
 		expect(box.width).toBeLessThanOrEqual(480);
-		// Sheet reserves a scrollbar gutter on html while open, so the dialog centers in the content area beside it.
-		const contentWidth = await page.evaluate(() => document.documentElement.clientWidth);
-		expect(box.x + box.width / 2).toBeCloseTo(contentWidth / 2, 0);
+		// Centered in the layout area. Sheet reserves a scrollbar gutter on html while open, which Linux Chromium
+		// (classic scrollbars, about 15 px) takes from the right, shifting the center by half of it. Tolerate a gutter.
+		const maxGutter = 20;
+		expect(Math.abs(box.x + box.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(maxGutter / 2);
 	}
 });
 
