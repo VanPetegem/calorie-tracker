@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { normalizeBarcode, type BarcodeFormat } from '#lib/domain/barcode.ts';
+	import type { Unit } from '#lib/domain/nutrition.ts';
 	import type { FoodInput } from '#lib/schemas/food.ts';
 	import type { Food } from '#lib/server/db/schema.ts';
 	import type { BarcodeLookup } from '#lib/server/foods/service.ts';
@@ -15,7 +16,8 @@
 	 * Every track of the stream is stopped when the view unmounts, which is also what closing the sheet does.
 	 */
 	type Props = {
-		onhit: (food: Food) => void;
+		/** `last` is the amount last logged for the food, null when it never was. */
+		onhit: (food: Food, last: { amount: number; unit: Unit } | null) => void;
 		onmiss: (barcode: string, prefill: Partial<FoodInput>) => void;
 		/** Open the food form for this barcode without an Open Food Facts result. */
 		onmanual: (barcode: string) => void;
@@ -27,6 +29,9 @@
 	const DETECT_INTERVAL_MS = 250;
 	const HAPTIC_MS = 50;
 	const HAVE_CURRENT_DATA = 2;
+	// A sharper picture than the default 640 x 480 helps with small or curved barcodes.
+	const VIDEO_WIDTH = 1280;
+	const VIDEO_HEIGHT = 720;
 
 	let camera = $state<ScannerCamera>('starting');
 	let status = $state<ScannerStatus>('idle');
@@ -46,12 +51,35 @@
 		getCapabilities?: () => { torch?: boolean };
 	};
 
-	function stop() {
-		disposed = true;
+	/** Stops the loop and every track; the camera can be started again. */
+	function release() {
 		clearTimeout(timer);
 		for (const track of stream?.getTracks() ?? []) track.stop();
 		stream = null;
 		if (video) video.srcObject = null;
+		torchAvailable = false;
+		torchOn = false;
+	}
+
+	function stop() {
+		disposed = true;
+		release();
+	}
+
+	// iOS ends the track when the camera is taken away (a call, another app): offer a restart instead of a dead view.
+	function interrupted() {
+		if (disposed) return;
+		release();
+		paused = true;
+		camera = 'interrupted';
+	}
+
+	function restart() {
+		release();
+		status = 'idle';
+		paused = false;
+		camera = 'starting';
+		void start();
 	}
 
 	async function start() {
@@ -61,14 +89,21 @@
 		}
 		try {
 			stream = await navigator.mediaDevices.getUserMedia({
-				video: { facingMode: { ideal: 'environment' } },
+				video: {
+					facingMode: { ideal: 'environment' },
+					width: { ideal: VIDEO_WIDTH },
+					height: { ideal: VIDEO_HEIGHT }
+				},
 				audio: false
 			});
 		} catch (error) {
+			const name = error instanceof DOMException ? error.name : '';
 			camera =
-				error instanceof DOMException && error.name === 'NotAllowedError'
+				name === 'NotAllowedError'
 					? 'denied'
-					: 'unsupported';
+					: name === 'NotReadableError'
+						? 'busy'
+						: 'unsupported';
 			return;
 		}
 		if (disposed) return stop();
@@ -83,6 +118,7 @@
 
 		const [track] = stream.getVideoTracks() as unknown as TorchTrack[];
 		torchAvailable = track?.getCapabilities?.().torch === true;
+		track?.addEventListener('ended', interrupted, { once: true });
 		if (video) {
 			video.srcObject = stream;
 			// Not awaited: `play()` settles only once frames arrive, and the loop below waits for them anyway.
@@ -120,18 +156,23 @@
 		paused = true;
 		clearTimeout(timer);
 		status = 'looking';
-		const code = normalizeBarcode(raw, format) ?? raw.trim();
+		// An invalid code never reaches the server, and an unreachable one is shown in its normalized form.
+		const code = normalizeBarcode(raw, format);
+		if (code === null) {
+			status = 'invalid';
+			return;
+		}
 		barcode = code;
 		let result: BarcodeLookup;
 		try {
-			result = await lookupBarcode({ raw, format });
+			result = await lookupBarcode({ raw: code });
 		} catch {
 			result = { kind: 'unavailable', barcode: code };
 		}
 		if (disposed) return;
 		switch (result.kind) {
 			case 'hit':
-				return onhit(result.food);
+				return onhit(result.food, result.last);
 			case 'miss':
 				return onmiss(result.barcode, result.prefill);
 			case 'unavailable':
@@ -181,6 +222,7 @@
 		onmanual={(code) => void lookup(code)}
 		onenter={() => barcode && onmanual(barcode)}
 		onrescan={rescan}
+		onrestart={restart}
 		{onback}
 	/>
 </div>

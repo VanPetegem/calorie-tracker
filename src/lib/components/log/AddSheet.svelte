@@ -171,7 +171,7 @@
 		/>
 	{:else if step.kind === 'scan'}
 		<ScannerView
-			onhit={(food) => (step = { kind: 'amount', food })}
+			onhit={(food, last) => (step = { kind: 'amount', food, last: last ?? undefined })}
 			onmiss={(barcode, prefill) => (step = { kind: 'new', initial: { ...prefill, barcode } })}
 			onmanual={(barcode) => (step = { kind: 'new', initial: { barcode } })}
 			onback={toSearch}

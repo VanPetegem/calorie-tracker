@@ -25,10 +25,10 @@ function freshBarcode(): string {
 	return `${body}${(10 - (sum % 10)) % 10}`;
 }
 
-type Camera = { code?: string; deny?: boolean; torch?: boolean };
+type Camera = { code?: string; deny?: boolean; busy?: boolean; torch?: boolean };
 
 async function mockCamera(page: Page, camera: Camera) {
-	await page.addInitScript(({ code, deny, torch }) => {
+	await page.addInitScript(({ code, deny, busy, torch }) => {
 		const w = window as unknown as Record<string, unknown>;
 		w.__tracks = [] as MediaStreamTrack[];
 		w.__vibrated = [] as number[];
@@ -36,7 +36,10 @@ async function mockCamera(page: Page, camera: Camera) {
 			(w.__vibrated as number[]).push(pattern as number);
 			return true;
 		};
-		const getUserMedia = async () => {
+		w.__constraints = [] as unknown[];
+		const getUserMedia = async (constraints: unknown) => {
+			(w.__constraints as unknown[]).push(constraints);
+			if (busy) throw new DOMException('Could not start video source', 'NotReadableError');
 			if (deny) throw new DOMException('Permission denied', 'NotAllowedError');
 			const canvas = document.createElement('canvas');
 			canvas.width = 320;
@@ -69,6 +72,9 @@ async function mockCamera(page: Page, camera: Camera) {
 			configurable: true
 		});
 		(globalThis as unknown as Record<string, unknown>).BarcodeDetector = class {
+			static async getSupportedFormats() {
+				return ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'qr_code'];
+			}
 			async detect() {
 				return code ? [{ rawValue: code, format: 'ean_13' }] : [];
 			}
@@ -139,7 +145,8 @@ test('an unknown barcode opens the food form with the barcode, and the next scan
 	// The same code now finds the custom food in the library.
 	const again = await openScanner(page);
 	await expect(again.getByRole('heading', { name })).toBeVisible();
-	await expect(again.getByLabel('Amount')).toBeVisible();
+	// The amount step starts from the amount logged last for this food.
+	await expect(again.getByLabel('Amount')).toHaveValue('100');
 });
 
 test('a denied camera explains why and manual entry still works', async ({ page }) => {
@@ -150,9 +157,15 @@ test('a denied camera explains why and manual entry still works', async ({ page 
 	await expect(sheet.getByText(/Camera access was denied/)).toBeVisible();
 	await expect(sheet.getByText('Accepts EAN-13, UPC-A or EAN-8.', { exact: false })).toBeVisible();
 
+	const lookups: string[] = [];
+	page.on('request', (request) => {
+		if (request.url().includes('lookupBarcode')) lookups.push(request.url());
+	});
 	await sheet.getByLabel('Barcode number').fill('12345');
 	await sheet.getByRole('button', { name: 'Look up' }).click();
 	await expect(sheet.getByText('That is not a valid barcode.')).toBeVisible();
+	// An invalid code is rejected in the browser, without a server call.
+	expect(lookups).toEqual([]);
 
 	await sheet.getByLabel('Barcode number').fill(COLA);
 	await sheet.getByRole('button', { name: 'Look up' }).click();
@@ -213,4 +226,42 @@ test('there is no torch button without torch support, and closing the sheet stop
 			)
 		)
 		.toEqual(['ended']);
+});
+
+test('the camera is requested at 1280 x 720', async ({ page }) => {
+	await mockCamera(page, {});
+	await gotoHydrated(page, '/');
+	await openScanner(page);
+	const [constraints] = await page.evaluate(
+		() => (window as never as { __constraints: unknown[] }).__constraints
+	);
+	expect(constraints).toMatchObject({
+		video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+	});
+});
+
+test('a camera another app holds says so and can be tried again', async ({ page }) => {
+	await mockCamera(page, { busy: true });
+	await gotoHydrated(page, '/');
+	const sheet = await openScanner(page);
+	await expect(sheet.getByText('The camera is in use by another app.')).toBeVisible();
+	await expect(sheet.getByRole('button', { name: 'Restart camera' })).toBeVisible();
+	await expect(sheet.getByLabel('Barcode number')).toBeVisible();
+});
+
+test('a camera the system takes away offers a restart', async ({ page }) => {
+	await mockCamera(page, {});
+	await gotoHydrated(page, '/');
+	const sheet = await openScanner(page);
+	await expect(sheet.getByText('Point the camera at the barcode')).toBeVisible();
+
+	// iOS ends the track when a call or another app takes the camera.
+	await page.evaluate(() => {
+		const [track] = (window as never as { __tracks: MediaStreamTrack[] }).__tracks.slice(-1);
+		track.stop();
+		track.dispatchEvent(new Event('ended'));
+	});
+	await expect(sheet.getByText(/The camera stopped/)).toBeVisible();
+	await sheet.getByRole('button', { name: 'Restart camera' }).click();
+	await expect(sheet.getByText('Point the camera at the barcode')).toBeVisible();
 });

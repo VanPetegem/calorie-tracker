@@ -11,7 +11,8 @@
 	 * `camera` is the state of the camera and `status` the outcome of the last lookup. `ScannerView` drives both;
 	 * the /design route sets them by hand to show every state. `video` is the element the stream is attached to.
 	 */
-	export type ScannerCamera = 'starting' | 'scanning' | 'denied' | 'unsupported';
+	export type ScannerCamera =
+		'starting' | 'scanning' | 'denied' | 'unsupported' | 'busy' | 'interrupted';
 	export type ScannerStatus = 'idle' | 'looking' | 'invalid' | 'unavailable';
 
 	type Props = {
@@ -29,6 +30,8 @@
 		onenter?: () => void;
 		/** Clears a lookup outcome and scans again. */
 		onrescan?: () => void;
+		/** Starts the camera again after another app held it or the system took it away. */
+		onrestart?: () => void;
 		onback: () => void;
 	};
 
@@ -43,6 +46,7 @@
 		onmanual,
 		onenter,
 		onrescan,
+		onrestart,
 		onback
 	}: Props = $props();
 
@@ -98,6 +102,17 @@
 			Camera access was denied. Allow the camera for this site in your browser settings to scan, or
 			type the barcode below.
 		</p>
+	{:else if camera === 'busy' || camera === 'interrupted'}
+		<div class="flex flex-col gap-3">
+			<p role="status" class="text-base text-text">
+				{camera === 'busy'
+					? 'The camera is in use by another app. Close it and try again, or type the barcode below.'
+					: 'The camera stopped, for example after a call or switching apps. Restart it, or type the barcode below.'}
+			</p>
+			{#if onrestart}
+				<Button variant="secondary" onclick={onrestart}>Restart camera</Button>
+			{/if}
+		</div>
 	{:else}
 		<p role="status" class="text-base text-text">
 			This browser cannot open the camera here. Type the barcode below instead.
