@@ -41,7 +41,10 @@ describe('createDetector', () => {
 		return { Native, detect };
 	}
 
-	function mockPonyfill(prepare = vi.fn(async (_options?: unknown) => ({})), purge = vi.fn()) {
+	function mockPonyfill(
+		prepare = vi.fn<(options?: unknown) => Promise<object>>(async () => ({})),
+		purge = vi.fn()
+	) {
 		const ponyfillDetect = vi.fn(async () => []);
 		const Ponyfill = vi.fn(function () {
 			return { detect: ponyfillDetect };
