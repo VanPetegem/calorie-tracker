@@ -94,8 +94,9 @@ miss opens `FoodForm` with the barcode and any partial OFF values and then the a
 and otherwise dynamically imports the `barcode-detector` ponyfill, whose zxing-wasm decoder is a separate chunk
 plus a 0.9 MB `.wasm` asset that no route imports statically, so it never loads with Today. The wasm is bundled
 (`zxing-wasm` is a direct dependency, pinned to the version `barcode-detector` uses, loaded through `?url`) instead
-of fetched from the ponyfill's default CDN. The service worker precaches build assets, so the wasm is cached after
-the first install and scanning also works offline for foods already in the library. To check a build, walk the
+of fetched from the ponyfill's default CDN. The service worker precaches build files but filters out `.wasm`, so the
+wasm is fetched on the first scan and then served by the browser's HTTP cache (the file is hashed and immutable).
+Scanning needs a connection, because the lookup is a server command. To check a build, walk the
 static `imports` of every entry in `.svelte-kit/output/client/.vite/manifest.json` and confirm that the zxing
 chunks are not among them. e2e replaces `getUserMedia` and `BarcodeDetector` in the page (`e2e/scan.e2e.ts`).
 
