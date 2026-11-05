@@ -16,18 +16,34 @@
 			"migrations_dir": "drizzle"
 		}
 	],
-	// Throttles sign in and sign up attempts per client IP (checked in src/hooks.server.ts).
 	"ratelimits": [
+		// Throttles sign in and sign up attempts per client IP (checked in src/hooks.server.ts).
 		{
 			"name": "AUTH_LIMITER",
 			"namespace_id": "1001",
 			"simple": { "limit": 10, "period": 60 }
+		},
+		// Outgoing Open Food Facts calls (src/lib/server/off), kept below OFF's own limits of 15 product reads
+		// and 10 searches a minute per IP.
+		{
+			"name": "OFF_PRODUCT_LIMITER",
+			"namespace_id": "1002",
+			"simple": { "limit": 12, "period": 60 }
+		},
+		{
+			"name": "OFF_SEARCH_LIMITER",
+			"namespace_id": "1003",
+			"simple": { "limit": 8, "period": 60 }
 		}
 	],
 	// Declared so `wrangler types` does not infer the Env type from whatever .env or .dev.vars holds locally.
-	"secrets": { "required": ["BETTER_AUTH_SECRET"] },
-	// Production only. Local dev and e2e override ORIGIN (see .env.example and playwright.config.ts).
-	"vars": { "ORIGIN": "https://kcal.avp.software" },
+	"secrets": { "required": ["BETTER_AUTH_SECRET", "OFF_CONTACT_EMAIL"] },
+	// Production only. Local dev and e2e override ORIGIN and the OFF hosts (see .env.example and playwright.config.ts).
+	"vars": {
+		"ORIGIN": "https://kcal.avp.software",
+		"OFF_BASE_URL": "https://world.openfoodfacts.org",
+		"OFF_SEARCH_URL": "https://search.openfoodfacts.org"
+	},
 	"routes": [{ "pattern": "kcal.avp.software", "custom_domain": true }],
 	"workers_dev": false,
 	"preview_urls": false,

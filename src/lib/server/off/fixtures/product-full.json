@@ -1,0 +1,33 @@
+{
+	"code": "3017620422003",
+	"product": {
+		"brands": "Nutella, Ferrero",
+		"code": "3017620422003",
+		"nutriments": {
+			"carbohydrates": 57.5,
+			"carbohydrates_100g": 57.5,
+			"energy-kcal": 539,
+			"energy-kcal_100g": 539,
+			"energy-kj": 2252,
+			"energy-kj_100g": 2252,
+			"fat": 30.9,
+			"fat_100g": 30.9,
+			"fiber": 0,
+			"fiber_100g": 0,
+			"proteins": 6.3,
+			"proteins_100g": 6.3,
+			"salt": 0.107,
+			"salt_100g": 0.107,
+			"sugars": 56.3,
+			"sugars_100g": 56.3
+		},
+		"nutrition_data": "on",
+		"nutrition_data_prepared_per": "100g",
+		"product_name": "Nutella",
+		"product_quantity": 400,
+		"product_quantity_unit": "g",
+		"quantity": "400 g e"
+	},
+	"status": 1,
+	"status_verbose": "product found"
+}

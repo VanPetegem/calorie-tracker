@@ -4,6 +4,25 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-05
 
+- **Open Food Facts text search uses search-a-licious (`https://search.openfoodfacts.org/search?q=`), product reads
+  use the v2 API (`/api/v2/product/<barcode>`).** Checked live on 2026-11-05: `/cgi/search.pl` and `/api/v2/search`
+  on `world.openfoodfacts.org` both answered 503 "Page temporarily unavailable" on every attempt (v2 search also
+  has no full text parameter), while search-a-licious answered 200 with ranked hits (`hits[]`, `brands` as an array,
+  only `_100g` nutriments, fields omitted when empty). Search hits without nutriments are dropped, so only complete
+  products reach the user. The search host differs from the product host, so the Worker has two vars,
+  `OFF_BASE_URL` and `OFF_SEARCH_URL`; e2e points both at `e2e/off-stub.mjs`. Fixtures in
+  `src/lib/server/off/fixtures` are recorded responses (Nutella, Coca-Cola, unknown barcode, two searches) with
+  unused nutriments trimmed; `product-serving-only.json` is synthetic, because no real per serving only product
+  was worth a live search.
+- **Two rate limit bindings for OFF, not one.** `OFF_PRODUCT_LIMITER` (namespace 1002, 12 a minute) and
+  `OFF_SEARCH_LIMITER` (namespace 1003, 8 a minute) stay below OFF's 15 product reads and 10 searches, so a
+  burst of searches never uses up barcode lookups. Like `AUTH_LIMITER` they count per Cloudflare location, so the
+  cap is approximate. `OFF_CONTACT_EMAIL` is a Worker secret (`wrangler secret put OFF_CONTACT_EMAIL`) listed in
+  `secrets.required`; set it before deploying.
+- **OFF calls time out after 5 seconds and never throw.** The client returns `{ ok: false, reason }` with
+  `rate_limited` (limiter refusal or HTTP 429) or `unavailable` (anything else), so a slow OFF cannot hold up
+  logging a library food.
+
 - **Passkey sign in runs its own client flow (`src/lib/passkey-sign-in.ts`), not `authClient.signIn.passkey`.**
   Better Auth fetches the challenge after the tap, and iOS Safari can drop the tap's user activation across that
   fetch, so the ceremony failed on the iPhone. The login page prefetches the challenge on load and the tap calls

@@ -1,0 +1,47 @@
+{
+	"hits": [
+		{
+			"code": "5000112663952",
+			"quantity": "500ml",
+			"product_name": "Coca cola original"
+		},
+		{
+			"code": "5000112548068",
+			"brands": ["Coca-Cola"],
+			"quantity": "0.5l",
+			"nutriments": {
+				"carbohydrates_100g": 10.6,
+				"energy-kcal_100g": 42,
+				"energy-kj_100g": 180,
+				"fat_100g": 0,
+				"proteins_100g": 0,
+				"sugars_100g": 10.6
+			},
+			"product_name": "Coca-Cola Classic"
+		},
+		{
+			"code": "54001886",
+			"brands": ["Coca-Cola"],
+			"quantity": "1",
+			"nutriments": {
+				"carbohydrates_100g": 10.6,
+				"energy-kcal_100g": 42,
+				"fat_100g": 0,
+				"proteins_100g": 0,
+				"sugars_100g": 10.6
+			},
+			"product_name": "Coca cola original"
+		}
+	],
+	"aggregations": null,
+	"facets": {},
+	"charts": {},
+	"page": 1,
+	"page_size": 3,
+	"page_count": 3334,
+	"took": 24,
+	"timed_out": false,
+	"count": 10000,
+	"is_count_exact": false,
+	"warnings": null
+}

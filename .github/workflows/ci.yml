@@ -21,6 +21,7 @@ jobs:
       # Worker reads the real ones at runtime. e2e overrides ORIGIN with --var and takes its secret from .dev.vars.
       ORIGIN: http://localhost:4173
       BETTER_AUTH_SECRET: build-validation-only
+      OFF_CONTACT_EMAIL: build-validation-only@example.invalid
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -62,6 +63,7 @@ jobs:
       # Build time validation only, see the verify job. Production uses vars.ORIGIN and the Worker secret.
       ORIGIN: https://kcal.avp.software
       BETTER_AUTH_SECRET: build-validation-only
+      OFF_CONTACT_EMAIL: build-validation-only@example.invalid
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

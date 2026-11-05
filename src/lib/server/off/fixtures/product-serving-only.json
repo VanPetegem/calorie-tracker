@@ -1,0 +1,20 @@
+{
+	"code": "7612345678900",
+	"status": 1,
+	"status_verbose": "product found",
+	"product": {
+		"code": "7612345678900",
+		"product_name": "Hazelnut crunch bar",
+		"brands": "Example Foods",
+		"serving_size": "1 bar (40 g)",
+		"serving_quantity": 40,
+		"nutrition_data_per": "serving",
+		"nutriments": {
+			"energy-kcal_serving": 200,
+			"proteins_serving": 4,
+			"carbohydrates_serving": 22,
+			"fat_serving": 11,
+			"fiber_serving": 2
+		}
+	}
+}

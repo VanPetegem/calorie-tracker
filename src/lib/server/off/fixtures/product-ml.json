@@ -1,0 +1,38 @@
+{
+	"code": "5449000000996",
+	"product": {
+		"brands": "COCA-COLA SERVICES SA/NV",
+		"code": "5449000000996",
+		"nutriments": {
+			"carbohydrates": 10.6,
+			"carbohydrates_100g": 10.6,
+			"carbohydrates_serving": 35,
+			"energy-kcal": 42.4,
+			"energy-kcal_100g": 42.4,
+			"energy-kcal_serving": 140,
+			"energy-kj": 180,
+			"energy-kj_100g": 180,
+			"energy-kj_serving": 594,
+			"fat": 0,
+			"fat_100g": 0,
+			"fat_serving": 0,
+			"proteins": 0,
+			"proteins_100g": 0,
+			"proteins_serving": 0,
+			"salt": 0,
+			"salt_100g": 0,
+			"salt_serving": 0,
+			"sugars": 10.6,
+			"sugars_100g": 10.6,
+			"sugars_serving": 35
+		},
+		"nutrition_data": "on",
+		"nutrition_data_per": "100g",
+		"nutrition_data_prepared_per": "100g",
+		"product_name": "Coca-Cola Original",
+		"serving_quantity": 330,
+		"serving_size": "1 portion (330 ml)"
+	},
+	"status": 1,
+	"status_verbose": "product found"
+}
