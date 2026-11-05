@@ -17,6 +17,18 @@ test('add a passkey, sign in with it, then delete it', async ({ page, context })
 		}
 	});
 
+	// Retry safe: a failed attempt can leave its passkey behind, so start from none.
+	const baseURL = test.info().project.use.baseURL ?? 'http://localhost:4173';
+	const listed = await page.request.get('/api/auth/passkey/list-user-passkeys');
+	expect(listed.ok()).toBe(true);
+	for (const { id } of (await listed.json()) as { id: string }[]) {
+		const deleted = await page.request.post('/api/auth/passkey/delete-passkey', {
+			data: { id },
+			headers: { origin: baseURL }
+		});
+		expect(deleted.ok()).toBe(true);
+	}
+
 	await gotoHydrated(page, '/settings/security');
 	await expect(page.getByRole('heading', { name: 'No passkeys yet' })).toBeVisible();
 	await page.getByRole('button', { name: 'Add a passkey' }).click();

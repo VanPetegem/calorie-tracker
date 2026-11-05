@@ -20,7 +20,31 @@ function getAuth() {
 	return instance;
 }
 
-export const handle: Handle = async ({ event, resolve }) => {
+/** Forbids embedding any page in a frame (clickjacking). Both headers: X-Frame-Options for older browsers. */
+function withFrameProtection(response: Response) {
+	const set = (headers: Headers) => {
+		headers.set('x-frame-options', 'DENY');
+		// Add to a policy another layer already set instead of replacing it.
+		const csp = headers.get('content-security-policy');
+		if (!csp?.includes('frame-ancestors')) {
+			headers.set(
+				'content-security-policy',
+				[csp, "frame-ancestors 'none'"].filter(Boolean).join('; ')
+			);
+		}
+	};
+	try {
+		set(response.headers);
+		return response;
+	} catch {
+		// Responses from `fetch` have immutable headers: copy them.
+		const copy = new Response(response.body, response);
+		set(copy.headers);
+		return copy;
+	}
+}
+
+const handleRequest: Handle = async ({ event, resolve }) => {
 	if (building) return resolve(event);
 
 	const { request, url } = event;
@@ -78,3 +102,5 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	return svelteKitHandler({ event, resolve, auth, building });
 };
+
+export const handle: Handle = async (input) => withFrameProtection(await handleRequest(input));

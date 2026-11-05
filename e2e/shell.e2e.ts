@@ -156,3 +156,9 @@ test('the design page shows the shell components without a second Primary landma
 		})
 	).toHaveAttribute('aria-current', 'page');
 });
+
+test('pages forbid being framed', async ({ page }) => {
+	const response = await page.goto('/');
+	expect(response?.headers()['x-frame-options']).toBe('DENY');
+	expect(response?.headers()['content-security-policy']).toContain("frame-ancestors 'none'");
+});

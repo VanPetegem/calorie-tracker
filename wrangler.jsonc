@@ -26,7 +26,7 @@
 	],
 	// Declared so `wrangler types` does not infer the Env type from whatever .env or .dev.vars holds locally.
 	"secrets": { "required": ["BETTER_AUTH_SECRET"] },
-	// Production only. Local dev and e2e override ORIGIN (see .dev.vars.example and playwright.config.ts).
+	// Production only. Local dev and e2e override ORIGIN (see .env.example and playwright.config.ts).
 	"vars": { "ORIGIN": "https://kcal.avp.software" },
 	"routes": [{ "pattern": "kcal.avp.software", "custom_domain": true }],
 	"workers_dev": false,

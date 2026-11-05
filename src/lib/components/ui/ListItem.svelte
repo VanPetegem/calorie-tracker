@@ -25,7 +25,8 @@
 	const rowClass = $derived([
 		'flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left',
 		interactive &&
-			'cursor-pointer transition-colors duration-100 ease-out hover:bg-text/5 active:bg-text/10',
+			// Inset ring: rows sit in overflow-hidden cards, which would clip the default outside outline.
+			'cursor-pointer transition-colors duration-100 ease-out hover:bg-text/5 focus-visible:-outline-offset-2 focus-visible:outline-brand active:bg-text/10',
 		className
 	]);
 </script>

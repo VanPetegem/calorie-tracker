@@ -47,11 +47,3 @@ export const createAuth = (d1: D1Database) =>
 	});
 
 export type Auth = ReturnType<typeof createAuth>;
-
-/**
- * DO NOT USE!
- *
- * This instance is used by the `auth` CLI for schema generation ONLY.
- * To access `auth` at runtime, use `event.locals.auth`.
- */
-export const auth = createAuth(null!);

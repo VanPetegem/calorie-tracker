@@ -5,7 +5,7 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 ## 2026-11-05
 
 - **CI deploys on push to `main`.** The `verify` job runs the full gate on every push and pull request; the
-  `deploy` job needs it, runs only on `main`, and does `db:migrate:remote` then `build` and `wrangler deploy`
+  `deploy` job needs it, runs only on `main`, and builds, then runs `db:migrate:remote` and `wrangler deploy`
   under a `deploy` concurrency group so two merges never deploy at once. One user, one environment, no staging:
   the gate is the safety net, and the migration runs before the new code ships, so migrations must stay
   backward compatible for one release.

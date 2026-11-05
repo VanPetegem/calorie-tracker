@@ -83,16 +83,22 @@ whole gate.
 
 ## Migrations
 
-1. Edit `src/lib/server/db/schema.ts` (or run `pnpm auth:schema` after a Better Auth change).
+1. Edit `src/lib/server/db/schema.ts` (or run `pnpm auth:schema`, then `pnpm format`, after a Better Auth change;
+   the CLI reads `src/lib/server/auth.cli.ts`, which stays out of the Worker bundle).
 2. `pnpm db:generate` writes a SQL file to `drizzle/`. Commit it.
 3. `pnpm db:migrate:local` applies it to the local database.
-4. On merge to `main`, CI runs `pnpm db:migrate:remote` before it deploys. Migrations must stay compatible with
-   the previous Worker version, because the migration runs first.
+4. On merge to `main`, CI builds, runs `pnpm db:migrate:remote`, then deploys. Migrations must stay compatible with
+   the previous Worker version, because the migration runs before the new code ships.
+
+`drizzle/0001_single_account.sql` is hand written: a trigger on `user` that aborts a second insert (the database
+level backstop for single account sign up). SQLite drops a table's triggers when the table is rebuilt, which
+drizzle-kit does for some column changes. After any migration that touches `user`, re-create the trigger in that
+migration; `e2e/migrations.e2e.ts` fails if it is missing.
 
 ## Deploy
 
 Pushes to `main` deploy automatically (`.github/workflows/ci.yml`): the `verify` job runs the full gate, then the
-`deploy` job runs `pnpm db:migrate:remote`, `pnpm build` and `pnpm wrangler deploy`. Pull requests and other
+`deploy` job runs `pnpm build`, `pnpm db:migrate:remote` and `pnpm wrangler deploy`. Pull requests and other
 branches only run `verify`.
 
 Manual deploy, from a machine with `CLOUDFLARE_API_TOKEN` in `.env`:

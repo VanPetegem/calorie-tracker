@@ -34,7 +34,7 @@ pnpm check && pnpm lint && pnpm test && pnpm test:e2e
 ## Deploy
 
 Production: `https://kcal.avp.software` (Cloudflare Worker + D1 `kcal`). Pushing to `main` runs
-`.github/workflows/ci.yml`: the full gate, then `pnpm db:migrate:remote`, `pnpm build` and `pnpm wrangler deploy`.
+`.github/workflows/ci.yml`: the full gate, then `pnpm build`, `pnpm db:migrate:remote` and `pnpm wrangler deploy`.
 Other branches and pull requests only run the gate. Never deploy or migrate remotely from an agent session; the
 user does that. Details, secrets and the migration workflow: `docs/architecture.md`.
 
