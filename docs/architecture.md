@@ -101,9 +101,11 @@ Pushes to `main` deploy automatically (`.github/workflows/ci.yml`): the `verify`
 `deploy` job runs `pnpm build`, `pnpm db:migrate:remote` and `pnpm wrangler deploy`. Pull requests and other
 branches only run `verify`.
 
-Both jobs stop after 5 minutes: run `pnpm verify` locally before pushing, CI only confirms it. `verify` runs in the
+`verify` stops after 5 minutes: run `pnpm verify` locally before pushing, CI only confirms it. `deploy` keeps 10
+minutes, so a timeout never lands between the remote migration and `wrangler deploy`. `verify` runs in the
 `mcr.microsoft.com/playwright` image, which ships the browsers and their system packages, so nothing is installed
-with apt. Its tag and digest must match the Playwright version in `pnpm-lock.yaml`: bump them together.
+with apt. Its tag and digest must match the Playwright version in `pnpm-lock.yaml`: bump them together. A CI step
+fails with that message when they drift.
 
 Manual deploy, from a machine with `CLOUDFLARE_API_TOKEN` in `.env`:
 
