@@ -36,9 +36,25 @@ const blank = v.pipe(
 	v.transform(() => null)
 );
 
-/** An optional field: missing, null and blank become null; anything else must pass `schema`. */
+function isBlank(input: unknown): boolean {
+	return input === null || (typeof input === 'string' && input.trim() === '');
+}
+
+/**
+ * An optional field: missing, null and blank become null; anything else must pass `schema`. The choice is made on
+ * the input rather than with a union, so a bad value reports `schema`'s own message ("Enter a number") instead of
+ * the union's raw type error.
+ */
 export function orNull<TSchema extends v.GenericSchema>(schema: TSchema) {
-	return v.optional(v.union([blank, schema]), null);
+	return v.optional(
+		v.lazy(
+			(
+				input
+			): v.GenericSchema<v.InferInput<TSchema> | string | null, v.InferOutput<TSchema> | null> =>
+				isBlank(input) ? blank : schema
+		),
+		null
+	);
 }
 
 /** Trimmed, non empty text of at most `max` characters. */

@@ -5,6 +5,7 @@
 	import type { LogUnit } from '#lib/schemas/fields.ts';
 	import type { Food } from '#lib/server/db/schema.ts';
 	import { parseDecimal } from '#lib/utils/decimal.ts';
+	import Pencil from '@lucide/svelte/icons/pencil';
 	import { Button, Card, Input, SegmentedControl } from '#lib/components/ui/index.ts';
 	import { convertAmount, defaultAmount, unitOptions, type AmountValue } from './amount.ts';
 
@@ -26,9 +27,11 @@
 		onsubmit: (value: AmountValue) => void | Promise<void>;
 		/** Shows a Back button when given. */
 		onback?: () => void;
+		/** Shows an "Edit food" button when given. Editing the food never changes entries already logged. */
+		onedit?: () => void;
 	};
 
-	let { food, mode, initial = null, onsubmit, onback }: Props = $props();
+	let { food, mode, initial = null, onsubmit, onback, onedit }: Props = $props();
 
 	// The food and initial amount are fixed for one step: the parent mounts a new step for another food.
 	const start = untrack(() => defaultAmount(food, initial));
@@ -85,9 +88,16 @@
 </script>
 
 <form class="flex flex-col gap-5" onsubmit={submit} novalidate>
-	<p class="text-sm text-text-muted tabular-nums">
-		{Math.round(food.kcal)} kcal per 100 {food.nutritionBasis}
-	</p>
+	<div class="flex items-center justify-between gap-3">
+		<p class="text-sm text-text-muted tabular-nums">
+			{Math.round(food.kcal)} kcal per 100 {food.nutritionBasis}
+		</p>
+		{#if onedit}
+			<div class="shrink-0">
+				<Button variant="ghost" size="sm" icon={Pencil} onclick={onedit}>Edit food</Button>
+			</div>
+		{/if}
+	</div>
 
 	<div class="flex flex-col gap-3">
 		<SegmentedControl label="Unit" {options} bind:value={() => unit, setUnit} class="w-full" />

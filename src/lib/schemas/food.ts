@@ -6,7 +6,7 @@ import {
 	MIN_KCAL_PER_100,
 	MIN_MACRO_PER_100
 } from '../domain/constants.ts';
-import { decimalIn, orNull, positiveUpTo, text } from './fields.ts';
+import { decimalIn, id, orNull, positiveUpTo, text } from './fields.ts';
 
 const macro = decimalIn(MIN_MACRO_PER_100, MAX_MACRO_PER_100);
 
@@ -25,3 +25,8 @@ export const FoodInput = v.strictObject({
 });
 
 export type FoodInput = v.InferOutput<typeof FoodInput>;
+
+/** Changes the food with `id` to these values. */
+export const UpdateFoodInput = v.strictObject({ id, ...FoodInput.entries });
+
+export type UpdateFoodInput = v.InferOutput<typeof UpdateFoodInput>;

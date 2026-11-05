@@ -8,14 +8,17 @@
 	import { editAmount } from '../../../routes/(app)/log.remote.ts';
 	import AmountStep from './AmountStep.svelte';
 	import type { AmountValue } from './amount.ts';
+	import FoodForm from './FoodForm.svelte';
+	import QuickAddForm from './QuickAddForm.svelte';
 
 	/**
-	 * Edits the amount of a logged food in the amount step. The entry's food is loaded when the sheet opens, because
-	 * the preview needs its nutrition per 100. The server rescales the stored snapshot from the new grams over the
-	 * old grams; the entry is never re-read from the food.
+	 * Edits a logged entry. A food entry opens the amount step; its food is loaded when the sheet opens, because the
+	 * preview needs its nutrition per 100. The server rescales the stored snapshot from the new grams over the old
+	 * grams; the entry is never re-read from the food. The amount step's "Edit food" changes the food itself, which
+	 * never touches this or any other logged entry. A quick entry opens the quick add form instead.
 	 */
 	type Props = {
-		/** A food entry. Quick entries have their own form (Task 9). */
+		/** A food or quick entry. */
 		entry: LogEntry | null;
 		open: boolean;
 	};
@@ -24,6 +27,7 @@
 
 	let food = $state.raw<Food | null>(null);
 	let failed = $state(false);
+	let editingFood = $state(false);
 
 	$effect(() => {
 		const foodId = entry?.foodId;
@@ -58,8 +62,29 @@
 	}
 </script>
 
-<Sheet bind:open title={entry?.label ?? 'Entry'} description="Change the amount">
-	{#if entry && food}
+<Sheet
+	bind:open
+	onclose={() => (editingFood = false)}
+	title={entry?.kind === 'quick'
+		? 'Edit quick add'
+		: editingFood
+			? 'Edit food'
+			: (entry?.label ?? 'Entry')}
+	description={entry?.kind === 'quick' || editingFood ? undefined : 'Change the amount'}
+>
+	{#if entry?.kind === 'quick'}
+		<QuickAddForm {entry} date={entry.date} ondone={() => (open = false)} />
+	{:else if entry && food && editingFood}
+		<FoodForm
+			foodId={food.id}
+			initial={food}
+			onsaved={(saved) => {
+				food = saved;
+				editingFood = false;
+			}}
+			oncancel={() => (editingFood = false)}
+		/>
+	{:else if entry && food}
 		<AmountStep
 			{food}
 			mode="edit"
@@ -67,6 +92,7 @@
 				? { amount: entry.amount, unit: entry.unit }
 				: null}
 			onsubmit={(value) => save(entry, value)}
+			onedit={() => (editingFood = true)}
 		/>
 	{:else if failed}
 		<p role="alert" class="text-base text-danger">Could not load this food. Close and try again.</p>

@@ -33,7 +33,9 @@
 	import DayHero from '#lib/components/log/DayHero.svelte';
 	import AmountStep from '#lib/components/log/AmountStep.svelte';
 	import EntryRow from '#lib/components/log/EntryRow.svelte';
+	import FoodForm from '#lib/components/log/FoodForm.svelte';
 	import FoodRow from '#lib/components/log/FoodRow.svelte';
+	import QuickAddForm from '#lib/components/log/QuickAddForm.svelte';
 	import type { LogEntry } from '#lib/server/db/schema.ts';
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
 	import TabBar from '#lib/components/shell/TabBar.svelte';
@@ -732,8 +734,58 @@
 	</Section>
 
 	<Section
+		name="FoodForm"
+		description="Creates or edits a food. Each field is checked when it loses focus, so 901 kcal or fiber 'abc' shows its message at once; comma decimals work. Editing says that days already logged keep their values. These previews save nothing."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">New food</span>
+				<FoodForm preview onsaved={() => {}} oncancel={() => {}} />
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted"
+					>Editing, with a barcode from the miss flow</span
+				>
+				<FoodForm
+					preview
+					foodId="design-oats-food"
+					initial={{
+						name: 'Rolled oats',
+						brand: 'Kölln',
+						barcode: '4000540000000',
+						nutritionBasis: 'g',
+						kcal: 372,
+						protein: 13.5,
+						carbs: 58.7,
+						fat: 7,
+						fiber: 10,
+						servingG: 40
+					}}
+					onsaved={() => {}}
+				/>
+			</div>
+		</div>
+	</Section>
+
+	<Section
+		name="QuickAddForm"
+		description="Manual kcal and macros without a food, such as a restaurant estimate. Kcal is required; empty macros count as 0. With an entry it edits that entry. These previews save nothing."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">New quick add</span>
+				<QuickAddForm preview date="2026-11-05" ondone={() => {}} oncancel={() => {}} />
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Editing an entry</span>
+				<QuickAddForm preview entry={sampleQuick} date="2026-11-05" ondone={() => {}} />
+			</div>
+		</div>
+	</Section>
+
+	<Section
 		name="AddSheet"
-		description="Search field, recents and frequents; typing searches the library after 200 ms, Enter or the Open Food Facts row searches OFF. Opens from the add button, the sidebar and Cmd or Ctrl K."
+		description="Search field, then Quick add and New food, recents and frequents; typing searches the library after 200 ms, Enter or the Open Food Facts row searches OFF. Opens from the add button, the sidebar and Cmd or Ctrl K."
 	>
 		<div>
 			<Button icon={Plus} onclick={() => addSheet.show()}>Open the add sheet</Button>

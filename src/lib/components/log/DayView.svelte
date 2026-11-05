@@ -33,12 +33,12 @@
 		void goto(date === data.today ? resolve('/(app)') : resolve('/(app)/day/[date]', { date }));
 	}
 
-	// Tap on a row: food entries open the amount step. Task 9 opens the quick add form for quick entries.
+	// Tap on a row: food entries open the amount step, quick entries the quick add form.
 	let editEntry = $state<LogEntry | null>(null);
 	let editOpen = $state(false);
 
 	function edit(entry: LogEntry) {
-		if (entry.kind !== 'food' || entry.foodId === null) return;
+		if (entry.kind === 'batch' || (entry.kind === 'food' && entry.foodId === null)) return;
 		editEntry = entry;
 		editOpen = true;
 	}

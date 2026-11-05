@@ -1,7 +1,10 @@
 import { command, query } from '$app/server';
 import * as v from 'valibot';
 import { id } from '#lib/schemas/fields.ts';
+import { FoodInput, UpdateFoodInput } from '#lib/schemas/food.ts';
 import { appContext } from '#lib/server/context.ts';
+import type { Food } from '#lib/server/db/schema.ts';
+import * as foodsRepo from '#lib/server/foods/repo.ts';
 import { frequents, getFood, recents, searchLibrary } from '#lib/server/foods/repo.ts';
 import { resolveOffPick } from '#lib/server/foods/service.ts';
 
@@ -51,3 +54,30 @@ export const loadSuggestions = command(async () => {
 	);
 	return { today, recents: recentFoods, frequents: frequentFoods };
 });
+
+/** Saving a food: the saved row, or the library food that already has the barcode (the library wins). */
+export type SaveFoodResult =
+	{ ok: true; food: Food } | { ok: false; reason: 'barcode_taken'; food: Food };
+
+/** Creates a custom food. A barcode already in the library (archived foods included) is refused, never overwritten. */
+export const createFood = command(FoodInput, async (input): Promise<SaveFoodResult> => {
+	const { db } = await appContext();
+	if (input.barcode !== null) {
+		const taken = await foodsRepo.getFoodByBarcode(db, input.barcode);
+		if (taken) return { ok: false, reason: 'barcode_taken', food: taken };
+	}
+	return { ok: true, food: await foodsRepo.createFood(db, input) };
+});
+
+/** Edits any food. Editing an OFF or BLV food keeps the fix through refreshes (`edited_at`); past entries are untouched. */
+export const updateFood = command(
+	UpdateFoodInput,
+	async ({ id: foodId, ...input }): Promise<SaveFoodResult> => {
+		const { db } = await appContext();
+		if (input.barcode !== null) {
+			const taken = await foodsRepo.getFoodByBarcode(db, input.barcode);
+			if (taken && taken.id !== foodId) return { ok: false, reason: 'barcode_taken', food: taken };
+		}
+		return { ok: true, food: await foodsRepo.updateFood(db, foodId, input) };
+	}
+);

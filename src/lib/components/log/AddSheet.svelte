@@ -11,14 +11,17 @@
 	import { logFood } from '../../../routes/(app)/log.remote.ts';
 	import AmountStep from './AmountStep.svelte';
 	import type { AmountValue } from './amount.ts';
+	import FoodForm from './FoodForm.svelte';
 	import FoodSearch from './FoodSearch.svelte';
+	import QuickAddForm from './QuickAddForm.svelte';
 
 	/**
 	 * The add sheet: search and recents first, then the amount step for the chosen food.
 	 *
 	 * Mounted once in the app layout. Whether it is open lives in the `addSheet` store, which the tab bar, the
-	 * sidebar and the ⌘K shortcut set. Later modes (quick add, new food, scan) become more steps here, opened the
-	 * same way. The sheet logs on `day.date` (the day being viewed). Pages that do not load a day (Weight,
+	 * sidebar and the ⌘K shortcut set. Quick add and New food are steps of their own; a new food continues to its
+	 * amount step so it can be logged at once, and the amount step's "Edit food" opens the food form for that food.
+	 * Scan (phase 2b) becomes one more step. The sheet logs on `day.date` (the day being viewed). Pages that do not load a day (Weight,
 	 * Settings) pass `day: null`, and the sheet fetches today and the suggestions itself when it opens.
 	 */
 	type Props = {
@@ -27,8 +30,13 @@
 
 	let { day }: Props = $props();
 
+	type Last = { amount: number; unit: Unit };
 	type Step =
-		{ kind: 'search' } | { kind: 'amount'; food: Food; last?: { amount: number; unit: Unit } };
+		| { kind: 'search' }
+		| { kind: 'amount'; food: Food; last?: Last }
+		| { kind: 'quick' }
+		| { kind: 'new' }
+		| { kind: 'edit'; food: Food; last?: Last };
 	let step = $state.raw<Step>({ kind: 'search' });
 	// Bumping it mounts a fresh search (empty field) the next time the sheet opens.
 	let searchKey = $state(0);
@@ -48,6 +56,23 @@
 	const date = $derived(day ? day.date : (fetched?.today ?? null));
 	const recents = $derived(day?.recents ?? fetched?.recents ?? []);
 	const frequents = $derived(day?.frequents ?? fetched?.frequents ?? []);
+
+	function title(current: Step): string {
+		switch (current.kind) {
+			case 'amount':
+				return current.food.name;
+			case 'quick':
+				return 'Quick add';
+			case 'new':
+				return 'New food';
+			case 'edit':
+				return 'Edit food';
+			default:
+				return 'Add food';
+		}
+	}
+
+	const toSearch = () => (step = { kind: 'search' });
 
 	function reset() {
 		step = { kind: 'search' };
@@ -73,7 +98,7 @@
 
 <Sheet
 	bind:open={addSheet.open}
-	title={step.kind === 'amount' ? step.food.name : 'Add food'}
+	title={title(step)}
 	description={step.kind === 'amount' ? (step.food.brand ?? undefined) : undefined}
 	onclose={reset}
 >
@@ -84,17 +109,34 @@
 				{frequents}
 				active={addSheet.open && step.kind === 'search'}
 				onpick={(food, last) => (step = { kind: 'amount', food, last })}
+				onquick={() => (step = { kind: 'quick' })}
+				onnew={() => (step = { kind: 'new' })}
 			/>
 		{/key}
 	</div>
 	{#if step.kind === 'amount'}
-		{@const food = step.food}
+		{@const { food, last } = step}
 		<AmountStep
 			{food}
 			mode="add"
-			initial={step.last}
-			onback={() => (step = { kind: 'search' })}
+			initial={last}
+			onback={toSearch}
+			onedit={() => (step = { kind: 'edit', food, last })}
 			onsubmit={(value) => log(food, value)}
+		/>
+	{:else if step.kind === 'quick'}
+		{#if date !== null}
+			<QuickAddForm {date} ondone={() => (addSheet.open = false)} oncancel={toSearch} />
+		{/if}
+	{:else if step.kind === 'new'}
+		<FoodForm onsaved={(food) => (step = { kind: 'amount', food })} oncancel={toSearch} />
+	{:else if step.kind === 'edit'}
+		{@const { food, last } = step}
+		<FoodForm
+			foodId={food.id}
+			initial={food}
+			onsaved={(saved) => (step = { kind: 'amount', food: saved, last })}
+			oncancel={() => (step = { kind: 'amount', food, last })}
 		/>
 	{/if}
 </Sheet>

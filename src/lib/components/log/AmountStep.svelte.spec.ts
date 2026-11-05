@@ -109,4 +109,14 @@ describe('AmountStep', () => {
 		await page.getByRole('button', { name: 'Log' }).click();
 		expect(onsubmit).toHaveBeenCalledTimes(2);
 	});
+
+	it('offers Edit food only when asked to', async () => {
+		const onedit = vi.fn();
+		const view = render(AmountStep, props(oats, { onedit }));
+		await page.getByRole('button', { name: 'Edit food' }).click();
+		expect(onedit).toHaveBeenCalledOnce();
+		view.unmount();
+		render(AmountStep, props());
+		expect(page.getByRole('button', { name: 'Edit food' }).elements()).toHaveLength(0);
+	});
 });

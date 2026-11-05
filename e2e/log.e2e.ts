@@ -44,7 +44,8 @@ function dayAfter(date: string): string {
 test('a day without entries shows the empty state and the no target hero', async ({ page }) => {
 	await gotoHydrated(page, `/day/${EMPTY_DATE}`);
 	await expect(page.getByRole('heading', { name: 'Nothing logged yet' })).toBeVisible();
-	await expect(page.getByText('kcal eaten', { exact: true })).toBeVisible();
+	// "kcal eaten" without a target, "kcal remaining, ..." with one: the target test in this file sets it briefly.
+	await expect(page.getByText(/^kcal (eaten|remaining)/)).toBeVisible();
 	await expect(page.getByRole('button', { name: /^More actions/ })).toHaveCount(0);
 });
 
@@ -261,4 +262,128 @@ test('Ctrl+K opens the add sheet on desktop', async ({ page }) => {
 	await page.keyboard.press('Control+k');
 	await expect(page.getByRole('dialog', { name: 'Add food' })).toBeVisible();
 	await expect(page.getByRole('searchbox', { name: 'Search foods' })).toBeFocused();
+});
+
+// Custom foods, quick add and the temporary target.
+
+test('a custom food can be created from the add sheet and logged', async ({ page }, testInfo) => {
+	const date = foodDate(testInfo.project.name);
+	const name = `Protein bar ${testInfo.project.name} ${testInfo.retry} ${Date.now()}`;
+	await gotoHydrated(page, `/day/${date}`);
+
+	const sheet = await openAddSheet(page);
+	await sheet.getByRole('button', { name: 'New food' }).click();
+	await expect(sheet.getByRole('heading', { name: 'New food' })).toBeVisible();
+
+	// Validation runs when a field loses focus.
+	await sheet.getByLabel('Calories', { exact: true }).fill('901');
+	await sheet.getByLabel('Protein', { exact: true }).click();
+	await expect(sheet.getByText('Enter at most 900')).toBeVisible();
+
+	await sheet.getByLabel('Name', { exact: true }).fill(name);
+	await sheet.getByLabel('Calories', { exact: true }).fill('380');
+	await sheet.getByLabel('Protein', { exact: true }).fill('20,5');
+	await sheet.getByLabel('Carbs', { exact: true }).fill('40');
+	await sheet.getByLabel('Fat', { exact: true }).fill('12');
+	await sheet.getByLabel('Serving size (optional)').fill('50');
+	await sheet.getByRole('button', { name: 'Save food' }).click();
+
+	// A new food goes straight to its amount step, starting at one serving.
+	await expect(sheet.getByLabel('Amount')).toHaveValue('1');
+	await expect(sheet.getByTestId('preview-kcal')).toHaveText('190 kcal');
+	await sheet.getByRole('button', { name: 'Log' }).click();
+	await expect(sheet).toBeHidden();
+	await expect(page.getByRole('button', { name: new RegExp(`^${name}`) })).toBeVisible();
+
+	// Tapping the entry and choosing Edit food changes the food, not the entry already logged.
+	await page.getByRole('button', { name: new RegExp(`^${name}`) }).click();
+	// The dialog is renamed by each step, so hold the element.
+	const editSheet = page.locator('dialog[data-sheet][open]');
+	await editSheet.getByRole('button', { name: 'Edit food' }).click();
+	await expect(editSheet.getByText(/Days you already logged keep their values/)).toBeVisible();
+	await editSheet.getByLabel('Calories', { exact: true }).fill('400');
+	await editSheet.getByRole('button', { name: 'Save food' }).click();
+	await expect(editSheet.getByText('400 kcal per 100 g')).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('button', { name: new RegExp(`^${name}`) })).toContainText(
+		'190 kcal'
+	);
+
+	// It is in the library from now on.
+	const again = await openAddSheet(page);
+	await again.getByRole('searchbox', { name: 'Search foods' }).fill(name);
+	await expect(
+		again
+			.getByRole('region', { name: 'Your foods' })
+			.getByRole('button', { name: new RegExp(name) })
+	).toBeVisible();
+});
+
+test('quick add logs 650 kcal with a label and the entry can be edited to 700', async ({
+	page
+}, testInfo) => {
+	const date = foodDate(testInfo.project.name);
+	const label = `Restaurant ${testInfo.project.name} ${testInfo.retry} ${Date.now()}`;
+	await gotoHydrated(page, `/day/${date}`);
+
+	const sheet = await openAddSheet(page);
+	await sheet.getByRole('button', { name: 'Quick add' }).click();
+	await sheet.getByLabel('Label (optional)').fill(label);
+	await sheet.getByLabel('Calories', { exact: true }).fill('650');
+	await sheet.getByRole('button', { name: 'Log' }).click();
+	await expect(sheet).toBeHidden();
+
+	const row = page.getByRole('button', { name: new RegExp(`^${label}`) });
+	await expect(row).toContainText('650 kcal');
+
+	await row.click();
+	const edit = page.getByRole('dialog', { name: 'Edit quick add' });
+	await expect(edit.getByLabel('Calories', { exact: true })).toHaveValue('650');
+	await edit.getByLabel('Calories', { exact: true }).fill('700');
+	await edit.getByRole('button', { name: 'Save' }).click();
+	await expect(edit).toBeHidden();
+	await expect(row).toContainText('700 kcal');
+
+	await page.reload();
+	await page.waitForLoadState('networkidle');
+	await expect(row).toContainText('700 kcal');
+});
+
+test('a manual target in Settings shows remaining kcal on Today, and clearing it brings the plain hero back', async ({
+	page
+}, testInfo) => {
+	// The target lives in the one settings row, shared by both browser projects and every other test that opens
+	// Today. Only one project may set it, or the two would clear each other's target mid test.
+	test.skip(
+		!testInfo.project.name.startsWith('chromium'),
+		'the target is global; one project sets it'
+	);
+	await gotoHydrated(page, '/settings');
+	await page.getByLabel('Calories per day').fill('3000');
+	await page.getByLabel('Body weight').fill('70');
+	// The macros show up live: protein 1.8 g/kg is 126 g.
+	await expect(page.getByLabel('Macros for this target').getByText('126 g')).toBeVisible();
+	await page.getByRole('button', { name: 'Save target' }).click();
+	await expect(page.getByText('Target saved')).toBeVisible();
+
+	try {
+		await gotoHydrated(page, '/');
+		await expect(page.getByText(/kcal remaining/)).toBeVisible();
+		await expect(page.getByText(/ \/ 126 g/)).toBeVisible();
+	} finally {
+		await gotoHydrated(page, '/settings');
+		await page.getByRole('button', { name: 'Clear' }).click();
+		await expect(page.getByText('Target cleared')).toBeVisible();
+	}
+
+	await gotoHydrated(page, '/');
+	await expect(page.getByText('kcal eaten', { exact: true })).toBeVisible();
+	await expect(page.getByText(/kcal remaining/)).toHaveCount(0);
+});
+
+test('a target needs both kcal and weight', async ({ page }) => {
+	await gotoHydrated(page, '/settings');
+	await page.getByLabel('Calories per day').fill('2800');
+	await page.getByRole('button', { name: 'Save target' }).click();
+	await expect(page.getByText('Enter both kcal and weight, or neither')).toBeVisible();
 });

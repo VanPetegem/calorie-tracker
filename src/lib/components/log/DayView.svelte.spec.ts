@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
 	removeEntry: vi.fn(),
 	restoreEntry: vi.fn(),
 	editAmount: vi.fn(),
+	editQuick: vi.fn(),
+	logQuick: vi.fn(),
 	loadFood: vi.fn()
 }));
 
@@ -18,9 +20,15 @@ vi.mock('$app/navigation', () => ({ goto: vi.fn(), invalidateAll: mocks.invalida
 vi.mock('../../../routes/(app)/log.remote.ts', () => ({
 	removeEntry: mocks.removeEntry,
 	restoreEntry: mocks.restoreEntry,
-	editAmount: mocks.editAmount
+	editAmount: mocks.editAmount,
+	editQuick: mocks.editQuick,
+	logQuick: mocks.logQuick
 }));
-vi.mock('../../../routes/(app)/foods.remote.ts', () => ({ loadFood: mocks.loadFood }));
+vi.mock('../../../routes/(app)/foods.remote.ts', () => ({
+	loadFood: mocks.loadFood,
+	createFood: vi.fn(),
+	updateFood: vi.fn()
+}));
 
 const entry: LogEntry = {
 	id: '0198a000-0000-7000-8000-000000000001',
@@ -149,10 +157,19 @@ describe('DayView edit', () => {
 		await vi.waitFor(() => expect(mocks.invalidateAll).toHaveBeenCalled());
 	});
 
-	it('does nothing for a quick entry yet', async () => {
+	it('opens the quick add form for a quick entry and saves it with editQuick', async () => {
+		mocks.editQuick.mockResolvedValue(entry);
 		render(DayViewTestHarness, { data });
 		await row().click();
 		expect(mocks.loadFood).not.toHaveBeenCalled();
 		expect(page.getByLabelText('Amount').elements()).toHaveLength(0);
+		await expect.element(page.getByLabelText('Calories', { exact: true })).toHaveValue('400');
+		await page.getByLabelText('Calories', { exact: true }).fill('450');
+		await page.getByRole('button', { name: 'Save' }).click();
+		await vi.waitFor(() =>
+			expect(mocks.editQuick).toHaveBeenCalledWith(
+				expect.objectContaining({ id: entry.id, kcal: 450, label: 'Porridge' })
+			)
+		);
 	});
 });

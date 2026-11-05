@@ -1,6 +1,6 @@
 import * as v from 'valibot';
 import { describe, expect, it } from 'vitest';
-import { FoodInput } from './food.ts';
+import { FoodInput, UpdateFoodInput } from './food.ts';
 import {
 	EditAmountInput,
 	EditQuickInput,
@@ -52,6 +52,27 @@ describe('FoodInput', () => {
 
 	it('rejects an empty name', () => {
 		expect(v.safeParse(FoodInput, { ...food, name: '  ' }).success).toBe(false);
+	});
+
+	it('says "Enter a number" for text in an optional number field', () => {
+		const result = v.safeParse(FoodInput, { ...food, fiber: 'abc' });
+		expect(result.success).toBe(false);
+		expect(result.issues?.map((issue) => issue.message)).toEqual(['Enter a number']);
+	});
+
+	it('keeps the range message for an optional number out of range', () => {
+		const result = v.safeParse(FoodInput, { ...food, fiber: '101' });
+		expect(result.issues?.map((issue) => issue.message)).toEqual(['Enter at most 100']);
+	});
+});
+
+describe('UpdateFoodInput', () => {
+	it('is a food plus the id of the food to change', () => {
+		expect(v.parse(UpdateFoodInput, { ...food, id: foodId })).toMatchObject({
+			id: foodId,
+			kcal: 370
+		});
+		expect(v.safeParse(UpdateFoodInput, food).success).toBe(false);
 	});
 });
 

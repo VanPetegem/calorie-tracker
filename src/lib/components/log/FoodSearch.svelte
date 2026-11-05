@@ -1,10 +1,12 @@
 <script lang="ts">
 	import Globe from '@lucide/svelte/icons/globe';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
+	import Plus from '@lucide/svelte/icons/plus';
+	import Zap from '@lucide/svelte/icons/zap';
 	import type { Unit } from '#lib/domain/nutrition.ts';
 	import type { Food } from '#lib/server/db/schema.ts';
 	import type { FoodHit, MappedProduct, RecentFood } from '#lib/server/foods/repo.ts';
-	import { Input, ListItem } from '#lib/components/ui/index.ts';
+	import { Button, Input, ListItem } from '#lib/components/ui/index.ts';
 	import { pickOff, searchFoods, searchOff } from '../../../routes/(app)/foods.remote.ts';
 	import FoodRow from './FoodRow.svelte';
 
@@ -13,18 +15,21 @@
 	 *
 	 * Typing searches the library (custom, cached OFF, BLV) after 200 ms. Open Food Facts is searched only when the
 	 * person presses Enter or taps its row, so typing never spends the OFF quota. A picked OFF product is stored
-	 * through `pickOff` first; `onpick` always receives a library food.
+	 * through `pickOff` first; `onpick` always receives a library food. Below the field, while it is empty, sit the
+	 * quick actions: Quick add (kcal without a food) and New food. Scan joins them with the scanner (phase 2b).
 	 */
 	type Props = {
 		recents: RecentFood[];
 		frequents: RecentFood[];
 		/** `last` is the last logged amount, known for recents and frequents. */
 		onpick: (food: Food, last?: { amount: number; unit: Unit }) => void;
+		onquick: () => void;
+		onnew: () => void;
 		/** True while the sheet shows this step: the search field takes focus each time it turns true. */
 		active: boolean;
 	};
 
-	let { recents, frequents, onpick, active }: Props = $props();
+	let { recents, frequents, onpick, onquick, onnew, active }: Props = $props();
 
 	const DEBOUNCE_MS = 200;
 	const uid = $props.id();
@@ -132,6 +137,10 @@
 	</form>
 
 	{#if q === ''}
+		<div class="flex gap-2">
+			<Button variant="secondary" icon={Zap} onclick={onquick}>Quick add</Button>
+			<Button variant="secondary" icon={Plus} onclick={onnew}>New food</Button>
+		</div>
 		{#each [{ id: 'recent', title: 'Recent', foods: recents }, { id: 'frequent', title: 'Often logged', foods: frequents }] as group (group.id)}
 			{#if group.foods.length > 0}
 				<section class="flex flex-col gap-2" aria-labelledby="{uid}-{group.id}">
