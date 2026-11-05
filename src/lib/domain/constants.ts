@@ -7,6 +7,11 @@ export const MAX_AMOUNT_GRAMS_OR_ML = 5000;
 export const MAX_AMOUNT_SERVINGS = 50;
 export const MIN_QUICK_KCAL = 0;
 export const MAX_QUICK_KCAL = 10000;
+export const MAX_QUICK_MACRO_G = 1000;
+
+/** Bounds for the temporary manual target (phase 2). */
+export const MAX_MANUAL_TARGET_KCAL = 10000;
+export const MAX_WEIGHT_KG = 400;
 
 /** Default macro rules behind the daily targets. */
 export const MACRO_RULE_DEFAULTS = { proteinGPerKg: 1.8, fatPct: 0.25, fatMinGPerKg: 0.6 } as const;

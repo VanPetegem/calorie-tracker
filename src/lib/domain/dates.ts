@@ -73,10 +73,14 @@ export function addDays(date: string, n: number): string {
 	return formatDate(d);
 }
 
+/** True when `date` is a `YYYY-MM-DD` string naming a real calendar date. */
+export function isCalendarDate(date: string): boolean {
+	return DATE_FORMAT.test(date) && formatDate(parseDate(date)) === date;
+}
+
 /** True when `date` is a real calendar date no later than tomorrow relative to `today`. */
 export function isAllowedLogDate(date: string, today: string): boolean {
-	if (!DATE_FORMAT.test(date) || formatDate(parseDate(date)) !== date) return false;
-	return date <= addDays(today, 1);
+	return isCalendarDate(date) && date <= addDays(today, 1);
 }
 
 /**
