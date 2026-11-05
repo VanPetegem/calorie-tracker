@@ -62,6 +62,7 @@
 	},
 	"dependencies": {
 		"@better-auth/passkey": "^1.7.17",
-		"@lucide/svelte": "^1.68.0"
+		"@lucide/svelte": "^1.68.0",
+		"@simplewebauthn/browser": "13.3.0"
 	}
 }

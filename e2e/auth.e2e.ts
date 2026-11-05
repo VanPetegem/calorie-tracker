@@ -39,9 +39,17 @@ test.describe('logged out', () => {
 		await expect(page.getByRole('heading', { level: 1, name: 'Weight' })).toBeVisible();
 	});
 
+	test('the login fields are visible on load and marked for password managers', async ({
+		page
+	}) => {
+		await gotoHydrated(page, '/login');
+		await expect(page.getByLabel('Email')).toBeVisible();
+		await expect(page.getByLabel('Email')).toHaveAttribute('autocomplete', 'username webauthn');
+		await expect(page.getByLabel('Password')).toHaveAttribute('autocomplete', 'current-password');
+	});
+
 	test('a wrong password shows an error and stays on /login', async ({ page }) => {
 		await gotoHydrated(page, '/login');
-		await page.getByText('Use email and password instead').click();
 		await page.getByLabel('Email').fill(TEST_USER.email);
 		await page.getByLabel('Password').fill('not-the-right-password');
 		await page.getByRole('button', { name: 'Sign in', exact: true }).click();

@@ -26,7 +26,6 @@ export async function gotoHydrated(page: Page, path: string) {
 export async function signInWithPassword(page: Page) {
 	await expect(page).toHaveURL(/\/login/);
 	await page.waitForLoadState('networkidle');
-	await page.getByText('Use email and password instead').click();
 	await page.getByLabel('Email').fill(TEST_USER.email);
 	await page.getByLabel('Password').fill(TEST_USER.password);
 	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
