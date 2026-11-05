@@ -2,5 +2,18 @@
   "enabledPlugins": {
     "cloudflare@claude-plugins-official": true,
     "modern-web-guidance@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(nvm use *)",
+      "Bash(pnpm vitest run *)",
+      "Bash(pnpm exec vitest run *)",
+      "Bash(pnpm check)",
+      "Bash(pnpm lint)",
+      "Bash(pnpm test)",
+      "Bash(pnpm exec svelte-check *)",
+      "Bash(pnpm wrangler whoami)",
+      "mcp__plugin_svelte_svelte__svelte-autofixer"
+    ]
   }
 }
