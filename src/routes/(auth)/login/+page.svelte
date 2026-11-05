@@ -17,9 +17,10 @@
 	let passwordPending = $state(false);
 
 	const passkey = createPasskeySignIn();
+	let destroyed = false;
 
 	async function finish(result: PasskeySignInResult) {
-		if (!result.ok) return false;
+		if (!result.ok || destroyed) return false;
 		// `redirectTo` was checked on the server: always a path on this origin.
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- already an absolute app path
 		await goto(data.redirectTo, { invalidateAll: true });
@@ -28,15 +29,27 @@
 
 	/**
 	 * Offers the passkey in the email field's autofill (1Password, iCloud Keychain). Runs until a passkey is
-	 * picked; the button aborts it, then starts it again.
+	 * picked; the button aborts it, then starts it again, and so does a refresh of the options. Starting it again
+	 * aborts the previous one, which ends as `cancelled`.
 	 */
 	async function startAutofill() {
 		const available = await window.PublicKeyCredential?.isConditionalMediationAvailable?.();
-		if (!available) return;
+		// While the button's ceremony runs, an autofill ceremony would abort it.
+		if (!available || passkeyPending || destroyed) return;
 		const result = await passkey.signIn({ autofill: true });
 		if (await finish(result)) return;
-		// A cancelled ceremony usually means the button took over; it restarts the autofill when done.
-		if (!result.ok && !result.cancelled) passkeyError = signInPasskeyError(result.error);
+		// Only a passkey the user picked earns an error; a failed fetch is retried by the next refresh.
+		if (!result.ok && result.reason === 'verify' && !destroyed) {
+			passkeyError = signInPasskeyError(result.error);
+			void startAutofill();
+		}
+	}
+
+	/** Keeps the options fresh, so a tap never waits on the network and the autofill never holds a dead challenge. */
+	function refresh() {
+		if (document.visibilityState !== 'visible' || passkeyPending || !passkey.isStale()) return;
+		// New options replace the server's challenge, so the autofill restarts with them.
+		void passkey.prefetch().then(startAutofill);
 	}
 
 	async function signInWithPasskey() {
@@ -52,6 +65,14 @@
 	onMount(() => {
 		// Fetch the challenge now: on iOS the tap must reach WebAuthn without waiting on the network.
 		void passkey.prefetch().then(startAutofill);
+		const timer = setInterval(refresh, 30_000);
+		document.addEventListener('visibilitychange', refresh);
+		return () => {
+			destroyed = true;
+			clearInterval(timer);
+			document.removeEventListener('visibilitychange', refresh);
+			passkey.cancel();
+		};
 	});
 </script>
 

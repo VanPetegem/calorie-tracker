@@ -8,7 +8,11 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
   Better Auth fetches the challenge after the tap, and iOS Safari can drop the tap's user activation across that
   fetch, so the ceremony failed on the iPhone. The login page prefetches the challenge on load and the tap calls
   WebAuthn directly. The same options also drive passkey autofill (`autocomplete="username webauthn"`), since
-  the server keeps one challenge cookie per browser.
+  the server keeps one challenge cookie per browser. The page refreshes stale options every 30 seconds while
+  visible and on return to the tab, and restarts the autofill with them. Accepted cost: every /login view writes
+  a verification row, even for a password sign in. `@simplewebauthn/browser` stays pinned to the exact version
+  `@better-auth/passkey` uses: `WebAuthnAbortService` is a module singleton, so two copies would stop one
+  ceremony from aborting the other. Bump both together.
 - **The email and password fields are always visible on /login.** In a closed `<details>`, 1Password on iOS
   found no login form.
 - **CI deploys on push to `main`.** The `verify` job runs the full gate on every push and pull request; the

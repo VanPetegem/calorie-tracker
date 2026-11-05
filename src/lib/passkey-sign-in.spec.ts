@@ -6,6 +6,7 @@ const startAuthentication = vi.fn();
 vi.mock('#lib/auth-client.ts', () => ({ authClient: { $fetch } }));
 vi.mock('@simplewebauthn/browser', () => ({
 	startAuthentication,
+	WebAuthnAbortService: { cancelCeremony: vi.fn() },
 	WebAuthnError: class extends Error {
 		code = 'ERROR_CEREMONY_ABORTED';
 	}
@@ -78,7 +79,7 @@ describe('createPasskeySignIn', () => {
 		const passkey = createPasskeySignIn();
 		startAuthentication.mockRejectedValue(new Error('NotAllowedError'));
 		const result = await passkey.signIn();
-		expect(result).toMatchObject({ ok: false, cancelled: true, error: { status: 400 } });
+		expect(result).toMatchObject({ ok: false, reason: 'cancelled', error: { status: 400 } });
 	});
 
 	it('passes a failed verification through', async () => {
@@ -91,9 +92,48 @@ describe('createPasskeySignIn', () => {
 		);
 		expect(await passkey.signIn()).toEqual({
 			ok: false,
-			cancelled: false,
+			reason: 'verify',
 			error: { status: 429, message: 'slow down' }
 		});
+	});
+
+	it('turns a network failure on verify into a result', async () => {
+		const passkey = createPasskeySignIn();
+		startAuthentication.mockResolvedValue(ASSERTION);
+		$fetch.mockImplementation(async (path: string) => {
+			if (path === '/passkey/generate-authenticate-options') return { data: OPTIONS, error: null };
+			throw new TypeError('Failed to fetch');
+		});
+		expect(await passkey.signIn()).toMatchObject({
+			ok: false,
+			reason: 'verify',
+			error: { status: 0 }
+		});
+	});
+
+	it('forgets options that failed to load, so the next attempt fetches again', async () => {
+		const passkey = createPasskeySignIn();
+		$fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+		await expect(passkey.prefetch()).resolves.toBeUndefined();
+		expect(passkey.isStale()).toBe(true);
+
+		$fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+		expect(await passkey.signIn()).toMatchObject({ ok: false, reason: 'options' });
+		expect(startAuthentication).not.toHaveBeenCalled();
+
+		startAuthentication.mockResolvedValue(ASSERTION);
+		expect(await passkey.signIn()).toEqual({ ok: true });
+		expect(optionFetches()).toBe(3);
+	});
+
+	it('reports when the options are stale', async () => {
+		let now = 0;
+		const passkey = createPasskeySignIn(() => now);
+		expect(passkey.isStale()).toBe(true);
+		await passkey.prefetch();
+		expect(passkey.isStale()).toBe(false);
+		now = 4 * 60 * 1000 + 1;
+		expect(passkey.isStale()).toBe(true);
 	});
 
 	it('uses browser autofill when asked', async () => {
