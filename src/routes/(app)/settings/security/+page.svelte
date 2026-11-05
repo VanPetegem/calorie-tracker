@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import KeyRound from '@lucide/svelte/icons/key-round';
+	import LogIn from '@lucide/svelte/icons/log-in';
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -8,6 +9,7 @@
 	import { resolve } from '$app/paths';
 	import { Button, EmptyState, IconButton, ListItem, Sheet } from '#lib/components/ui/index.ts';
 	import { authClient, deviceName, signOut } from '#lib/auth-client.ts';
+	import { addPasskeyError } from '#lib/auth-errors.ts';
 	import { toasts, type ToastOptions } from '#lib/stores/toasts.svelte.ts';
 	import type { PageProps } from './$types';
 
@@ -18,6 +20,9 @@
 	const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 
 	let adding = $state(false);
+	/** Set when adding a passkey needs a fresh sign in first. */
+	let reauthMessage = $state<string>();
+	let reauthing = $state(false);
 	let signingOut = $state(false);
 	let toDelete = $state<Passkey>();
 	let confirmOpen = $state(false);
@@ -29,13 +34,13 @@
 
 	async function addPasskey() {
 		adding = true;
+		reauthMessage = undefined;
 		const result = await authClient.passkey.addPasskey({ name: deviceName() });
 		adding = false;
 		if (result.error) {
-			toasts.show({
-				message: result.error.message ?? 'The passkey was not saved.',
-				tone: 'danger'
-			});
+			const { message, signInAgain } = addPasskeyError(result.error);
+			if (signInAgain) reauthMessage = message;
+			else toasts.show({ message, tone: 'danger' });
 			return;
 		}
 		await invalidateAll();
@@ -65,6 +70,15 @@
 		toDelete = undefined;
 		if (afterClose) toasts.show(afterClose);
 		afterClose = undefined;
+	}
+
+	/** Signs out and comes back here after the next sign in, with a fresh session. */
+	async function signInAgain() {
+		reauthing = true;
+		if (!(await signOut(`/login?redirectTo=${encodeURIComponent('/settings/security')}`))) {
+			reauthing = false;
+			toasts.show({ message: 'Couldn’t sign out. Check your connection.', tone: 'danger' });
+		}
 	}
 
 	async function handleSignOut() {
@@ -135,6 +149,12 @@
 		<Button variant="secondary" icon={Plus} loading={adding} onclick={addPasskey}>
 			Add a passkey
 		</Button>
+		{#if reauthMessage}
+			<div class="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+				<p role="alert" class="text-base text-pretty text-text">{reauthMessage}</p>
+				<Button icon={LogIn} loading={reauthing} onclick={signInAgain}>Sign in again</Button>
+			</div>
+		{/if}
 	</section>
 
 	<section class="flex flex-col gap-3" aria-labelledby="session-heading">

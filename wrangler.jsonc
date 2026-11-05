@@ -16,6 +16,14 @@
 			"migrations_dir": "drizzle"
 		}
 	],
+	// Throttles sign in and sign up attempts per client IP (checked in src/hooks.server.ts).
+	"ratelimits": [
+		{
+			"name": "AUTH_LIMITER",
+			"namespace_id": "1001",
+			"simple": { "limit": 10, "period": 60 }
+		}
+	],
 	// Declared so `wrangler types` does not infer the Env type from whatever .env or .dev.vars holds locally.
 	"secrets": { "required": ["BETTER_AUTH_SECRET"] },
 	"workers_dev": true,

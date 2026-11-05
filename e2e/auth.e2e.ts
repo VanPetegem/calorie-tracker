@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures.ts';
 import { TEST_USER, gotoHydrated, loggedOut, signInWithPassword } from './helpers.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -114,6 +114,69 @@ test.describe('logged out', () => {
 			const response = await request.get(path, { maxRedirects: 0 });
 			expect(response.status(), path).toBe(200);
 		}
+	});
+
+	test('sign in attempts are throttled per client: the API answers 429, the form says so', async ({
+		page,
+		request
+	}) => {
+		// AUTH_LIMITER allows 10 attempts a minute for this test's client IP (see fixtures.ts).
+		const attempt = () =>
+			request.post('/api/auth/sign-in/email', {
+				data: { email: TEST_USER.email, password: 'not-the-right-password' }
+			});
+		for (let i = 0; i < 10; i++) expect((await attempt()).status()).not.toBe(429);
+		const limited = await attempt();
+		expect(limited.status()).toBe(429);
+		expect((await limited.json()).code).toBe('TOO_MANY_REQUESTS');
+
+		// Even the right password is refused now, through the form action as well.
+		await page.goto('/login');
+		await signInWithPassword(page);
+		await expect(page.getByRole('alert')).toHaveText(
+			'Too many attempts. Wait a minute, then try again.'
+		);
+		await expect(page).toHaveURL(/\/login/);
+	});
+
+	test('login pads its content for the status bar and home indicator', async ({ page }) => {
+		await page.goto('/login');
+		const padding = await page
+			.getByRole('main')
+			.evaluate((el) => getComputedStyle(el.parentElement!).paddingTop);
+		// 48 px plus the inset, which is 0 outside a real notched device.
+		expect(padding).toBe('48px');
+	});
+});
+
+test.describe('adding a passkey with an old session', () => {
+	// "Sign in again" signs out, so this test uses its own session. The mocked response below must not be
+	// bypassed by the service worker (WebKit routes a controlled page's fetches through it).
+	test.use({ storageState: loggedOut, serviceWorkers: 'block' });
+
+	test('explains the fresh sign in it needs and comes back after it', async ({ page }) => {
+		await page.goto('/settings/security');
+		await signInWithPassword(page);
+		await expect(page).toHaveURL('/settings/security');
+		await page.waitForLoadState('networkidle');
+
+		// What Better Auth answers when the session was created more than a day ago.
+		await page.route('**/api/auth/passkey/generate-register-options*', (route) =>
+			route.fulfill({
+				status: 403,
+				contentType: 'application/json',
+				body: JSON.stringify({ code: 'SESSION_NOT_FRESH', message: 'Session is not fresh' })
+			})
+		);
+		await page.getByRole('button', { name: 'Add a passkey' }).click();
+		await expect(page.getByRole('alert')).toContainText('To add a passkey, sign in again first.');
+		await expect(page.getByText('Session is not fresh')).toHaveCount(0);
+
+		await page.getByRole('button', { name: 'Sign in again' }).click();
+		await expect(page).toHaveURL('/login?redirectTo=%2Fsettings%2Fsecurity');
+		await signInWithPassword(page);
+		await expect(page).toHaveURL('/settings/security');
+		await expect(page.getByRole('heading', { level: 1, name: 'Security' })).toBeVisible();
 	});
 });
 

@@ -4,6 +4,18 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-05
 
+- **Adding a passkey keeps Better Auth's fresh session rule (signed in within the last day).** A stolen long
+  lived cookie must not be enough to plant a new credential. Sessions last a year, so most attempts hit
+  `SESSION_NOT_FRESH`; the Security page explains it and offers "Sign in again", which signs out and returns to
+  `/settings/security` after the next sign in.
+- **Sign in and sign up are throttled by a Workers Rate Limiting binding (`AUTH_LIMITER`, 10 a minute per
+  `cf-connecting-ip`).** Better Auth's limiter is off on Workers (it keys on `NODE_ENV`) and never sees the form
+  actions, which call `auth.api` directly. The hook checks POST `/login`, `/setup`, `/api/auth/sign-in/*`,
+  `/api/auth/sign-up/*` and `/api/auth/passkey/verify-authentication`; the API answers 429, the forms show a
+  message. `wrangler dev` simulates the binding locally and passes a client sent `cf-connecting-ip` through,
+  which the e2e fixture uses to give every test its own bucket.
+- **A database trigger (`user_single_account`) also enforces the single account.** The hook answers first
+  with a 403; the trigger stops two first run sign ups that race past it.
 - **Sign up closes in a Better Auth `user.create.before` hook, not in the UI.** Every path that creates a
   user (email sign up, a direct API call, passkey first registration) runs through it, so a second account
   gets a 403 "Sign up is closed".

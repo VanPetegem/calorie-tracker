@@ -64,15 +64,26 @@ export function decideAccess(input: AccessInput): AccessDecision {
 	return { kind: 'deny', status: 401 };
 }
 
+/** A placeholder origin: whatever resolves against it and keeps it is a path on our own origin. */
+const SELF = 'http://self.invalid';
+
 /**
- * Where to go after login. Only a same-origin relative path is accepted: `//host` and `/\host` are
- * protocol-relative URLs to another origin, and browsers drop tabs and newlines while parsing, so `/\t/host`
- * would become `//host`. Anything else goes to `/`.
+ * Where to go after login. The target is resolved the way a browser resolves a Location header: `//host`,
+ * `/\host` and `/<tab>/host` (the parser drops tabs and newlines) all land on another origin and give `/`. A same-origin
+ * path comes back normalised and percent-encoded, so it is always a valid header value. Anything that is not a
+ * path (`https://...`, `javascript:...`, `evil.com`) gives `/` as well.
  */
 export function safeRedirect(target: string | null): string {
 	if (!target || !target.startsWith('/')) return '/';
-	// eslint-disable-next-line no-control-regex -- control characters are exactly what must be rejected
-	if (/[\u0000-\u001f\u007f]/.test(target)) return '/';
-	if (target.startsWith('//') || target.startsWith('/\\')) return '/';
-	return target;
+	let url: URL;
+	try {
+		url = new URL(target, SELF);
+	} catch {
+		return '/';
+	}
+	if (url.origin !== SELF) return '/';
+	const path = url.pathname + url.search + url.hash;
+	// Dot segments can collapse into a protocol-relative path: `/.//evil.com` normalises to `//evil.com`.
+	if (path.startsWith('//') || path.startsWith('/\\')) return '/';
+	return path;
 }

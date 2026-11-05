@@ -16,17 +16,24 @@ export function deviceName(userAgent = navigator.userAgent): string {
 
 /**
  * Ends the session, then deletes the service worker caches so pages rendered for the signed in user cannot be
- * opened from the cache afterwards, then loads /login fresh. Returns false when the sign out request failed.
+ * opened from the cache afterwards, then loads `to` (a /login URL) fresh. Returns false, without navigating,
+ * only when the sign out request itself failed; a failed cache purge never keeps the user signed in.
  */
-export async function signOut(): Promise<boolean> {
-	const { error } = await authClient.signOut();
-	if (error) return false;
-	if ('caches' in window) {
+export async function signOut(to = '/login'): Promise<boolean> {
+	try {
+		const { error } = await authClient.signOut();
+		if (error) return false;
+	} catch {
+		return false;
+	}
+	try {
 		const keys = await caches.keys();
 		await Promise.all(
 			keys.filter((key) => key.startsWith('kcal-')).map((key) => caches.delete(key))
 		);
+	} catch {
+		// No Cache Storage (an insecure context) or the purge failed: the session is gone either way.
 	}
-	window.location.assign('/login');
+	window.location.assign(to);
 	return true;
 }

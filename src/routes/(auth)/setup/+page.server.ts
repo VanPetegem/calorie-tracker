@@ -19,6 +19,15 @@ export const actions: Actions = {
 		const name = String(data.get('name') ?? '').trim();
 		const email = String(data.get('email') ?? '').trim();
 		const password = String(data.get('password') ?? '');
+		// AUTH_LIMITER refused this attempt in the hook.
+		if (locals.rateLimited) {
+			return fail(429, {
+				name,
+				email,
+				errors: {} as FieldErrors,
+				message: 'Too many attempts. Wait a minute, then try again.'
+			});
+		}
 
 		const errors: FieldErrors = {};
 		if (!name) errors.name = 'Enter your name.';

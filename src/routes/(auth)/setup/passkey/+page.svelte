@@ -4,6 +4,7 @@
 	import ScanFace from '@lucide/svelte/icons/scan-face';
 	import { Button } from '#lib/components/ui/index.ts';
 	import { authClient, deviceName } from '#lib/auth-client.ts';
+	import { addPasskeyError } from '#lib/auth-errors.ts';
 
 	let adding = $state(false);
 	let error = $state<string>();
@@ -14,7 +15,7 @@
 		const result = await authClient.passkey.addPasskey({ name: deviceName() });
 		adding = false;
 		if (result.error) {
-			error = `${result.error.message ?? 'The passkey was not saved.'} Try again, or skip and add one later in Settings.`;
+			error = `${addPasskeyError(result.error).message} You can also skip and add one later in Settings.`;
 			return;
 		}
 		await goto(resolve('/(app)'));

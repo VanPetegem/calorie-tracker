@@ -9,6 +9,8 @@ declare global {
 			user?: User;
 			session?: Session;
 			auth: ReturnType<typeof createAuth>;
+			/** Set by the hook when AUTH_LIMITER refused a sign in or sign up form post. */
+			rateLimited?: boolean;
 		}
 
 		// interface Error {}

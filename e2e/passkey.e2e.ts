@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures.ts';
 import { gotoHydrated } from './helpers.ts';
 
 // The virtual authenticator is a Chrome DevTools Protocol feature.

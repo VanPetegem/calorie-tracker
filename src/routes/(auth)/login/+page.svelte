@@ -5,6 +5,7 @@
 	import ScanFace from '@lucide/svelte/icons/scan-face';
 	import { Button, Input } from '#lib/components/ui/index.ts';
 	import { authClient } from '#lib/auth-client.ts';
+	import { signInPasskeyError } from '#lib/auth-errors.ts';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -21,7 +22,7 @@
 		const result = await authClient.signIn.passkey();
 		if (result.error) {
 			passkeyPending = false;
-			passkeyError = 'No passkey was used. Try again, or sign in with your email and password.';
+			passkeyError = signInPasskeyError(result.error);
 			return;
 		}
 		// `redirectTo` was checked on the server: always a path on this origin.

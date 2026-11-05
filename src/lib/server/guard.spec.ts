@@ -140,12 +140,33 @@ describe('safeRedirect', () => {
 		expect(safeRedirect(target)).toBe('/');
 	});
 
-	it.each(['/\t/evil.com', '/\n/evil.com', '/%09/evil.com'])(
-		'returns / when the URL parser would turn %j into another origin',
+	it.each(['/\t/evil.com', '/\n/evil.com', '/\\\t\\evil.com', '/\r/evil.com'])(
+		'returns / for %j, which the URL parser turns into another origin',
 		(target) => {
-			expect(new URL(safeRedirect(target), 'https://kcal.example').origin).toBe(
-				'https://kcal.example'
-			);
+			expect(safeRedirect(target)).toBe('/');
 		}
 	);
+
+	it('keeps an encoded tab, which stays a path segment on this origin', () => {
+		expect(safeRedirect('/%09/evil.com')).toBe('/%09/evil.com');
+	});
+
+	it('percent-encodes non ASCII paths so the result is a valid Location header', () => {
+		const target = safeRedirect('/é');
+		expect(target).toBe('/%C3%A9');
+		expect(() => new Headers({ location: target })).not.toThrow();
+		expect(() => new Response(null, { status: 303, headers: { location: target } })).not.toThrow();
+	});
+
+	it.each(['/.//evil.com', '/a/..//evil.com', '/%2e//evil.com', '/./\\evil.com'])(
+		'returns / for %j, whose normalised path would be protocol-relative',
+		(target) => {
+			expect(safeRedirect(target)).toBe('/');
+		}
+	);
+
+	it('normalises dot segments without leaving the origin', () => {
+		expect(safeRedirect('/a/../weight')).toBe('/weight');
+		expect(safeRedirect('/../../evil.com')).toBe('/evil.com');
+	});
 });

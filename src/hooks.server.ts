@@ -6,6 +6,7 @@ import { getSessionCookie } from 'better-auth/cookies';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
 import { createAuth, type Auth } from '#lib/server/auth.ts';
 import { decideAccess } from '#lib/server/guard.ts';
+import { isRateLimitedPath, rateLimitKey } from '#lib/server/rate-limit.ts';
 
 let instance: Auth | undefined;
 
@@ -22,8 +23,28 @@ function getAuth() {
 export const handle: Handle = async ({ event, resolve }) => {
 	if (building) return resolve(event);
 
+	const { request, url } = event;
 	const auth = getAuth();
 	event.locals.auth = auth;
+
+	// Throttle credential attempts before any of them reaches Better Auth.
+	if (isRateLimitedPath(request.method, url.pathname)) {
+		const { success } = await env.AUTH_LIMITER.limit({ key: rateLimitKey(request.headers) });
+		if (!success) {
+			// Form actions answer with their own 429 message, so the page shows it like any other error.
+			if (!url.pathname.startsWith('/api/')) {
+				event.locals.rateLimited = true;
+			} else {
+				return Response.json(
+					{
+						code: 'TOO_MANY_REQUESTS',
+						message: 'Too many attempts. Wait a minute, then try again.'
+					},
+					{ status: 429, headers: { 'retry-after': '60', 'cache-control': 'no-store' } }
+				);
+			}
+		}
+	}
 
 	// Fail closed: the cookie check only decides whether to look the session up. A missing cookie means no
 	// session; a present but invalid, expired or revoked one is rejected by getSession; a lookup error throws.
@@ -36,7 +57,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 	}
 
-	const { request, url } = event;
 	const decision = decideAccess({
 		pathname: url.pathname,
 		search: url.search,

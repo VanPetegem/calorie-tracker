@@ -17,8 +17,10 @@
 <style>
 	.screen {
 		min-height: 100dvh;
-		padding-top: calc(env(safe-area-inset-top) + 48px);
-		padding-bottom: calc(env(safe-area-inset-bottom) + 32px);
-		padding-inline: max(16px, env(safe-area-inset-left)) max(16px, env(safe-area-inset-right));
+		/* Tailwind's 4 px spacing step: 12 = 48 px, 8 = 32 px, 4 = 16 px. */
+		padding-top: calc(env(safe-area-inset-top) + var(--spacing) * 12);
+		padding-bottom: calc(env(safe-area-inset-bottom) + var(--spacing) * 8);
+		padding-inline: max(calc(var(--spacing) * 4), env(safe-area-inset-left))
+			max(calc(var(--spacing) * 4), env(safe-area-inset-right));
 	}
 </style>

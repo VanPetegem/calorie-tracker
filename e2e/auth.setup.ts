@@ -1,4 +1,4 @@
-import { expect, test as setup } from '@playwright/test';
+import { expect, test as setup } from './fixtures.ts';
 import { AUTH_FILE, TEST_USER } from './helpers.ts';
 
 setup('create the account through first run setup', async ({ page }) => {

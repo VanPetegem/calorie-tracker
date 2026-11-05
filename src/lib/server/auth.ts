@@ -11,6 +11,9 @@ import { user } from '#lib/server/db/schema.ts';
 /** One year. The installed iPhone app must stay signed in across relaunches. */
 const SESSION_SECONDS = 60 * 60 * 24 * 365;
 
+/** ORIGIN normalised (`https://host`, no path or trailing slash): WebAuthn compares origins exactly. */
+const APP_ORIGIN = new URL(ORIGIN).origin;
+
 /** True once the single account exists. Sign up closes from then on. */
 export async function hasAnyUser(d1: D1Database): Promise<boolean> {
 	const rows = await getDb(d1).select({ id: user.id }).from(user).limit(1);
@@ -38,7 +41,7 @@ export const createAuth = (d1: D1Database) =>
 			}
 		},
 		plugins: [
-			passkey({ rpID: new URL(ORIGIN).hostname, rpName: 'kcal', origin: ORIGIN }),
+			passkey({ rpID: new URL(APP_ORIGIN).hostname, rpName: 'kcal', origin: APP_ORIGIN }),
 			sveltekitCookies(getRequestEvent) // make sure this is the last plugin in the array
 		]
 	});
