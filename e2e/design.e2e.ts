@@ -88,7 +88,9 @@ test('Sheet is a bottom sheet on a phone and a centered dialog on a wide screen'
 		expect(box.y + box.height).toBeCloseTo(viewport.height, 0);
 	} else {
 		expect(box.width).toBeLessThanOrEqual(480);
-		expect(box.x + box.width / 2).toBeCloseTo(viewport.width / 2, 0);
+		// Sheet reserves a scrollbar gutter on html while open, so the dialog centers in the content area beside it.
+		const contentWidth = await page.evaluate(() => document.documentElement.clientWidth);
+		expect(box.x + box.width / 2).toBeCloseTo(contentWidth / 2, 0);
 	}
 });
 

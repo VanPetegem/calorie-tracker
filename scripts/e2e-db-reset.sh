@@ -17,3 +17,13 @@ fi
 
 rm -rf .wrangler/e2e
 pnpm wrangler d1 migrations apply DB --local --persist-to .wrangler/e2e
+
+# drizzle/0001_single_account.sql is hand written. SQLite drops a table's triggers when drizzle-kit rebuilds the
+# table, so fail here if the single account backstop is gone. This must run before any server holds the database:
+# a second connection to the live file makes D1 fail with SQLITE_BUSY.
+trigger=$(pnpm --silent wrangler d1 execute DB --local --persist-to .wrangler/e2e --json \
+	--command "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = 'user_single_account'")
+if ! grep -q 'user_single_account' <<<"$trigger"; then
+	echo 'The user_single_account trigger is missing after migrations. Re-create it in the migration that rebuilt the user table.' >&2
+	exit 1
+fi

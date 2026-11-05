@@ -93,7 +93,7 @@ whole gate.
 `drizzle/0001_single_account.sql` is hand written: a trigger on `user` that aborts a second insert (the database
 level backstop for single account sign up). SQLite drops a table's triggers when the table is rebuilt, which
 drizzle-kit does for some column changes. After any migration that touches `user`, re-create the trigger in that
-migration; `e2e/migrations.e2e.ts` fails if it is missing.
+migration; `scripts/e2e-db-reset.sh` fails the e2e run if it is missing.
 
 ## Deploy
 
