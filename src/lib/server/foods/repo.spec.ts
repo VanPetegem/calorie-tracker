@@ -256,6 +256,15 @@ describe('food repository', () => {
 			expect(created.fetchedAt).not.toBeNull();
 		});
 
+		it('returns one food for two lookups of the same new barcode racing each other', async () => {
+			const [a, b] = await Promise.all([
+				upsertOffFood(test.db, product()),
+				upsertOffFood(test.db, product())
+			]);
+			expect(a.id).toBe(b.id);
+			expect(await test.db.select().from(foods)).toHaveLength(1);
+		});
+
 		it('returns a library food with the same barcode unchanged', async () => {
 			const custom = await createFood(test.db, input({ name: 'Mine', barcode: '7610000000001' }));
 			expect(await upsertOffFood(test.db, product())).toEqual(custom);

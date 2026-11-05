@@ -30,3 +30,11 @@ export type FoodInput = v.InferOutput<typeof FoodInput>;
 export const UpdateFoodInput = v.strictObject({ id, ...FoodInput.entries });
 
 export type UpdateFoodInput = v.InferOutput<typeof UpdateFoodInput>;
+
+/** A scanned or typed barcode, with the format the scanner reported when it did. */
+export const BarcodeLookupInput = v.strictObject({
+	raw: v.pipe(v.string(), v.trim(), v.maxLength(32)),
+	format: v.optional(v.picklist(['ean_13', 'ean_8', 'upc_a', 'upc_e']))
+});
+
+export type BarcodeLookupInput = v.InferOutput<typeof BarcodeLookupInput>;
