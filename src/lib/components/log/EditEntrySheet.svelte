@@ -28,6 +28,8 @@
 	let food = $state.raw<Food | null>(null);
 	let failed = $state(false);
 	let editingFood = $state(false);
+	// Forms prefill once, so each opening gets a fresh one: another entry, or the same one after Cancel.
+	let openings = $state(0);
 
 	$effect(() => {
 		const foodId = entry?.foodId;
@@ -64,7 +66,10 @@
 
 <Sheet
 	bind:open
-	onclose={() => (editingFood = false)}
+	onclose={() => {
+		editingFood = false;
+		openings++;
+	}}
 	title={entry?.kind === 'quick'
 		? 'Edit quick add'
 		: editingFood
@@ -73,7 +78,9 @@
 	description={entry?.kind === 'quick' || editingFood ? undefined : 'Change the amount'}
 >
 	{#if entry?.kind === 'quick'}
-		<QuickAddForm {entry} date={entry.date} ondone={() => (open = false)} />
+		{#key `${entry.id}:${openings}`}
+			<QuickAddForm {entry} date={entry.date} ondone={() => (open = false)} />
+		{/key}
 	{:else if entry && food && editingFood}
 		<FoodForm
 			foodId={food.id}

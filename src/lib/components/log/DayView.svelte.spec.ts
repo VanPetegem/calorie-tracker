@@ -172,4 +172,45 @@ describe('DayView edit', () => {
 			)
 		);
 	});
+
+	describe('with several quick entries', () => {
+		const other: LogEntry = {
+			...entry,
+			id: '0198a000-0000-7000-8000-000000000003',
+			label: 'Soup',
+			kcal: 220
+		};
+		const two = { ...data, entries: [entry, other] };
+		const calories = () => page.getByLabelText('Calories', { exact: true });
+
+		it("shows the second entry's values and saves them to the second entry", async () => {
+			mocks.editQuick.mockResolvedValue(other);
+			render(DayViewTestHarness, { data: two });
+			await page.getByRole('button', { name: /^Porridge/ }).click();
+			await expect.element(calories()).toHaveValue('400');
+			await calories().fill('999');
+			await page.getByRole('button', { name: 'Close' }).click();
+			await expect.element(calories()).not.toBeVisible();
+
+			await page.getByRole('button', { name: /^Soup/ }).click();
+			await expect.element(calories()).toHaveValue('220');
+			await expect.element(page.getByLabelText('Label (optional)')).toHaveValue('Soup');
+			await page.getByRole('button', { name: 'Save' }).click();
+			await vi.waitFor(() => expect(mocks.editQuick).toHaveBeenCalled());
+			expect(mocks.editQuick).toHaveBeenCalledWith(
+				expect.objectContaining({ id: other.id, kcal: 220, label: 'Soup' })
+			);
+		});
+
+		it('shows the stored values again when the same entry is reopened after closing', async () => {
+			render(DayViewTestHarness, { data: two });
+			await page.getByRole('button', { name: /^Porridge/ }).click();
+			await calories().fill('999');
+			await page.getByRole('button', { name: 'Close' }).click();
+			await expect.element(calories()).not.toBeVisible();
+
+			await page.getByRole('button', { name: /^Porridge/ }).click();
+			await expect.element(calories()).toHaveValue('400');
+		});
+	});
 });

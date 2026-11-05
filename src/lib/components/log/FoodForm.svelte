@@ -59,8 +59,8 @@
 	let busy = $state(false);
 	let failed = $state(false);
 	let previewed = $state(false);
-	// The food that already has the barcode, when a save was refused for it.
-	let barcodeOwner = $state<string | null>(null);
+	// The food that already has the barcode, when a save was refused for it. The message goes when the barcode changes.
+	let barcodeOwner = $state<{ name: string; barcode: string } | null>(null);
 
 	const result = $derived(v.safeParse(FoodInput, { ...values, nutritionBasis: basis }));
 	const errors = $derived.by(() => {
@@ -75,17 +75,13 @@
 	});
 
 	function shown(field: Field): string | undefined {
-		if (field === 'barcode' && barcodeOwner) {
-			return `This barcode is already in your library as ${barcodeOwner}.`;
+		if (field === 'barcode' && barcodeOwner && barcodeOwner.barcode === values.barcode) {
+			return `This barcode is already in your library as ${barcodeOwner.name}.`;
 		}
 		return touched[field] || submitted ? errors[field] : undefined;
 	}
 
 	const blur = (field: Field) => () => (touched[field] = true);
-
-	function edit() {
-		barcodeOwner = null;
-	}
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
@@ -109,7 +105,7 @@
 			busy = false;
 		}
 		if (!outcome.ok) {
-			barcodeOwner = outcome.food.name;
+			barcodeOwner = { name: outcome.food.name, barcode: values.barcode };
 			return;
 		}
 		onsaved(outcome.food);
@@ -217,7 +213,6 @@
 			autocomplete="off"
 			error={shown('barcode')}
 			onblur={blur('barcode')}
-			onkeydown={edit}
 		/>
 	</div>
 

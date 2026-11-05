@@ -120,6 +120,8 @@ describe('FoodForm saving', () => {
 		await page.getByRole('button', { name: 'Save food' }).click();
 		await expect.element(page.getByText(/already in your library as Nutella/)).toBeVisible();
 		expect(onsaved).not.toHaveBeenCalled();
+		await field('Barcode (optional)').fill('3017620422004');
+		await expect.element(page.getByText(/already in your library/)).not.toBeInTheDocument();
 	});
 
 	it('shows an inline error when saving fails and keeps the values', async () => {
