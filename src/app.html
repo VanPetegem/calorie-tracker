@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="text-scale" content="scale" />
+		<meta name="theme-color" content="#09090B" />
+		<link rel="icon" href="%sveltekit.assets%/favicon.ico" sizes="48x48" />
+		<link rel="icon" href="%sveltekit.assets%/icon.svg" type="image/svg+xml" sizes="any" />
+		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
+		<link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon-180x180.png" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-title" content="kcal" />
+		<!-- The page draws under the status bar; the app shell pads itself by safe-area-inset-top. -->
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<script>
+			// Runs before first paint to avoid a flash of the wrong theme.
+			// Keep the logic identical to resolveTheme() in src/lib/design/theme.ts
+			// and the bg values in src/lib/design/tokens.ts.
+			(function () {
+				var KEY = 'kcal-theme';
+				var BG = { dark: '#09090B', light: '#FAFAFA' };
+				var mq = matchMedia('(prefers-color-scheme: dark)');
+				function preference() {
+					try {
+						var stored = localStorage.getItem(KEY);
+						if (stored === 'light' || stored === 'dark') return stored;
+					} catch (e) {}
+					return 'system';
+				}
+				function apply() {
+					var p = preference();
+					var theme = p === 'system' ? (mq.matches ? 'dark' : 'light') : p;
+					document.documentElement.dataset.theme = theme;
+					var meta = document.querySelector('meta[name="theme-color"]');
+					if (meta) meta.setAttribute('content', BG[theme]);
+				}
+				apply();
+				mq.addEventListener('change', function () {
+					if (preference() === 'system') apply();
+				});
+			})();
+		</script>
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>

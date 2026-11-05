@@ -1,0 +1,16 @@
+# Package Managers
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+bun.lock
+bun.lockb
+
+# Miscellaneous
+/static/
+/drizzle/
+
+# Generated and tool-owned files (regenerated or managed outside prettier style)
+/worker-configuration.d.ts
+/.claude/
+/.superpowers/
+/docs/superpowers/

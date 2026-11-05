@@ -1,0 +1,3 @@
+# Single user private app: keep it out of every index.
+User-agent: *
+Disallow: /
