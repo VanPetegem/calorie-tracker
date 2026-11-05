@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
+	import { per100FromSnapshot } from '#lib/domain/nutrition.ts';
 	import type { Food, LogEntry } from '#lib/server/db/schema.ts';
 	import { Sheet, Skeleton } from '#lib/components/ui/index.ts';
 	import { toasts } from '#lib/stores/toasts.svelte.ts';
@@ -12,9 +13,9 @@
 	import QuickAddForm from './QuickAddForm.svelte';
 
 	/**
-	 * Edits a logged entry. A food entry opens the amount step; its food is loaded when the sheet opens, because the
-	 * preview needs its nutrition per 100. The server rescales the stored snapshot from the new grams over the old
-	 * grams; the entry is never re-read from the food. The amount step's "Edit food" changes the food itself, which
+	 * Edits a logged entry. A food entry opens the amount step; its food is loaded when the sheet opens, for its
+	 * serving weight and basis and for "Edit food". The server rescales the stored snapshot from the new grams over
+	 * the old grams, and the preview does the same: its per 100 values come from the entry, never from the food. The amount step's "Edit food" changes the food itself, which
 	 * never touches this or any other logged entry. A quick entry opens the quick add form instead.
 	 */
 	type Props = {
@@ -49,6 +50,13 @@
 			}
 		);
 		return () => (stale = true);
+	});
+
+	// The server rescales the stored snapshot, so the preview must start from it too: per 100 from the entry, while
+	// the serving weight and basis come from the food. An entry without grams falls back to the food's values.
+	const previewFood = $derived.by(() => {
+		if (!food || !entry || entry.grams === null || entry.grams <= 0) return food;
+		return { ...food, ...per100FromSnapshot(entry, entry.grams) };
 	});
 
 	async function save(target: LogEntry, { amount, unit }: AmountValue) {
@@ -91,9 +99,9 @@
 			}}
 			oncancel={() => (editingFood = false)}
 		/>
-	{:else if entry && food}
+	{:else if entry && previewFood}
 		<AmountStep
-			{food}
+			food={previewFood}
 			mode="edit"
 			initial={entry.amount !== null && entry.unit !== null
 				? { amount: entry.amount, unit: entry.unit }

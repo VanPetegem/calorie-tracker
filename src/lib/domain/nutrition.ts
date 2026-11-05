@@ -52,6 +52,19 @@ export function scaleSnapshot(s: Nutrients, oldGrams: number, newGrams: number):
 	};
 }
 
+/** The values per 100 g that a stored snapshot of `grams` implies, for previewing an edit of a logged entry. */
+export function per100FromSnapshot(s: Nutrients, grams: number): Per100 {
+	if (grams <= 0) throw new RangeError('The weight must be greater than zero');
+	const factor = 100 / grams;
+	return {
+		kcal: s.kcal * factor,
+		protein: s.protein * factor,
+		carbs: s.carbs * factor,
+		fat: s.fat * factor,
+		fiber: s.fiber === null ? null : s.fiber * factor
+	};
+}
+
 /** Converts a label's per serving values to per 100 g. */
 export function perServingToPer100(perServing: Per100, servingG: number): Per100 {
 	if (servingG <= 0) throw new RangeError('The serving weight must be greater than zero');

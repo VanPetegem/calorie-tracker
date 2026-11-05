@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	per100FromSnapshot,
 	perServingToPer100,
 	scaleSnapshot,
 	snapshotFor,
@@ -72,6 +73,27 @@ describe('scaleSnapshot', () => {
 
 	it('rejects a zero old weight', () => {
 		expect(() => scaleSnapshot(snapshotFor(yogurt, 200), 0, 300)).toThrow(RangeError);
+	});
+});
+
+describe('per100FromSnapshot', () => {
+	it('turns a snapshot back into values per 100 g', () => {
+		expect(per100FromSnapshot(snapshotFor(yogurt, 200), 200)).toEqual(yogurt);
+	});
+
+	it('shows what a rescale of the snapshot gives, not the current food', () => {
+		// Logged when the food had 350 kcal per 100 g; the food has since changed.
+		const per100 = per100FromSnapshot({ kcal: 140, protein: 5, carbs: 24, fat: 3, fiber: 4 }, 40);
+		expect(per100).toEqual({ kcal: 350, protein: 12.5, carbs: 60, fat: 7.5, fiber: 10 });
+		expect(snapshotFor(per100, 60).kcal).toBe(210);
+	});
+
+	it('keeps fiber null', () => {
+		expect(per100FromSnapshot(snapshotFor({ ...yogurt, fiber: null }, 200), 200).fiber).toBeNull();
+	});
+
+	it('rejects a zero weight', () => {
+		expect(() => per100FromSnapshot(snapshotFor(yogurt, 200), 0)).toThrow(RangeError);
 	});
 });
 

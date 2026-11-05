@@ -157,6 +157,17 @@ describe('DayView edit', () => {
 		await vi.waitFor(() => expect(mocks.invalidateAll).toHaveBeenCalled());
 	});
 
+	it('previews the amount from the stored snapshot, not from the current food', async () => {
+		// Logged at 200 kcal per 100 g; the food has since been edited to 250.
+		mocks.loadFood.mockResolvedValue(food);
+		const stale: LogEntry = { ...foodEntry, kcal: 160, protein: 8 };
+		render(DayViewTestHarness, { data: { ...data, entries: [stale] } });
+		await page.getByRole('button', { name: /^Oats/ }).click();
+		await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('160 kcal');
+		await page.getByLabelText('Amount').fill('100');
+		await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('200 kcal');
+	});
+
 	it('opens the quick add form for a quick entry and saves it with editQuick', async () => {
 		mocks.editQuick.mockResolvedValue(entry);
 		render(DayViewTestHarness, { data });
