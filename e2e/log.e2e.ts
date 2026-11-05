@@ -147,3 +147,118 @@ test('swiping the page right goes to the previous day and left comes back', asyn
 	await swipe(page.getByRole('heading', { level: 1 }), -120);
 	await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
 });
+
+// Add sheet. Foods come from the migrated BLV library; Open Food Facts answers from e2e/off-stub.mjs.
+//
+// The OFF search limiter (8 a minute, one shared key) is shared by the whole run and both browser projects, so
+// only two tests search OFF: one success and one outage. That is 4 searches per run (8 with a CI retry), which
+// stays within the limit. Do not add a third OFF search test without keying the limiter per client.
+
+/** The day this project's add sheet tests log on, apart from the seeded days above. */
+function foodDate(projectName: string): string {
+	return projectName.startsWith('chromium') ? '2020-04-10' : '2020-04-11';
+}
+
+async function openAddSheet(page: import('@playwright/test').Page) {
+	const phone = (page.viewportSize()?.width ?? 0) < 1024;
+	const nav = page.getByRole('navigation', { name: 'Primary' });
+	await nav.getByRole('button', { name: phone ? 'Add food' : /^Add food/ }).click();
+	await expect(page.getByRole('dialog', { name: 'Add food' })).toBeVisible();
+	// The dialog is named after the chosen food on the amount step, so the rest of a test holds the element.
+	return page.locator('dialog[data-sheet][open]');
+}
+
+test('searching the library finds a BLV food, logs 200 g, and the entry can be edited', async ({
+	page
+}, testInfo) => {
+	const date = foodDate(testInfo.project.name);
+	await gotoHydrated(page, `/day/${date}`);
+	await expect(page.getByRole('heading', { name: 'Nothing logged yet' })).toBeVisible();
+
+	const sheet = await openAddSheet(page);
+	await sheet.getByRole('searchbox', { name: 'Search foods' }).fill('poulet');
+	// BLV names are English; "poulet" matches through the French alternate names in the search text.
+	const first = sheet.getByRole('region', { name: 'Your foods' }).getByRole('button').first();
+	await expect(first).toContainText(/chicken/i);
+	await first.click();
+
+	await expect(sheet.getByLabel('Amount')).toBeVisible();
+	await sheet.getByRole('radio', { name: 'g', exact: true }).click();
+	await sheet.getByLabel('Amount').fill('200');
+	const preview = await sheet.getByTestId('preview-kcal').innerText();
+	const kcal = Number(/(\d+)/.exec(preview)![1]);
+	expect(kcal).toBeGreaterThan(0);
+
+	await sheet.getByRole('button', { name: 'Log' }).click();
+	await expect(sheet).toBeHidden();
+	await expect(page.getByText(/^Logged /)).toBeVisible();
+	await expect(page.getByText('200 g', { exact: false }).first()).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Nothing logged yet' })).toHaveCount(0);
+
+	// The row and the hero show the same kcal that the preview promised, and a reload keeps it.
+	await page.reload();
+	await page.waitForLoadState('networkidle');
+	await expect(page.getByText(`${kcal} kcal`).first()).toBeVisible();
+
+	// Tapping the entry opens the amount step to edit it.
+	await page.getByRole('button', { name: /200 g/ }).first().click();
+	const edit = page.getByRole('dialog').filter({ has: page.getByLabel('Amount') });
+	await expect(edit.getByLabel('Amount')).toHaveValue('200');
+	await edit.getByLabel('Amount').fill('100');
+	await edit.getByRole('button', { name: 'Save' }).click();
+	await expect(edit).toBeHidden();
+	await expect(page.getByRole('button', { name: /100 g/ }).first()).toBeVisible();
+});
+
+test('an Open Food Facts product can be found, picked and logged', async ({ page }, testInfo) => {
+	const date = foodDate(testInfo.project.name);
+	await gotoHydrated(page, `/day/${date}`);
+
+	const sheet = await openAddSheet(page);
+	const search = sheet.getByRole('searchbox', { name: 'Search foods' });
+	await search.fill('nutella');
+	// Typing never reaches OFF: it needs Enter or the row.
+	await expect(sheet.getByRole('button', { name: /Search Open Food Facts/ })).toBeVisible();
+	await search.press('Enter');
+
+	const product = sheet.getByRole('button', { name: /^Nutella/ }).first();
+	await expect(product).toBeVisible();
+	await product.click();
+
+	await expect(sheet.getByLabel('Amount')).toBeVisible();
+	await sheet.getByLabel('Amount').fill('30');
+	await sheet.getByRole('button', { name: 'Log' }).click();
+	await expect(sheet).toBeHidden();
+	await expect(page.getByRole('button', { name: /^Nutella/ }).first()).toBeVisible();
+});
+
+test('an Open Food Facts outage says so and keeps the library results', async ({ page }) => {
+	await gotoHydrated(page, '/');
+	const sheet = await openAddSheet(page);
+	const search = sheet.getByRole('searchbox', { name: 'Search foods' });
+	// "riz" matches BLV foods and also makes the stub answer 503.
+	await search.fill('riz');
+	const libraryRow = sheet.getByRole('region', { name: 'Your foods' }).getByRole('button').first();
+	await expect(libraryRow).toBeVisible();
+	await search.press('Enter');
+	await expect(sheet.getByText('Product database unreachable')).toBeVisible();
+	await expect(libraryRow).toBeVisible();
+});
+
+test('the add sheet also works on a page without a day', async ({ page }) => {
+	await gotoHydrated(page, '/weight');
+	const sheet = await openAddSheet(page);
+	await sheet.getByRole('searchbox', { name: 'Search foods' }).fill('poulet');
+	await sheet.getByRole('region', { name: 'Your foods' }).getByRole('button').first().click();
+	await expect(sheet.getByLabel('Amount')).toBeVisible();
+	await sheet.getByRole('button', { name: 'Back' }).click();
+	await expect(sheet.getByRole('searchbox', { name: 'Search foods' })).toHaveValue('poulet');
+});
+
+test('Ctrl+K opens the add sheet on desktop', async ({ page }) => {
+	test.skip((page.viewportSize()?.width ?? 0) < 1024, 'desktop shortcut');
+	await gotoHydrated(page, '/');
+	await page.keyboard.press('Control+k');
+	await expect(page.getByRole('dialog', { name: 'Add food' })).toBeVisible();
+	await expect(page.getByRole('searchbox', { name: 'Search foods' })).toBeFocused();
+});

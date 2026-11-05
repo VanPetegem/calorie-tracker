@@ -21,6 +21,7 @@
 		Sheet,
 		Skeleton
 	} from '#lib/components/ui/index.ts';
+	import { addSheet } from '#lib/stores/add-sheet.svelte.ts';
 	import { toasts, withUndo } from '#lib/stores/toasts.svelte.ts';
 	import {
 		getThemePreference,
@@ -30,7 +31,9 @@
 	import { themes, type ColorToken } from '#lib/design/tokens.ts';
 	import DateSwitcher from '#lib/components/log/DateSwitcher.svelte';
 	import DayHero from '#lib/components/log/DayHero.svelte';
+	import AmountStep from '#lib/components/log/AmountStep.svelte';
 	import EntryRow from '#lib/components/log/EntryRow.svelte';
+	import FoodRow from '#lib/components/log/FoodRow.svelte';
 	import type { LogEntry } from '#lib/server/db/schema.ts';
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
 	import TabBar from '#lib/components/shell/TabBar.svelte';
@@ -154,6 +157,35 @@
 	const heroTarget = { kcal: 3000, proteinG: 126, fatG: 83, carbsG: 424, carbsFloored: false };
 	let switcherDate = $state('2026-11-05');
 	let rowLog = $state('Tap, swipe left or use the menu button.');
+	let foodLog = $state('Pick a food, or change an amount and log it.');
+
+	const sampleFood = {
+		name: 'Rolled oats',
+		brand: 'Kölln',
+		nutritionBasis: 'g',
+		kcal: 372,
+		protein: 13.5,
+		carbs: 58.7,
+		fat: 7,
+		fiber: 10,
+		servingG: 40
+	} as const;
+	const sampleLiquid = {
+		...sampleFood,
+		name: 'Oat drink',
+		brand: null,
+		nutritionBasis: 'ml',
+		kcal: 46,
+		protein: 1,
+		carbs: 6.7,
+		fat: 1.5,
+		fiber: 0.8,
+		servingG: null
+	} as const;
+	async function failingSubmit() {
+		await new Promise((resolve) => setTimeout(resolve, 600));
+		throw new Error('Demo failure');
+	}
 
 	function simulateSave() {
 		loading = true;
@@ -648,23 +680,99 @@
 	</Section>
 
 	<Section
+		name="FoodRow"
+		description="A food in the add sheet. Search results show brand, per 100 g or ml and kcal per 100. Recents and frequents show the last amount and its kcal. At least 56 px tall."
+	>
+		<ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
+			<li><FoodRow food={sampleFood} onselect={() => (foodLog = 'Picked Rolled oats')} /></li>
+			<li>
+				<FoodRow food={sampleLiquid} onselect={() => (foodLog = 'Picked Oat drink')} />
+			</li>
+			<li>
+				<FoodRow
+					food={sampleFood}
+					last={{ amount: 2, unit: 'serving' }}
+					onselect={() => (foodLog = 'Picked Rolled oats (recent)')}
+				/>
+			</li>
+		</ul>
+		<span class="text-sm text-text-muted">{foodLog}</span>
+	</Section>
+
+	<Section
+		name="AmountStep"
+		description="The amount step of the add sheet and of editing an entry. The unit switch keeps the quantity (80 g becomes 2 servings of 40 g), the preview is live, and the amount accepts a comma or a point."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted"
+					>Food with a serving: starts at one serving</span
+				>
+				<AmountStep
+					food={sampleFood}
+					mode="add"
+					onsubmit={(value) => void (foodLog = `Log ${value.amount} ${value.unit}`)}
+				/>
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Liquid without a serving, edit mode</span>
+				<AmountStep
+					food={sampleLiquid}
+					mode="edit"
+					initial={{ amount: 250, unit: 'ml' }}
+					onsubmit={(value) => void (foodLog = `Save ${value.amount} ${value.unit}`)}
+					onback={() => (foodLog = 'Back')}
+				/>
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Saving fails: inline error, retry</span>
+				<AmountStep food={sampleFood} mode="add" onsubmit={failingSubmit} />
+			</div>
+		</div>
+	</Section>
+
+	<Section
+		name="AddSheet"
+		description="Search field, recents and frequents; typing searches the library after 200 ms, Enter or the Open Food Facts row searches OFF. Opens from the add button, the sidebar and Cmd or Ctrl K."
+	>
+		<div>
+			<Button icon={Plus} onclick={() => addSheet.show()}>Open the add sheet</Button>
+		</div>
+	</Section>
+
+	<Section
 		name="TabBar"
-		description="Primary navigation below 1024 px, fixed to the bottom and padded by the home indicator inset. Four tabs, each at least 44 px tall. The active tab uses the brand color, a top marker and aria-current."
+		description="Primary navigation below 1024 px, fixed to the bottom and padded by the home indicator inset. Four tabs, each at least 44 px tall, with a round add button in the middle. The active tab uses the brand color, a top marker and aria-current."
 	>
 		<div class="flex flex-col gap-3">
 			<div class="overflow-hidden rounded-lg border border-border">
-				<TabBar pathname="/" label="TabBar preview, Today active" preview />
+				<TabBar
+					pathname="/"
+					label="TabBar preview, Today active"
+					preview
+					onadd={() => addSheet.show()}
+				/>
 			</div>
 			<div class="overflow-hidden rounded-lg border border-border">
-				<TabBar pathname="/weight" label="TabBar preview, Weight active" preview />
+				<TabBar
+					pathname="/weight"
+					label="TabBar preview, Weight active"
+					preview
+					onadd={() => addSheet.show()}
+				/>
 			</div>
 		</div>
 	</Section>
 
 	<Section
 		name="Sidebar"
-		description="Replaces the tab bar from 1024 px. Fixed to the left edge, 240 px wide. Items are 44 px tall; the active one has a raised background and the brand color."
+		description="Replaces the tab bar from 1024 px. Fixed to the left edge, 240 px wide. An Add food button sits above the items. Items are 44 px tall; the active one has a raised background and the brand color."
 	>
-		<Sidebar pathname="/recipes" label="Sidebar preview, Recipes active" preview />
+		<Sidebar
+			pathname="/recipes"
+			label="Sidebar preview, Recipes active"
+			preview
+			onadd={() => addSheet.show()}
+		/>
 	</Section>
 </div>

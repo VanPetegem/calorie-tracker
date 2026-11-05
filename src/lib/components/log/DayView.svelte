@@ -12,6 +12,7 @@
 	import { removeEntry, restoreEntry } from '../../../routes/(app)/log.remote.ts';
 	import DateSwitcher from './DateSwitcher.svelte';
 	import DayHero from './DayHero.svelte';
+	import EditEntrySheet from './EditEntrySheet.svelte';
 	import EntryRow from './EntryRow.svelte';
 	import { swipeDirection } from './swipe.ts';
 
@@ -32,9 +33,23 @@
 		void goto(date === data.today ? resolve('/(app)') : resolve('/(app)/day/[date]', { date }));
 	}
 
+	// Tap on a row: food entries open the amount step. Task 9 opens the quick add form for quick entries.
+	let editEntry = $state<LogEntry | null>(null);
+	let editOpen = $state(false);
+
 	function edit(entry: LogEntry) {
-		// Task 8 opens the amount step here for food entries, Task 9 the quick add form for quick entries.
-		void entry;
+		if (entry.kind !== 'food' || entry.foodId === null) return;
+		editEntry = entry;
+		editOpen = true;
+	}
+
+	/** Reloads the page data. A failed refresh is not an error of the write before it: the next load catches up. */
+	async function refresh() {
+		try {
+			await invalidateAll();
+		} catch {
+			// ignored on purpose
+		}
 	}
 
 	function labelOf(entry: LogEntry) {
@@ -47,7 +62,6 @@
 		let removed: LogEntry | null;
 		try {
 			removed = await removeEntry(entry.id);
-			await invalidateAll();
 		} catch {
 			hidden.delete(entry.id);
 			const id = toasts.show({
@@ -64,16 +78,22 @@
 			return;
 		}
 		// Already gone on the server (another device): the row is gone here too, nothing to undo.
-		if (!removed) return;
-		withUndo({
-			message: `Deleted ${labelOf(entry)}`,
-			apply: () => {},
-			revert: async () => {
-				await restoreEntry({ id: entry.id });
-				await invalidateAll();
-				hidden.delete(entry.id);
-			}
-		});
+		if (removed) {
+			withUndo({
+				message: `Deleted ${labelOf(entry)}`,
+				apply: () => {},
+				revert: async () => {
+					await restoreEntry({ id: entry.id });
+					try {
+						await refresh();
+					} finally {
+						// Restored on the server: show the row again whether or not the refresh went through.
+						hidden.delete(entry.id);
+					}
+				}
+			});
+		}
+		await refresh();
 	}
 
 	// Row menu: one sheet for the whole list.
@@ -143,6 +163,8 @@
 		</Card>
 	{/if}
 </div>
+
+<EditEntrySheet entry={editEntry} bind:open={editOpen} />
 
 <Sheet
 	bind:open={menuOpen}

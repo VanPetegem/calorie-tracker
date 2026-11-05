@@ -4,6 +4,16 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-05
 
+- **The add sheet lives in the app layout, opened through a store (`src/lib/stores/add-sheet.svelte.ts`).** The tab
+  bar's centre button, the sidebar's button and Cmd or Ctrl K all call `addSheet.show()`, so one sheet serves every
+  page. Day pages pass their date, recents and frequents (from `page.data`); other pages pass none and the sheet
+  fetches today and the suggestions through `loadSuggestions` when it opens. Editing a logged food reuses
+  `AmountStep` in `EditEntrySheet`, which DayView owns. Remote functions are called untracked inside effects:
+  calling one reads and writes reactive state of its own, which otherwise reruns the effect forever.
+- **OFF search stays on one shared limiter key; the e2e suite keeps to two OFF searches per browser project.** Keying
+  the limiter per client would weaken the protection, because OFF limits the Worker's egress IP, not our user. The
+  8 a minute budget then covers 4 searches per run (8 with a CI retry). Do not add a third OFF search test without
+  changing that.
 - **Open Food Facts text search uses search-a-licious (`https://search.openfoodfacts.org/search?q=`), product reads
   use the v2 API (`/api/v2/product/<barcode>`).** Checked live on 2026-11-05: `/cgi/search.pl` and `/api/v2/search`
   on `world.openfoodfacts.org` both answered 503 "Page temporarily unavailable" on every attempt (v2 search also
