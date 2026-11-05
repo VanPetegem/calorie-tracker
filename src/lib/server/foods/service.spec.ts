@@ -115,6 +115,50 @@ describe('lookupBarcode', () => {
 		expect(off.getProduct).toHaveBeenCalledTimes(1);
 	});
 
+	it('stores a found product under the normalized barcode, so the next scan hits the library', async () => {
+		// OFF answers a UPC-A lookup with the 12 digit form of the code.
+		const off = fakeOff({
+			ok: true,
+			value: { kind: 'found', product: { ...product, barcode: '036000291452' } }
+		});
+		const first = await lookupBarcode(test.db, off, '036000291452', 'upc_a');
+		expect(first).toMatchObject({ kind: 'hit', food: { barcode: '0036000291452' } });
+		const second = await lookupBarcode(test.db, off, '036000291452', 'upc_a');
+		expect(second).toMatchObject({ kind: 'hit', food: { barcode: '0036000291452' } });
+		expect(off.getProduct).toHaveBeenCalledTimes(1);
+	});
+
+	it('returns the last logged amount with a hit, null when the food was never logged', async () => {
+		const existing = await createFood(test.db, {
+			name: 'My muesli',
+			barcode: BARCODE,
+			kcal: 400,
+			protein: 9,
+			carbs: 62,
+			fat: 9
+		});
+		const off = fakeOff({ ok: false, reason: 'unavailable' });
+		expect(await lookupBarcode(test.db, off, BARCODE)).toMatchObject({ kind: 'hit', last: null });
+		await test.db.insert(logEntries).values({
+			id: crypto.randomUUID(),
+			date: '2026-11-05',
+			loggedAt: '2026-11-05T08:00:00.000Z',
+			kind: 'food',
+			foodId: existing.id,
+			amount: 45,
+			unit: 'g',
+			grams: 45,
+			kcal: 180,
+			protein: 4,
+			carbs: 28,
+			fat: 4
+		});
+		expect(await lookupBarcode(test.db, off, BARCODE)).toMatchObject({
+			kind: 'hit',
+			last: { amount: 45, unit: 'g' }
+		});
+	});
+
 	it('normalizes a UPC-A scan to EAN-13 before looking it up', async () => {
 		const off = fakeOff({ ok: true, value: { kind: 'found', product } });
 		await lookupBarcode(test.db, off, '036000291452', 'upc_a');

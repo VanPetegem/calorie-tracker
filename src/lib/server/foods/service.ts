@@ -3,7 +3,8 @@ import type { FoodInput } from '../../schemas/food.ts';
 import type { Db } from '../db/index.ts';
 import type { Food } from '../db/schema.ts';
 import type { OffClient } from '../off/client.ts';
-import { getFoodByBarcode, isStaleOffFood, upsertOffFood } from './repo.ts';
+import { getFoodByBarcode, getLastAmount, isStaleOffFood, upsertOffFood } from './repo.ts';
+import type { Unit } from '../../domain/nutrition.ts';
 
 /**
  * The food for an Open Food Facts search result the user picked. The library wins: a food with the barcode is
@@ -23,7 +24,7 @@ export async function resolveOffPick(
 }
 
 export type BarcodeLookup =
-	| { kind: 'hit'; food: Food }
+	| { kind: 'hit'; food: Food; last: { amount: number; unit: Unit } | null }
 	| { kind: 'miss'; barcode: string; prefill: Partial<FoodInput> }
 	| { kind: 'unavailable'; barcode: string }
 	| { kind: 'invalid' };
@@ -33,6 +34,7 @@ export type BarcodeLookup =
  * An unedited OFF food past the refresh age is returned at once and refreshed through `defer` (the platform's
  * `waitUntil`), so the scan never waits on OFF; refresh errors are swallowed. Otherwise OFF is asked: a complete
  * product is cached and returned, anything else is a `miss` (the sheet offers a prefilled form) or `unavailable`.
+ * A hit carries the food's last logged amount (null when it was never logged) for the amount step to start from.
  */
 export async function lookupBarcode(
 	db: Db,
@@ -47,14 +49,17 @@ export async function lookupBarcode(
 	const existing = await getFoodByBarcode(db, barcode);
 	if (existing) {
 		if (defer && isStaleOffFood(existing)) defer(refreshOffFood(db, off, barcode));
-		return { kind: 'hit', food: existing };
+		return { kind: 'hit', food: existing, last: await getLastAmount(db, existing.id) };
 	}
 
 	const result = await off.getProduct(barcode);
 	if (!result.ok) return { kind: 'unavailable', barcode };
 	switch (result.value.kind) {
-		case 'found':
-			return { kind: 'hit', food: await upsertOffFood(db, result.value.product) };
+		case 'found': {
+			// Stored under the normalized code, so the next scan finds it even when OFF answers with another form.
+			const food = await upsertOffFood(db, { ...result.value.product, barcode });
+			return { kind: 'hit', food, last: await getLastAmount(db, food.id) };
+		}
 		case 'incomplete':
 			return { kind: 'miss', barcode, prefill: result.value.prefill };
 		case 'not_found':

@@ -50,6 +50,19 @@ describe('FoodInput', () => {
 		expect(result).toMatchObject({ brand: null, barcode: null, fiber: null, servingG: null });
 	});
 
+	it('stores a typed UPC-A as EAN-13 so a scan finds it', () => {
+		expect(v.parse(FoodInput, { ...food, barcode: ' 036000291452 ' }).barcode).toBe(
+			'0036000291452'
+		);
+	});
+
+	it('keeps a barcode that does not normalize as typed', () => {
+		expect(v.parse(FoodInput, { ...food, barcode: '12345678901234' }).barcode).toBe(
+			'12345678901234'
+		);
+		expect(v.parse(FoodInput, { ...food, barcode: '7610000000002' }).barcode).toBe('7610000000002');
+	});
+
 	it('rejects an empty name', () => {
 		expect(v.safeParse(FoodInput, { ...food, name: '  ' }).success).toBe(false);
 	});

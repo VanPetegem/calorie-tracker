@@ -6,6 +6,7 @@ import {
 	frequents,
 	getFood,
 	getFoodByBarcode,
+	getLastAmount,
 	recents,
 	searchLibrary,
 	unarchiveFood,
@@ -271,6 +272,26 @@ describe('food repository', () => {
 			expect(await test.db.select().from(foods)).toHaveLength(1);
 		});
 
+		it('returns the food that kept the product source ref when its barcode was edited', async () => {
+			const first = await upsertOffFood(test.db, product());
+			await updateFood(test.db, first.id, {
+				name: 'Muesli',
+				brand: 'Bio',
+				barcode: '7610000000018',
+				nutritionBasis: 'g',
+				kcal: 380,
+				protein: 10,
+				carbs: 60,
+				fat: 8,
+				fiber: 7,
+				servingG: 50
+			});
+			const again = await upsertOffFood(test.db, product());
+			expect(again.id).toBe(first.id);
+			expect(again.barcode).toBe('7610000000018');
+			expect(await test.db.select().from(foods)).toHaveLength(1);
+		});
+
 		it('does not refresh a fresh OFF food', async () => {
 			const first = await upsertOffFood(test.db, product());
 			const again = await upsertOffFood(
@@ -320,6 +341,17 @@ describe('food repository', () => {
 				product({ per100: { kcal: 1, protein: 1, carbs: 1, fat: 1, fiber: null } })
 			);
 			expect(again.kcal).toBe(380);
+		});
+	});
+
+	describe('getLastAmount', () => {
+		it('gives the latest undeleted food entry, null when there is none', async () => {
+			const a = await createFood(test.db, input({ name: 'A' }));
+			expect(await getLastAmount(test.db, a.id)).toBeNull();
+			await log(a.id, TODAY, '2026-11-05T08:00:00.000Z', 50, 'g');
+			await log(a.id, TODAY, '2026-11-05T10:00:00.000Z', 2, 'serving');
+			await log(a.id, TODAY, '2026-11-05T11:00:00.000Z', 999, 'g', '2026-11-05T12:00:00.000Z');
+			expect(await getLastAmount(test.db, a.id)).toEqual({ amount: 2, unit: 'serving' });
 		});
 	});
 

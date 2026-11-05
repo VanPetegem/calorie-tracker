@@ -110,6 +110,22 @@ export async function getFoodByBarcode(db: Db, barcode: string): Promise<Food | 
 	return row ?? null;
 }
 
+/** The amount and unit of the food's most recent food entry, or null when it was never logged. */
+export async function getLastAmount(
+	db: Db,
+	foodId: string
+): Promise<{ amount: number; unit: Unit } | null> {
+	const [row] = await db
+		.select({ amount: logEntries.amount, unit: logEntries.unit })
+		.from(logEntries)
+		.where(
+			and(eq(logEntries.foodId, foodId), eq(logEntries.kind, 'food'), isNull(logEntries.deletedAt))
+		)
+		.orderBy(desc(logEntries.loggedAt), desc(logEntries.id))
+		.limit(1);
+	return row?.amount != null && row.unit != null ? { amount: row.amount, unit: row.unit } : null;
+}
+
 export async function createFood(db: Db, input: FoodInsert): Promise<Food> {
 	const [row] = await db
 		.insert(foods)
@@ -178,8 +194,8 @@ export async function upsertOffFood(db: Db, product: MappedProduct): Promise<Foo
 			.returning();
 		return row;
 	}
-	// Two lookups of the same new code can race: the unique barcode index lets one insert win, and the other
-	// returns the winner's row instead of throwing.
+	// Two lookups of the same new code can race, and a food whose barcode was edited still holds this product's
+	// (source, source_ref): either unique index lets one row win, and the loser returns that row instead of throwing.
 	const [inserted] = await db
 		.insert(foods)
 		.values({
@@ -195,11 +211,19 @@ export async function upsertOffFood(db: Db, product: MappedProduct): Promise<Foo
 			fetchedAt: now.toISOString(),
 			searchText: normalizeSearchText(product.name, product.brand)
 		})
-		.onConflictDoNothing({ target: foods.barcode })
+		.onConflictDoNothing()
 		.returning();
 	if (inserted) return inserted;
-	const winner = await getFoodByBarcode(db, product.barcode);
-	if (!winner) throw new Error('Food vanished after a barcode conflict');
+	const winner =
+		(await getFoodByBarcode(db, product.barcode)) ??
+		(
+			await db
+				.select()
+				.from(foods)
+				.where(and(eq(foods.source, 'off'), eq(foods.sourceRef, product.barcode)))
+				.limit(1)
+		)[0];
+	if (!winner) throw new Error('Food vanished after an insert conflict');
 	return winner;
 }
 

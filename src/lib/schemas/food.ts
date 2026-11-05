@@ -6,6 +6,7 @@ import {
 	MIN_KCAL_PER_100,
 	MIN_MACRO_PER_100
 } from '../domain/constants.ts';
+import { normalizeBarcode } from '../domain/barcode.ts';
 import { decimalIn, id, orNull, positiveUpTo, text } from './fields.ts';
 
 const macro = decimalIn(MIN_MACRO_PER_100, MAX_MACRO_PER_100);
@@ -14,7 +15,15 @@ const macro = decimalIn(MIN_MACRO_PER_100, MAX_MACRO_PER_100);
 export const FoodInput = v.strictObject({
 	name: text(200),
 	brand: orNull(text(200)),
-	barcode: orNull(v.pipe(v.string(), v.trim(), v.regex(/^\d{8,14}$/, 'Enter 8 to 14 digits'))),
+	// A code that normalizes (a UPC-A, say) is stored as EAN-13 so a scan of it finds the food; any other is kept as typed.
+	barcode: orNull(
+		v.pipe(
+			v.string(),
+			v.trim(),
+			v.regex(/^\d{8,14}$/, 'Enter 8 to 14 digits'),
+			v.transform((code) => normalizeBarcode(code) ?? code)
+		)
+	),
 	nutritionBasis: v.picklist(['g', 'ml'], 'Choose g or ml'),
 	kcal: decimalIn(MIN_KCAL_PER_100, MAX_KCAL_PER_100),
 	protein: macro,
