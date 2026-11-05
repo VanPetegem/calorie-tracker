@@ -21,7 +21,7 @@
 	type Props = {
 		recents: RecentFood[];
 		frequents: RecentFood[];
-		/** `last` is the last logged amount, known for recents and frequents. */
+		/** `last` is the last logged amount, known for recents, frequents and library hits that were logged before. */
 		onpick: (food: Food, last?: { amount: number; unit: Unit }) => void;
 		onquick: () => void;
 		onnew: () => void;
@@ -168,7 +168,11 @@
 					class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface"
 				>
 					{#each libraryHits as food (food.id)}
-						<li><FoodRow {food} onselect={() => onpick(food)} /></li>
+						{@const last =
+							food.lastAmount !== null && food.lastUnit !== null
+								? { amount: food.lastAmount, unit: food.lastUnit }
+								: undefined}
+						<li><FoodRow {food} onselect={() => onpick(food, last)} /></li>
 					{/each}
 				</ul>
 			{:else if libraryFailed}

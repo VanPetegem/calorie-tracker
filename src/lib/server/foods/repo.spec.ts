@@ -145,6 +145,33 @@ describe('food repository', () => {
 			]);
 		});
 
+		it('copes with a word longer than D1 accepts in a LIKE pattern', async () => {
+			const word = 'supercalifragilistic'.repeat(3);
+			await createFood(test.db, input({ name: `${word} soup` }));
+			expect(word).toHaveLength(60);
+			expect((await searchLibrary(test.db, word)).map((f) => f.name)).toEqual([`${word} soup`]);
+			expect(await searchLibrary(test.db, `${word}xyz`)).toHaveLength(1);
+			// 30 two byte letters: 60 bytes, cut on a character boundary.
+			const accented = 'é'.repeat(30);
+			await createFood(test.db, input({ name: `${accented} cake` }));
+			expect((await searchLibrary(test.db, accented)).map((f) => f.name)).toEqual([
+				`${accented} cake`
+			]);
+		});
+
+		it('carries the last logged amount, null for a food never logged', async () => {
+			const logged = await createFood(test.db, input({ name: 'Bread roll' }));
+			await createFood(test.db, input({ name: 'Bread plain' }));
+			await log(logged.id, TODAY, '2026-11-05T08:00:00.000Z', 40, 'g');
+			await log(logged.id, TODAY, '2026-11-05T09:00:00.000Z', 2, 'serving');
+			await log(logged.id, TODAY, '2026-11-05T10:00:00.000Z', 99, 'ml', '2026-11-05T11:00:00.000Z');
+			const hits = await searchLibrary(test.db, 'bread');
+			expect(hits.map((f) => [f.name, f.lastAmount, f.lastUnit])).toEqual([
+				['Bread roll', 2, 'serving'],
+				['Bread plain', null, null]
+			]);
+		});
+
 		it('respects the limit', async () => {
 			for (const name of ['Apple a', 'Apple b', 'Apple c'])
 				await createFood(test.db, input({ name }));
@@ -178,6 +205,33 @@ describe('food repository', () => {
 			const updated = await updateFood(test.db, off.id, edit);
 			expect(updated.editedAt).not.toBeNull();
 			expect(updated.source).toBe('off');
+		});
+
+		it('keeps the alternate names of a BLV food in search when it is saved', async () => {
+			const [blv] = await test.db
+				.insert(foods)
+				.values({
+					id: crypto.randomUUID(),
+					source: 'blv',
+					sourceRef: '1',
+					name: 'Chicken breast',
+					kcal: 110,
+					protein: 23,
+					carbs: 0,
+					fat: 2,
+					searchText: 'chicken breast poulet huhn brust'
+				})
+				.returning();
+			const saved = await updateFood(test.db, blv.id, { ...edit, name: 'Chicken breast' });
+			expect(saved.searchText).toBe('chicken breast poulet huhn brust');
+			for (const word of ['poulet', 'huhn', 'brust'])
+				expect((await searchLibrary(test.db, word)).map((f) => f.id)).toEqual([blv.id]);
+		});
+
+		it('puts a renamed food first in its search text and keeps the old words', async () => {
+			const off = await upsertOffFood(test.db, product());
+			const saved = await updateFood(test.db, off.id, { ...edit, name: 'Porridge', brand: 'Bio' });
+			expect(saved.searchText).toBe('porridge bio muesli');
 		});
 
 		it('throws for an unknown id', async () => {

@@ -8,7 +8,12 @@ import type { Db } from '../db/index.ts';
 import { foods, logEntries, type Food } from '../db/schema.ts';
 import { newId } from '../id.ts';
 
-export type FoodHit = Food & { logCount: number };
+/** A library search hit. The last amount is null for a food that was never logged. */
+export type FoodHit = Food & {
+	logCount: number;
+	lastAmount: number | null;
+	lastUnit: Unit | null;
+};
 export type RecentFood = Food & { lastAmount: number; lastUnit: Unit };
 
 /** Fields a caller supplies when creating a food. Ids, search text and timestamps are generated here. */
@@ -37,14 +42,47 @@ function escapeLike(value: string): string {
 const like = (column: SQL | typeof foods.searchText, pattern: string) =>
 	sql`${column} LIKE ${pattern} ESCAPE '\\'`;
 
+/** The amount and unit of a food's most recent food entry. */
+const lastEntryField = (field: 'amount' | 'unit') =>
+	sql.raw(
+		`(select l.${field} from log_entries l where l.food_id = foods.id and l.kind = 'food' and l.deleted_at is null order by l.logged_at desc, l.id desc limit 1)`
+	);
+
+const recentColumns = {
+	...getTableColumns(foods),
+	lastAmount: sql<number>`${lastEntryField('amount')}`,
+	lastUnit: sql<Unit>`${lastEntryField('unit')}`
+};
+
+/** D1 rejects LIKE patterns over 50 bytes; a token plus its two `%` stays under that with room to spare. */
+const MAX_TOKEN_BYTES = 40;
+
+/** Cuts a token to `MAX_TOKEN_BYTES` UTF-8 bytes without splitting a character. */
+function capToken(token: string): string {
+	const encoder = new TextEncoder();
+	let bytes = 0;
+	let end = 0;
+	for (const char of token) {
+		bytes += encoder.encode(char).length;
+		if (bytes > MAX_TOKEN_BYTES) break;
+		end += char.length;
+	}
+	return token.slice(0, end);
+}
+
 /** Library foods matching every word of the query, best matches first. Archived foods are hidden. */
 export async function searchLibrary(db: Db, query: string, limit = 20): Promise<FoodHit[]> {
-	const tokens = searchTokens(query);
+	const tokens = searchTokens(query).map(capToken);
 	if (tokens.length === 0) return [];
 	// Qualified by hand: Drizzle drops the table name from `foods.id` in a select, which would bind to `log_entries.id`.
 	const logCount = sql<number>`(select count(*) from log_entries l where l.food_id = foods.id and l.deleted_at is null)`;
 	return db
-		.select({ ...getTableColumns(foods), logCount })
+		.select({
+			...getTableColumns(foods),
+			lastAmount: sql<number | null>`${lastEntryField('amount')}`,
+			lastUnit: sql<Unit | null>`${lastEntryField('unit')}`,
+			logCount
+		})
 		.from(foods)
 		.where(
 			and(
@@ -89,11 +127,22 @@ export async function createFood(db: Db, input: FoodInsert): Promise<Food> {
 export async function updateFood(db: Db, id: string, input: FoodInput): Promise<Food> {
 	const existing = await getFood(db, id);
 	if (!existing) throw new Error('Food not found');
+	// BLV foods carry German and French names (and OFF foods any alias) in their search text; saving must not drop them.
+	const searchText =
+		existing.source === 'custom'
+			? normalizeSearchText(input.name, input.brand)
+			: [
+					...new Set(
+						`${normalizeSearchText(input.name, input.brand)} ${existing.searchText}`
+							.split(' ')
+							.filter(Boolean)
+					)
+				].join(' ');
 	const [row] = await db
 		.update(foods)
 		.set({
 			...input,
-			searchText: normalizeSearchText(input.name, input.brand),
+			searchText,
 			...(existing.source === 'custom' ? {} : { editedAt: new Date().toISOString() })
 		})
 		.where(eq(foods.id, id))
@@ -140,18 +189,6 @@ export async function upsertOffFood(db: Db, product: MappedProduct): Promise<Foo
 export async function unarchiveFood(db: Db, id: string): Promise<void> {
 	await db.update(foods).set({ archivedAt: null }).where(eq(foods.id, id));
 }
-
-/** The amount and unit of a food's most recent food entry. */
-const lastEntryField = (field: 'amount' | 'unit') =>
-	sql.raw(
-		`(select l.${field} from log_entries l where l.food_id = foods.id and l.kind = 'food' and l.deleted_at is null order by l.logged_at desc, l.id desc limit 1)`
-	);
-
-const recentColumns = {
-	...getTableColumns(foods),
-	lastAmount: sql<number>`${lastEntryField('amount')}`,
-	lastUnit: sql<Unit>`${lastEntryField('unit')}`
-};
 
 /** Distinct foods, most recently logged first. */
 export async function recents(db: Db, limit = 10): Promise<RecentFood[]> {
