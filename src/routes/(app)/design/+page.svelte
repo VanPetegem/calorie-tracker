@@ -28,6 +28,10 @@
 		type ThemePreference
 	} from '#lib/design/theme.ts';
 	import { themes, type ColorToken } from '#lib/design/tokens.ts';
+	import DateSwitcher from '#lib/components/log/DateSwitcher.svelte';
+	import DayHero from '#lib/components/log/DayHero.svelte';
+	import EntryRow from '#lib/components/log/EntryRow.svelte';
+	import type { LogEntry } from '#lib/server/db/schema.ts';
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
 	import TabBar from '#lib/components/shell/TabBar.svelte';
 	import Section from './Section.svelte';
@@ -114,6 +118,42 @@
 			}
 		});
 	}
+
+	const sampleEntry: LogEntry = {
+		id: 'design-oats',
+		date: '2026-11-05',
+		loggedAt: '2026-11-05T07:30:00.000Z',
+		kind: 'food',
+		foodId: 'design-oats-food',
+		batchId: null,
+		amount: 80,
+		unit: 'g',
+		grams: 80,
+		label: 'Rolled oats',
+		kcal: 302,
+		protein: 10.8,
+		carbs: 51.5,
+		fat: 5.6,
+		fiber: 8,
+		deletedAt: null
+	};
+	const sampleQuick: LogEntry = {
+		...sampleEntry,
+		id: 'design-quick',
+		kind: 'quick',
+		foodId: null,
+		amount: null,
+		unit: null,
+		grams: null,
+		label: 'Restaurant pasta',
+		kcal: 850,
+		protein: 30,
+		carbs: 110,
+		fat: 28
+	};
+	const heroTarget = { kcal: 3000, proteinG: 126, fatG: 83, carbsG: 424, carbsFloored: false };
+	let switcherDate = $state('2026-11-05');
+	let rowLog = $state('Tap, swipe left or use the menu button.');
 
 	function simulateSave() {
 		loading = true;
@@ -534,6 +574,76 @@
 					</Button>
 				</div>
 			</div>
+		</div>
+	</Section>
+
+	<Section
+		name="DateSwitcher"
+		description="Previous and next day with the day named. Next is disabled on tomorrow, the last day you can log, with a visible reason."
+	>
+		<div class="flex flex-col gap-6">
+			<div class="flex flex-col gap-2">
+				<span class="text-sm text-text-muted">Interactive, today is 5 Nov 2026</span>
+				<DateSwitcher date={switcherDate} today="2026-11-05" onselect={(d) => (switcherDate = d)} />
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm text-text-muted">On tomorrow (next disabled)</span>
+				<DateSwitcher date="2026-11-06" today="2026-11-05" onselect={() => {}} />
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm text-text-muted">Earlier day</span>
+				<DateSwitcher date="2026-10-30" today="2026-11-05" onselect={() => {}} />
+			</div>
+		</div>
+	</Section>
+
+	<Section
+		name="DayHero"
+		description="The day summary. Without a target: kcal and grams eaten. With a target: kcal remaining, a progress bar and three macro bars. Over target says &quot;over by&quot; in the success color: gaining weight is the goal."
+	>
+		<div class="flex flex-col gap-6">
+			<div class="flex flex-col gap-2">
+				<span class="text-sm text-text-muted">No target</span>
+				<DayHero totals={{ kcal: 1240, protein: 82, carbs: 150, fat: 40 }} target={null} />
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm text-text-muted">Under target</span>
+				<DayHero totals={{ kcal: 1240, protein: 82, carbs: 150, fat: 40 }} target={heroTarget} />
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm text-text-muted">Over target</span>
+				<DayHero totals={{ kcal: 3120, protein: 140, carbs: 430, fat: 90 }} target={heroTarget} />
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm text-text-muted">Carb target floored at zero</span>
+				<DayHero
+					totals={{ kcal: 900, protein: 60, carbs: 0, fat: 40 }}
+					target={{ kcal: 1500, proteinG: 126, fatG: 83, carbsG: 0, carbsFloored: true }}
+				/>
+			</div>
+		</div>
+	</Section>
+
+	<Section
+		name="EntryRow"
+		description="One logged item. Tap to edit, swipe left on a touch screen to delete, or use the menu button. Food entries show the amount, quick entries say Quick add."
+	>
+		<div class="flex flex-col gap-2">
+			<span class="text-sm text-text-muted">{rowLog}</span>
+			<ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
+				<EntryRow
+					entry={sampleEntry}
+					onedit={() => (rowLog = 'Edit Rolled oats')}
+					ondelete={() => (rowLog = 'Delete Rolled oats (swipe)')}
+					onmenu={() => (rowLog = 'Menu for Rolled oats')}
+				/>
+				<EntryRow
+					entry={sampleQuick}
+					onedit={() => (rowLog = 'Edit Restaurant pasta')}
+					ondelete={() => (rowLog = 'Delete Restaurant pasta (swipe)')}
+					onmenu={() => (rowLog = 'Menu for Restaurant pasta')}
+				/>
+			</ul>
 		</div>
 	</Section>
 
