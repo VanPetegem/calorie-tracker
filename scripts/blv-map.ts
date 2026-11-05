@@ -110,3 +110,26 @@ export function mapBlvRow(row: Record<string, unknown>, columns: BlvColumns): Bl
 		)
 	};
 }
+
+/**
+ * Splits SQL statements, in order, into chunks of at most `maxBytes` UTF-8 bytes of statement text. A statement
+ * larger than the limit gets a chunk of its own.
+ */
+export function chunkStatements(statements: string[], maxBytes: number): string[][] {
+	const encoder = new TextEncoder();
+	const chunks: string[][] = [];
+	let current: string[] = [];
+	let size = 0;
+	for (const statement of statements) {
+		const bytes = encoder.encode(statement).length;
+		if (current.length > 0 && size + bytes > maxBytes) {
+			chunks.push(current);
+			current = [];
+			size = 0;
+		}
+		current.push(statement);
+		size += bytes;
+	}
+	if (current.length > 0) chunks.push(current);
+	return chunks;
+}

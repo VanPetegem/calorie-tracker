@@ -92,13 +92,17 @@ browser project for that reason.
 
 ### BLV generics migration
 
-`scripts/import-blv.ts` (`pnpm blv:import [--dir data/blv] [--out drizzle/NNNN_blv_foods.sql]`) reads the English,
-German and French BLV Swiss Food Composition Database xlsx files (downloaded by hand from naehrwertdaten.ch into
-the gitignored `data/blv/`) and writes `drizzle/NNNN_blv_foods.sql`: one
-`INSERT ... ON CONFLICT(source, source_ref) DO UPDATE` per food, skipping rows the user edited. The migration is
-committed and applied by the normal migration step. A new BLV version means re-running the script, which produces a
-new migration. Only foods with kcal, protein, carbs and fat in range are imported. The current file is
-`drizzle/0003_blv_foods.sql` (version 7.1); attribution is in Settings.
+`scripts/import-blv.ts` (`pnpm blv:import [--dir data/blv] [--out-dir drizzle] [--chunk-bytes 60000]`) reads the
+English, German and French BLV Swiss Food Composition Database xlsx files (downloaded by hand from naehrwertdaten.ch
+into the gitignored `data/blv/`) and writes one
+`INSERT ... ON CONFLICT(source, source_ref) DO UPDATE` per food, skipping rows the user edited. The statements are
+split over several migrations of about 60 KB each, `drizzle/0003_blv_foods_01.sql` to `0017_blv_foods_15.sql`
+(version 7.1), because `wrangler d1 migrations apply --remote` sends a file as one request and D1 limits that to
+about 100 KB. Each needs its own journal entry and snapshot, so the script fills existing empty custom migrations
+(`pnpm drizzle-kit generate --custom --name blv_foods_NN`) and, when their number does not match, stops and prints
+the commands. The migrations are committed and applied by the normal migration step. A new BLV version means
+re-running the script, which produces new migrations. `scripts/migrations.spec.ts` fails if any migration file
+grows past 80 KB. Only foods with kcal, protein, carbs and fat in range are imported; attribution is in Settings.
 
 ## Directory map
 

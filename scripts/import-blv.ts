@@ -1,9 +1,15 @@
 /**
- * Turns the Swiss food composition database (BLV) generic foods sheets into a D1 migration.
+ * Turns the Swiss food composition database (BLV) generic foods sheets into D1 migrations.
  *
  * Download the English, German and French xlsx files from https://naehrwertdaten.ch/en/downloads/ into
- * `data/blv/` (gitignored), create an empty migration with `pnpm drizzle-kit generate --custom --name blv_foods`
- * and run `pnpm blv:import [--dir data/blv] [--out drizzle/0003_blv_foods.sql]`.
+ * `data/blv/` (gitignored) and run `pnpm blv:import [--dir data/blv] [--out-dir drizzle]`.
+ *
+ * `wrangler d1 migrations apply --remote` sends a migration file as one request, which D1 limits to about 100 KB,
+ * so the foods are split over several migrations of at most `--chunk-bytes` (default 60 000) of SQL each. Drizzle
+ * needs a journal entry and snapshot per migration, so the script fills existing empty custom migrations named
+ * `NNNN_blv_foods_01`, `NNNN_blv_foods_02`, and so on, and stops with the exact commands when their number is
+ * wrong:
+ * `pnpm drizzle-kit generate --custom --name blv_foods_NN`.
  *
  * Run with `node --experimental-strip-types`.
  */
@@ -12,12 +18,13 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import ExcelJS from 'exceljs';
 import { uuidv7 } from 'uuidv7';
-import { BLV_COLUMNS, mapBlvRow, type BlvFood } from './blv-map.ts';
+import { BLV_COLUMNS, chunkStatements, mapBlvRow, type BlvFood } from './blv-map.ts';
 
 const { values: args } = parseArgs({
 	options: {
 		dir: { type: 'string', default: 'data/blv' },
-		out: { type: 'string', default: 'drizzle/0003_blv_foods.sql' }
+		'out-dir': { type: 'string', default: 'drizzle' },
+		'chunk-bytes': { type: 'string', default: '60000' }
 	}
 });
 
@@ -192,6 +199,22 @@ sheets.en.eachRow((row, index) => {
 	else skipped += 1;
 });
 
+const chunks = chunkStatements(statements, Number(args['chunk-bytes']));
+const chunkFiles = readdirSync(args['out-dir'])
+	.filter((name) => /^\d{4}_blv_foods_\d{2}\.sql$/.test(name))
+	.sort();
+if (chunkFiles.length !== chunks.length) {
+	const commands = Array.from(
+		{ length: chunks.length },
+		(_, i) =>
+			`pnpm drizzle-kit generate --custom --name blv_foods_${String(i + 1).padStart(2, '0')}`
+	);
+	throw new Error(
+		`${chunks.length} chunks of foods need ${chunks.length} blv_foods_NN migrations, found ${chunkFiles.length}. ` +
+			`Remove the old blv_foods_* migrations (and their snapshots and journal entries), then run:\n${commands.join('\n')}`
+	);
+}
+
 const header = [
 	'-- BLV generic foods, imported by scripts/import-blv.ts. Do not edit by hand.',
 	`-- Source: Swiss Food Composition Database, Generic foods, version ${version},`,
@@ -200,11 +223,15 @@ const header = [
 	`-- Imported at ${importedAt}: ${statements.length} foods (${skipped} of ${rows} skipped for missing or out of range kcal, protein, carbs or fat).`,
 	'-- Rows the user edited (foods.edited_at set) are left alone on conflict.'
 ];
-// Drizzle's statement breakpoints: the test database helper and drizzle's migrator run one statement at a time.
-writeFileSync(
-	args.out,
-	`${header.join('\n')}\n${statements.join('\n--> statement-breakpoint\n')}\n`
-);
+chunks.forEach((chunk, index) => {
+	const file = join(args['out-dir'], chunkFiles[index]);
+	// Drizzle's statement breakpoints: the test database helper and drizzle's migrator run one statement at a time.
+	writeFileSync(
+		file,
+		`${[...header, `-- Part ${index + 1} of ${chunks.length}: ${chunk.length} foods.`].join('\n')}\n${chunk.join('\n--> statement-breakpoint\n')}\n`
+	);
+	console.log(`${file}: ${chunk.length} foods`);
+});
 console.log(
-	`${args.out}: ${statements.length} foods, ${skipped} of ${rows} skipped, version ${version}`
+	`${statements.length} foods in ${chunks.length} migrations, ${skipped} of ${rows} skipped, version ${version}`
 );

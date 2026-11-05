@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BLV_COLUMNS, mapBlvRow } from './blv-map.ts';
+import { BLV_COLUMNS, chunkStatements, mapBlvRow } from './blv-map.ts';
 
 const complete = {
 	id: 1234,
@@ -62,5 +62,34 @@ describe('mapBlvRow', () => {
 	it('returns null when a macro is out of range or the id is missing', () => {
 		expect(mapBlvRow({ ...complete, protein: 101 }, BLV_COLUMNS)).toBeNull();
 		expect(mapBlvRow({ ...complete, id: null }, BLV_COLUMNS)).toBeNull();
+	});
+});
+
+describe('chunkStatements', () => {
+	const bytes = (chunk: string[]) => chunk.reduce((sum, statement) => sum + statement.length, 0);
+
+	it('packs statements in order into chunks under the byte limit', () => {
+		const statements = Array.from({ length: 10 }, (_, i) => `${i}`.repeat(30));
+		const chunks = chunkStatements(statements, 100);
+		expect(chunks.flat()).toEqual(statements);
+		expect(chunks).toHaveLength(4);
+		for (const chunk of chunks) expect(bytes(chunk)).toBeLessThanOrEqual(100);
+	});
+
+	it('counts bytes, not characters', () => {
+		const chunks = chunkStatements(['é'.repeat(40), 'é'.repeat(40)], 100);
+		expect(chunks).toHaveLength(2);
+	});
+
+	it('gives an oversized statement a chunk of its own', () => {
+		expect(chunkStatements(['a', 'b'.repeat(50), 'c'], 10)).toEqual([
+			['a'],
+			['b'.repeat(50)],
+			['c']
+		]);
+	});
+
+	it('returns no chunks for no statements', () => {
+		expect(chunkStatements([], 100)).toEqual([]);
 	});
 });

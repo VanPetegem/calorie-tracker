@@ -4,6 +4,11 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-05
 
+- **The BLV generics ship as 15 migrations of about 60 KB, not one of 873 KB.** `wrangler d1 migrations apply
+--remote` sends a migration file as one request, which D1 limits to about 100 KB, and the first deploy would have
+  hit that. `scripts/import-blv.ts` fills `0003_blv_foods_01` to `0017_blv_foods_15`; `0018_log_entries_deleted_at`
+  follows. Nothing had been applied remotely, so the migrations were renumbered, not appended. A local dev database
+  that applied the old `0003` and `0004` needs a reset (delete `.wrangler/state` and migrate again).
 - **A custom food with a barcode that is already in the library is refused, naming the existing food.** `createFood`
   and `updateFood` (`foods.remote.ts`) look the barcode up first, archived foods included, and return
   `{ ok: false, reason: 'barcode_taken', food }` instead of hitting the unique index; the form shows "already in
