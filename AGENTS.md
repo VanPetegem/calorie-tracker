@@ -30,3 +30,14 @@ Run before claiming any work done:
 ```sh
 pnpm check && pnpm lint && pnpm test && pnpm test:e2e
 ```
+
+## Deploy
+
+Production: `https://kcal.avp.software` (Cloudflare Worker + D1 `kcal`). Pushing to `main` runs
+`.github/workflows/ci.yml`: the full gate, then `pnpm db:migrate:remote`, `pnpm build` and `pnpm wrangler deploy`.
+Other branches and pull requests only run the gate. Never deploy or migrate remotely from an agent session; the
+user does that. Details, secrets and the migration workflow: `docs/architecture.md`.
+
+- `wrangler.jsonc` holds the production `ORIGIN`; local dev reads `ORIGIN` from `.env`, e2e passes `--var`.
+- Run `pnpm gen` after any `wrangler.jsonc` change; `pnpm check` and `pnpm build` fail on stale types.
+- `BETTER_AUTH_SECRET` in production is a Worker secret (`wrangler secret put`), never in config.

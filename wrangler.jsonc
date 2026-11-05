@@ -12,7 +12,7 @@
 		{
 			"binding": "DB",
 			"database_name": "kcal",
-			"database_id": "00000000-0000-0000-0000-000000000000",
+			"database_id": "069d8fda-f1a6-4a33-a9a1-96543050b973",
 			"migrations_dir": "drizzle"
 		}
 	],
@@ -26,6 +26,10 @@
 	],
 	// Declared so `wrangler types` does not infer the Env type from whatever .env or .dev.vars holds locally.
 	"secrets": { "required": ["BETTER_AUTH_SECRET"] },
-	"workers_dev": true,
-	"preview_urls": true
+	// Production only. Local dev and e2e override ORIGIN (see .dev.vars.example and playwright.config.ts).
+	"vars": { "ORIGIN": "https://kcal.avp.software" },
+	"routes": [{ "pattern": "kcal.avp.software", "custom_domain": true }],
+	"workers_dev": false,
+	"preview_urls": false,
+	"observability": { "enabled": true }
 }

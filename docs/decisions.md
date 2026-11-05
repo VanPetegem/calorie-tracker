@@ -4,6 +4,18 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-05
 
+- **CI deploys on push to `main`.** The `verify` job runs the full gate on every push and pull request; the
+  `deploy` job needs it, runs only on `main`, and does `db:migrate:remote` then `build` and `wrangler deploy`
+  under a `deploy` concurrency group so two merges never deploy at once. One user, one environment, no staging:
+  the gate is the safety net, and the migration runs before the new code ships, so migrations must stay
+  backward compatible for one release.
+- **Local Cloudflare access uses an Account API token in `.env` (`CLOUDFLARE_API_TOKEN`), not `wrangler login`.**
+  The same token shape works for CI, it does not expire with a browser session, and agents never need an
+  interactive login. Wrangler reads it from the environment.
+- **Workers Rate Limiting is per Cloudflare location and eventually consistent.** The `AUTH_LIMITER` counts are
+  not shared across locations, so an attacker spread over several locations gets more than 10 attempts a
+  minute. Accepted for one user: passkeys are the main sign in, the account is single, and the limit exists to
+  slow guessing, not to be exact.
 - **Adding a passkey keeps Better Auth's fresh session rule (signed in within the last day).** A stolen long
   lived cookie must not be enough to plant a new credential. Sessions last a year, so most attempts hit
   `SESSION_NOT_FRESH`; the Security page explains it and offers "Sign in again", which signs out and returns to
