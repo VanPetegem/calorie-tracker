@@ -4,6 +4,15 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-05
 
+- **The scanner uses the `barcode-detector` ponyfill with a lazily loaded, self hosted zxing-wasm, and Scan lives in
+  the search step.** `createDetector` (`src/lib/scanner/detector.ts`) uses the browser's own `BarcodeDetector` when
+  present and otherwise `import('barcode-detector/ponyfill')`, so zxing never lands in Today's JS (checked in the
+  build manifest: no entry's static imports reach it). The wasm comes from `zxing-wasm/reader/zxing_reader.wasm?url`
+  (a direct dependency pinned to 3.1.6) instead of the ponyfill's default jsDelivr URL: no third party request, and
+  it works offline once precached. Only `ean_13`, `ean_8`, `upc_a` and `upc_e` reach the server as a format; other
+  formats are sent as none and the length decides. The Scan button sits with Quick add and New food in
+  `FoodSearch`, next to the search field, because the add sheet is where every way of logging starts; the camera
+  opens only after the tap and is stopped when the step or the sheet goes away.
 - **`/design` shows the parts of containers that call remote functions, not the containers.** `DayView`,
   `FoodSearch` and `EditEntrySheet` read or write through remote functions (delete, undo, edit, library and Open Food
   Facts search, `loadFood`), so a static section would either send real requests from a style guide or need those

@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import type { Unit } from '#lib/domain/nutrition.ts';
+	import type { FoodInput } from '#lib/schemas/food.ts';
 	import type { Food } from '#lib/server/db/schema.ts';
 	import type { RecentFood } from '#lib/server/foods/repo.ts';
 	import { Button, Sheet, Skeleton } from '#lib/components/ui/index.ts';
@@ -14,14 +15,16 @@
 	import FoodForm from './FoodForm.svelte';
 	import FoodSearch from './FoodSearch.svelte';
 	import QuickAddForm from './QuickAddForm.svelte';
+	import ScannerView from './ScannerView.svelte';
 
 	/**
 	 * The add sheet: search and recents first, then the amount step for the chosen food.
 	 *
 	 * Mounted once in the app layout. Whether it is open lives in the `addSheet` store, which the tab bar, the
-	 * sidebar and the ⌘K shortcut set. Quick add and New food are steps of their own; a new food continues to its
-	 * amount step so it can be logged at once, and the amount step's "Edit food" opens the food form for that food.
-	 * Scan (phase 2b) becomes one more step. The sheet logs on `day.date` (the day being viewed). Pages that do not load a day (Weight,
+	 * sidebar and the ⌘K shortcut set. Quick add, New food and Scan are steps of their own; a new food continues to
+	 * its amount step so it can be logged at once, and the amount step's "Edit food" opens the food form for that food.
+	 * A scanned code goes straight to the amount step when the food is known, else to the new food form with the
+	 * barcode (and what Open Food Facts knew) filled in. The sheet logs on `day.date` (the day being viewed). Pages that do not load a day (Weight,
 	 * Settings) pass `day: null`, and the sheet fetches today and the suggestions itself when it opens.
 	 */
 	type Props = {
@@ -35,7 +38,8 @@
 		| { kind: 'search' }
 		| { kind: 'amount'; food: Food; last?: Last }
 		| { kind: 'quick' }
-		| { kind: 'new' }
+		| { kind: 'new'; initial?: Partial<FoodInput> }
+		| { kind: 'scan' }
 		| { kind: 'edit'; food: Food; last?: Last };
 	let step = $state.raw<Step>({ kind: 'search' });
 	// Bumping it mounts a fresh search (empty field) the next time the sheet opens.
@@ -77,6 +81,8 @@
 				return 'Quick add';
 			case 'new':
 				return 'New food';
+			case 'scan':
+				return 'Scan barcode';
 			case 'edit':
 				return 'Edit food';
 			default:
@@ -123,6 +129,7 @@
 				onpick={(food, last) => (step = { kind: 'amount', food, last })}
 				onquick={() => (step = { kind: 'quick' })}
 				onnew={() => (step = { kind: 'new' })}
+				onscan={() => (step = { kind: 'scan' })}
 			/>
 		{/key}
 	</div>
@@ -157,7 +164,18 @@
 			</div>
 		{/if}
 	{:else if step.kind === 'new'}
-		<FoodForm onsaved={(food) => (step = { kind: 'amount', food })} oncancel={toSearch} />
+		<FoodForm
+			initial={step.initial}
+			onsaved={(food) => (step = { kind: 'amount', food })}
+			oncancel={toSearch}
+		/>
+	{:else if step.kind === 'scan'}
+		<ScannerView
+			onhit={(food) => (step = { kind: 'amount', food })}
+			onmiss={(barcode, prefill) => (step = { kind: 'new', initial: { ...prefill, barcode } })}
+			onmanual={(barcode) => (step = { kind: 'new', initial: { barcode } })}
+			onback={toSearch}
+		/>
 	{:else if step.kind === 'edit'}
 		{@const { food, last } = step}
 		<FoodForm
