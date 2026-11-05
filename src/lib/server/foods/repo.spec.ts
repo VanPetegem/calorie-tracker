@@ -58,10 +58,12 @@ describe('food repository', () => {
 		date: string,
 		loggedAt: string,
 		amount = 100,
-		unit: 'g' | 'ml' | 'serving' = 'g'
+		unit: 'g' | 'ml' | 'serving' = 'g',
+		deletedAt: string | null = null
 	) =>
 		test.db.insert(logEntries).values({
 			id: crypto.randomUUID(),
+			deletedAt,
 			date,
 			loggedAt,
 			kind: 'food',
@@ -272,6 +274,17 @@ describe('food repository', () => {
 			]);
 			expect(await recents(test.db, 1)).toHaveLength(1);
 		});
+
+		it('ignores deleted entries, also for the last amount', async () => {
+			const a = await createFood(test.db, input({ name: 'A' }));
+			const gone = await createFood(test.db, input({ name: 'Gone' }));
+			const deletedAt = '2026-11-05T12:00:00.000Z';
+			await log(a.id, TODAY, '2026-11-05T08:00:00.000Z', 50, 'g');
+			await log(a.id, TODAY, '2026-11-05T10:00:00.000Z', 999, 'g', deletedAt);
+			await log(gone.id, TODAY, '2026-11-05T11:00:00.000Z', 100, 'g', deletedAt);
+			const list = await recents(test.db);
+			expect(list.map((f) => [f.name, f.lastAmount])).toEqual([['A', 50]]);
+		});
 	});
 
 	describe('frequents', () => {
@@ -292,6 +305,17 @@ describe('food repository', () => {
 			expect(list[0]).toMatchObject({ lastAmount: 30, lastUnit: 'ml' });
 			expect((await frequents(test.db, TODAY, 10, [b.id])).map((f) => f.name)).toEqual(['A', 'C']);
 			expect(await frequents(test.db, TODAY, 1)).toHaveLength(1);
+		});
+
+		it('ignores deleted entries', async () => {
+			const a = await createFood(test.db, input({ name: 'A' }));
+			const gone = await createFood(test.db, input({ name: 'Gone' }));
+			const deletedAt = '2026-11-05T12:00:00.000Z';
+			await log(a.id, '2026-11-01', '2026-11-01T08:00:00.000Z');
+			for (const day of ['2026-11-02', '2026-11-03']) {
+				await log(gone.id, day, `${day}T08:00:00.000Z`, 100, 'g', deletedAt);
+			}
+			expect((await frequents(test.db, TODAY)).map((f) => f.name)).toEqual(['A']);
 		});
 	});
 });

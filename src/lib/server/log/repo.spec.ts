@@ -237,19 +237,50 @@ describe('log repository', () => {
 	});
 
 	describe('deleteEntry and restoreEntry', () => {
-		it('returns the deleted row, and null once it is gone', async () => {
-			const entry = await logOats();
-			expect(await deleteEntry(test.db, entry.id)).toEqual(entry);
-			expect(await deleteEntry(test.db, entry.id)).toBeNull();
-			expect(await allEntries()).toEqual([]);
-		});
+		const liveEntries = () => dayEntries(test.db, TODAY);
 
-		it('re-inserts the same row once, even when restored twice', async () => {
+		it('marks the row deleted, returns it, and null once it is gone', async () => {
 			const entry = await logOats();
 			const deleted = await deleteEntry(test.db, entry.id);
-			await restoreEntry(test.db, deleted!);
-			await restoreEntry(test.db, deleted!);
+			expect(deleted).toEqual({ ...entry, deletedAt: expect.any(String) });
+			expect(await deleteEntry(test.db, entry.id)).toBeNull();
+			expect(await deleteEntry(test.db, newId())).toBeNull();
+			expect(await liveEntries()).toEqual([]);
+			expect(await allEntries()).toHaveLength(1);
+		});
+
+		it('brings back the same row once, even when restored twice', async () => {
+			const entry = await logOats();
+			await deleteEntry(test.db, entry.id);
+			await restoreEntry(test.db, entry.id);
+			await restoreEntry(test.db, entry.id);
+			expect(await liveEntries()).toEqual([entry]);
 			expect(await allEntries()).toEqual([entry]);
+		});
+
+		it('does nothing for a live entry or an unknown id', async () => {
+			const entry = await logOats();
+			await restoreEntry(test.db, entry.id);
+			await expect(restoreEntry(test.db, newId())).resolves.toBeUndefined();
+			expect(await allEntries()).toEqual([entry]);
+		});
+
+		it('rejects edits of a deleted entry with 404', async () => {
+			const food = await logOats();
+			const quick = await addQuickEntry(
+				test.db,
+				{ date: TODAY, label: null, kcal: 100, protein: null, carbs: null, fat: null },
+				ctx
+			);
+			await deleteEntry(test.db, food.id);
+			await deleteEntry(test.db, quick.id);
+			await expect(
+				updateEntryAmount(test.db, { id: food.id, amount: 1, unit: 'g' })
+			).rejects.toMatchObject({ status: 404 });
+			const input = { label: null, kcal: 1, protein: null, carbs: null, fat: null };
+			await expect(updateQuickEntry(test.db, quick.id, input)).rejects.toMatchObject({
+				status: 404
+			});
 		});
 	});
 

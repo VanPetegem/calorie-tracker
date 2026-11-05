@@ -1,0 +1,1 @@
+ALTER TABLE `log_entries` ADD `deleted_at` text;

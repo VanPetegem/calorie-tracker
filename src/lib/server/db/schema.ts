@@ -73,7 +73,9 @@ export const logEntries = sqliteTable(
 		protein: real('protein').notNull(),
 		carbs: real('carbs').notNull(),
 		fat: real('fat').notNull(),
-		fiber: real('fiber')
+		fiber: real('fiber'),
+		/** Set when the entry is deleted, so Undo can bring the same row back. Reads skip these rows. */
+		deletedAt: text('deleted_at')
 	},
 	(table) => [
 		index('log_entries_date_idx').on(table.date),

@@ -114,36 +114,10 @@ describe('EditQuickInput', () => {
 });
 
 describe('RestoreEntryInput', () => {
-	const quick = {
-		id: foodId,
-		date: '2026-11-05',
-		loggedAt: '2026-11-05T10:30:00.000Z',
-		kind: 'quick',
-		foodId: null,
-		batchId: null,
-		amount: null,
-		unit: null,
-		grams: null,
-		label: 'Restaurant',
-		kcal: 650,
-		protein: 0,
-		carbs: 0,
-		fat: 0,
-		fiber: null
-	};
-	const foodEntry = { ...quick, kind: 'food', foodId, amount: 2, unit: 'serving', grams: 80 };
-
-	it('accepts a deleted quick or food entry as returned', () => {
-		expect(v.safeParse(RestoreEntryInput, quick).success).toBe(true);
-		expect(v.safeParse(RestoreEntryInput, foodEntry).success).toBe(true);
-	});
-
-	it('rejects mixed kinds, negative nutrition and unknown keys', () => {
-		expect(v.safeParse(RestoreEntryInput, { ...quick, foodId }).success).toBe(false);
-		expect(v.safeParse(RestoreEntryInput, { ...foodEntry, grams: null }).success).toBe(false);
-		expect(v.safeParse(RestoreEntryInput, { ...quick, kcal: -1 }).success).toBe(false);
-		expect(v.safeParse(RestoreEntryInput, { ...quick, extra: 1 }).success).toBe(false);
-		expect(v.safeParse(RestoreEntryInput, { ...quick, kind: 'batch' }).success).toBe(false);
+	it('takes only an id', () => {
+		expect(v.parse(RestoreEntryInput, { id: foodId })).toEqual({ id: foodId });
+		expect(v.safeParse(RestoreEntryInput, { id: 'x' }).success).toBe(false);
+		expect(v.safeParse(RestoreEntryInput, { id: foodId, kcal: 1e9 }).success).toBe(false);
 	});
 });
 

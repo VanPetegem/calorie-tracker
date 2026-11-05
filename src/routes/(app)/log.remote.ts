@@ -37,15 +37,14 @@ export const editQuick = command(EditQuickInput, async ({ id, ...input }) => {
 	return log.updateQuickEntry(db, id, input);
 });
 
-/** Deletes an entry and returns it for Undo, or null when it was already gone. */
+/** Deletes an entry (softly) and returns it for display, or null when it was already gone. */
 export const removeEntry = command(id, async (entryId) => {
 	const { db } = await appContext();
 	return log.deleteEntry(db, entryId);
 });
 
-/** Undo: puts back the entry `removeEntry` returned, with the same id. Restoring twice is harmless. */
-export const restoreEntry = command(RestoreEntryInput, async (entry) => {
-	const ctx = await appContext();
-	log.assertLogDate(entry.date, ctx.today);
-	await log.restoreEntry(ctx.db, entry);
+/** Undo: brings back the entry `removeEntry` deleted, by id. Restoring twice, or an unknown id, does nothing. */
+export const restoreEntry = command(RestoreEntryInput, async ({ id }) => {
+	const { db } = await appContext();
+	await log.restoreEntry(db, id);
 });

@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { isAllowedLogDate, loggedAtFor } from '../../domain/dates.ts';
 import {
 	scaleSnapshot,
@@ -44,11 +44,12 @@ function quickNutrients(input: Pick<QuickInput, 'kcal' | 'protein' | 'carbs' | '
 	};
 }
 
+/** A live (not deleted) entry of the kind, or 404. */
 async function getEntry(db: Db, id: string, kind: LogEntry['kind']): Promise<LogEntry> {
 	const [row] = await db
 		.select()
 		.from(logEntries)
-		.where(and(eq(logEntries.id, id), eq(logEntries.kind, kind)))
+		.where(and(eq(logEntries.id, id), eq(logEntries.kind, kind), isNull(logEntries.deletedAt)))
 		.limit(1);
 	if (!row) error(404, 'Entry not found');
 	return row;
@@ -59,7 +60,7 @@ export async function dayEntries(db: Db, date: string): Promise<LogEntry[]> {
 	return db
 		.select()
 		.from(logEntries)
-		.where(eq(logEntries.date, date))
+		.where(and(eq(logEntries.date, date), isNull(logEntries.deletedAt)))
 		.orderBy(asc(logEntries.loggedAt), asc(logEntries.id));
 }
 
@@ -122,8 +123,9 @@ export async function updateQuickEntry(
 	const [entry] = await db
 		.update(logEntries)
 		.set({ label: input.label, ...quickNutrients(input) })
-		.where(eq(logEntries.id, id))
+		.where(and(eq(logEntries.id, id), isNull(logEntries.deletedAt)))
 		.returning();
+	if (!entry) error(404, 'Entry not found');
 	return entry;
 }
 
@@ -145,18 +147,29 @@ export async function updateEntryAmount(db: Db, input: EditAmountInput): Promise
 			grams,
 			...scaleSnapshot(entry, entry.grams, grams)
 		})
-		.where(eq(logEntries.id, entry.id))
+		.where(and(eq(logEntries.id, entry.id), isNull(logEntries.deletedAt)))
 		.returning();
+	if (!updated) error(404, 'Entry not found');
 	return updated;
 }
 
-/** Deletes an entry and returns it, so Undo can put the same row back. Null when it was already gone. */
+/**
+ * Deletes an entry softly (sets `deleted_at`) and returns it, so Undo can bring back the same row by id without
+ * the client sending any values. Null when the entry is missing or already deleted.
+ */
 export async function deleteEntry(db: Db, id: string): Promise<LogEntry | null> {
-	const [row] = await db.delete(logEntries).where(eq(logEntries.id, id)).returning();
+	const [row] = await db
+		.update(logEntries)
+		.set({ deletedAt: new Date().toISOString() })
+		.where(and(eq(logEntries.id, id), isNull(logEntries.deletedAt)))
+		.returning();
 	return row ?? null;
 }
 
-/** Re-inserts a deleted entry with its id. A second restore of the same entry does nothing. */
-export async function restoreEntry(db: Db, entry: LogEntry): Promise<void> {
-	await db.insert(logEntries).values(entry).onConflictDoNothing({ target: logEntries.id });
+/** Undo: brings a deleted entry back. Restoring a live or unknown entry does nothing. */
+export async function restoreEntry(db: Db, id: string): Promise<void> {
+	await db
+		.update(logEntries)
+		.set({ deletedAt: null })
+		.where(and(eq(logEntries.id, id), isNotNull(logEntries.deletedAt)));
 }

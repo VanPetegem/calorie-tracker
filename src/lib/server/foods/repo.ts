@@ -42,7 +42,7 @@ export async function searchLibrary(db: Db, query: string, limit = 20): Promise<
 	const tokens = searchTokens(query);
 	if (tokens.length === 0) return [];
 	// Qualified by hand: Drizzle drops the table name from `foods.id` in a select, which would bind to `log_entries.id`.
-	const logCount = sql<number>`(select count(*) from log_entries l where l.food_id = foods.id)`;
+	const logCount = sql<number>`(select count(*) from log_entries l where l.food_id = foods.id and l.deleted_at is null)`;
 	return db
 		.select({ ...getTableColumns(foods), logCount })
 		.from(foods)
@@ -144,7 +144,7 @@ export async function unarchiveFood(db: Db, id: string): Promise<void> {
 /** The amount and unit of a food's most recent food entry. */
 const lastEntryField = (field: 'amount' | 'unit') =>
 	sql.raw(
-		`(select l.${field} from log_entries l where l.food_id = foods.id and l.kind = 'food' order by l.logged_at desc, l.id desc limit 1)`
+		`(select l.${field} from log_entries l where l.food_id = foods.id and l.kind = 'food' and l.deleted_at is null order by l.logged_at desc, l.id desc limit 1)`
 	);
 
 const recentColumns = {
@@ -159,7 +159,7 @@ export async function recents(db: Db, limit = 10): Promise<RecentFood[]> {
 		.select(recentColumns)
 		.from(logEntries)
 		.innerJoin(foods, eq(foods.id, logEntries.foodId))
-		.where(and(eq(logEntries.kind, 'food'), isNull(foods.archivedAt)))
+		.where(and(eq(logEntries.kind, 'food'), isNull(logEntries.deletedAt), isNull(foods.archivedAt)))
 		.groupBy(foods.id)
 		.orderBy(desc(sql`max(${logEntries.loggedAt})`))
 		.limit(limit);
@@ -180,6 +180,7 @@ export async function frequents(
 		.where(
 			and(
 				eq(logEntries.kind, 'food'),
+				isNull(logEntries.deletedAt),
 				isNull(foods.archivedAt),
 				sql`${logEntries.date} > ${addDays(today, -FREQUENTS_WINDOW_DAYS)}`,
 				exclude.length > 0 ? notInArray(foods.id, exclude) : undefined
