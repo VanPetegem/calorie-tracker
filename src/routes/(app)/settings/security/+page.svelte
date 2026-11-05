@@ -8,7 +8,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button, EmptyState, IconButton, ListItem, Sheet } from '#lib/components/ui/index.ts';
-	import { authClient, deviceName, signOut } from '#lib/auth-client.ts';
+	import { authClient, deviceName, signOutOrWarn } from '#lib/auth-client.ts';
 	import { addPasskeyError } from '#lib/auth-errors.ts';
 	import { toasts, type ToastOptions } from '#lib/stores/toasts.svelte.ts';
 	import type { PageProps } from './$types';
@@ -53,17 +53,26 @@
 	}
 
 	async function confirmDelete() {
-		if (!toDelete) return;
+		// Kept locally: closing the sheet while the request runs clears toDelete.
+		const passkey = toDelete;
+		if (!passkey) return;
 		deleting = true;
-		const result = await authClient.passkey.deletePasskey({ id: toDelete.id });
+		const result = await authClient.passkey.deletePasskey({ id: passkey.id });
+		let outcome: ToastOptions;
 		if (result.error) {
-			afterClose = { message: 'Couldn’t delete the passkey. Try again.', tone: 'danger' };
+			outcome = { message: 'Couldn’t delete the passkey. Try again.', tone: 'danger' };
 		} else {
 			await invalidateAll();
-			afterClose = { message: `${label(toDelete)} passkey deleted`, tone: 'success' };
+			outcome = { message: `${label(passkey)} passkey deleted`, tone: 'success' };
 		}
 		deleting = false;
-		confirmOpen = false;
+		if (confirmOpen && toDelete === passkey) {
+			afterClose = outcome;
+			confirmOpen = false;
+		} else {
+			// The sheet was already closed: there is no close left to wait for.
+			toasts.show(outcome);
+		}
 	}
 
 	function handleSheetClose() {
@@ -75,18 +84,13 @@
 	/** Signs out and comes back here after the next sign in, with a fresh session. */
 	async function signInAgain() {
 		reauthing = true;
-		if (!(await signOut(`/login?redirectTo=${encodeURIComponent('/settings/security')}`))) {
-			reauthing = false;
-			toasts.show({ message: 'Couldn’t sign out. Check your connection.', tone: 'danger' });
-		}
+		const to = `/login?redirectTo=${encodeURIComponent('/settings/security')}`;
+		if (!(await signOutOrWarn(to))) reauthing = false;
 	}
 
 	async function handleSignOut() {
 		signingOut = true;
-		if (!(await signOut())) {
-			signingOut = false;
-			toasts.show({ message: 'Couldn’t sign out. Check your connection.', tone: 'danger' });
-		}
+		if (!(await signOutOrWarn())) signingOut = false;
 	}
 </script>
 

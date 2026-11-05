@@ -7,6 +7,7 @@ import { svelteKitHandler } from 'better-auth/svelte-kit';
 import { createAuth, type Auth } from '#lib/server/auth.ts';
 import { decideAccess } from '#lib/server/guard.ts';
 import { isRateLimitedPath, rateLimitKey } from '#lib/server/rate-limit.ts';
+import { TOO_MANY_ATTEMPTS } from '#lib/auth-rules.ts';
 
 let instance: Auth | undefined;
 
@@ -60,10 +61,7 @@ const handleRequest: Handle = async ({ event, resolve }) => {
 				event.locals.rateLimited = true;
 			} else {
 				return Response.json(
-					{
-						code: 'TOO_MANY_REQUESTS',
-						message: 'Too many attempts. Wait a minute, then try again.'
-					},
+					{ code: 'TOO_MANY_REQUESTS', message: TOO_MANY_ATTEMPTS },
 					{ status: 429, headers: { 'retry-after': '60', 'cache-control': 'no-store' } }
 				);
 			}

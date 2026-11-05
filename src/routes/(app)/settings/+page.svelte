@@ -3,17 +3,13 @@
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import { resolve } from '$app/paths';
 	import { Button, Card, ListItem } from '#lib/components/ui/index.ts';
-	import { signOut } from '#lib/auth-client.ts';
-	import { toasts } from '#lib/stores/toasts.svelte.ts';
+	import { signOutOrWarn } from '#lib/auth-client.ts';
 
 	let signingOut = $state(false);
 
 	async function handleSignOut() {
 		signingOut = true;
-		if (!(await signOut())) {
-			signingOut = false;
-			toasts.show({ message: 'Couldn’t sign out. Check your connection.', tone: 'danger' });
-		}
+		if (!(await signOutOrWarn())) signingOut = false;
 	}
 </script>
 

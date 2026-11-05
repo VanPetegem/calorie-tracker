@@ -2,9 +2,8 @@ import { fail, redirect } from '@sveltejs/kit';
 import { isAPIError } from 'better-auth/api';
 import { env } from 'cloudflare:workers';
 import { hasAnyUser } from '#lib/server/auth.ts';
+import { MIN_PASSWORD_LENGTH, TOO_MANY_ATTEMPTS } from '#lib/auth-rules.ts';
 import type { Actions, PageServerLoad } from './$types';
-
-const MIN_PASSWORD_LENGTH = 12;
 
 /** First run only: once the account exists, setup is closed and this page sends you to login. */
 export const load: PageServerLoad = async () => {
@@ -25,7 +24,7 @@ export const actions: Actions = {
 				name,
 				email,
 				errors: {} as FieldErrors,
-				message: 'Too many attempts. Wait a minute, then try again.'
+				message: TOO_MANY_ATTEMPTS
 			});
 		}
 
@@ -48,8 +47,9 @@ export const actions: Actions = {
 			});
 		} catch (error) {
 			if (!isAPIError(error)) throw error;
-			// Someone finished setup first: sign up is closed (403 from the user create hook).
-			if (error.statusCode === 403) redirect(303, '/login');
+			// Someone finished setup first: sign up is closed. The user create hook answers 403; when two sign ups
+			// race past it, the D1 trigger aborts the second insert and Better Auth reports a 422 instead.
+			if (error.statusCode === 403 || (await hasAnyUser(env.DB))) redirect(303, '/login');
 			return fail(400, {
 				name,
 				email,

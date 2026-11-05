@@ -4,10 +4,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-if ! grep -q '^BETTER_AUTH_SECRET=.' .dev.vars 2>/dev/null; then
+# Matches a non empty value, quoted or not: the empty BETTER_AUTH_SECRET="" from .env.example does not count.
+has_secret='^BETTER_AUTH_SECRET=["'"'"']?[^"'"'"'[:space:]]'
+if ! grep -Eq "$has_secret" .dev.vars 2>/dev/null; then
 	if [ -n "${CI:-}" ]; then
 		printf 'BETTER_AUTH_SECRET=%s\n' "$(openssl rand -base64 32)" >> .dev.vars
-	elif grep -q '^BETTER_AUTH_SECRET=.' .env 2>/dev/null; then
+	elif grep -Eq "$has_secret" .env 2>/dev/null; then
 		grep '^BETTER_AUTH_SECRET=' .env >> .dev.vars
 	else
 		echo 'BETTER_AUTH_SECRET is missing: set it in .env (openssl rand -base64 32).' >&2

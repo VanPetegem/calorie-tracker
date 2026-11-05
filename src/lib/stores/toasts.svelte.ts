@@ -60,11 +60,15 @@ export function withUndo(opts: {
 	revert: () => void | Promise<void>;
 }): void {
 	opts.apply();
+	// The Undo button stays in the DOM while the toast animates out, so a double tap must not revert twice.
+	let undone = false;
 	const id = toasts.show({
 		message: opts.message,
 		action: {
 			label: 'Undo',
 			run: async () => {
+				if (undone) return;
+				undone = true;
 				toasts.dismiss(id);
 				try {
 					await opts.revert();

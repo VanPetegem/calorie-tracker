@@ -1,7 +1,7 @@
+import { TOO_MANY_ATTEMPTS as TOO_MANY } from '#lib/auth-rules.ts';
+
 /** The error part of a Better Auth client result. */
 export type AuthClientError = { code?: string; message?: string; status: number };
-
-const TOO_MANY = 'Too many attempts. Wait a minute, then try again.';
 
 /**
  * What to tell the user when adding a passkey failed. Adding one needs a fresh session (signed in within the

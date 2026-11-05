@@ -79,6 +79,14 @@ describe('withUndo', () => {
 		expect(toasts.items).toHaveLength(0);
 	});
 
+	it('reverts only once when Undo is tapped twice', async () => {
+		const revert = vi.fn();
+		withUndo({ message: 'Entry deleted', apply: vi.fn(), revert });
+		const action = toasts.items[0]!.action!;
+		await Promise.all([action.run(), action.run()]);
+		expect(revert).toHaveBeenCalledOnce();
+	});
+
 	it('never reverts when the toast expires', () => {
 		const revert = vi.fn();
 		withUndo({ message: 'Entry deleted', apply: vi.fn(), revert });

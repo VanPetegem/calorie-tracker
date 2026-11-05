@@ -8,7 +8,8 @@ describe('isRateLimitedPath', () => {
 		'/api/auth/sign-in/email',
 		'/api/auth/sign-in/passkey',
 		'/api/auth/sign-up/email',
-		'/api/auth/passkey/verify-authentication'
+		'/api/auth/passkey/verify-authentication',
+		'/api/auth/change-password'
 	])('limits POST %s', (pathname) => {
 		expect(isRateLimitedPath('POST', pathname)).toBe(true);
 	});

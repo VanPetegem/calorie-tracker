@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { Button, Input } from '#lib/components/ui/index.ts';
+	import { MIN_PASSWORD_LENGTH } from '#lib/auth-rules.ts';
 	import type { PageProps } from './$types';
 
 	let { form }: PageProps = $props();
@@ -56,7 +57,7 @@
 		name="password"
 		type="password"
 		autocomplete="new-password"
-		hint="At least 12 characters. A few random words work well."
+		hint="At least {MIN_PASSWORD_LENGTH} characters. A few random words work well."
 		bind:value={password}
 		error={form?.errors?.password}
 	/>

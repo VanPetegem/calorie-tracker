@@ -7,6 +7,7 @@ import { passkey } from '@better-auth/passkey';
 import { getRequestEvent } from '$app/server';
 import { getDb } from '#lib/server/db/index.ts';
 import { user } from '#lib/server/db/schema.ts';
+import { MIN_PASSWORD_LENGTH } from '#lib/auth-rules.ts';
 
 /** One year. The installed iPhone app must stay signed in across relaunches. */
 const SESSION_SECONDS = 60 * 60 * 24 * 365;
@@ -25,7 +26,7 @@ export const createAuth = (d1: D1Database) =>
 		baseURL: ORIGIN,
 		secret: BETTER_AUTH_SECRET,
 		database: drizzleAdapter(getDb(d1), { provider: 'sqlite' }),
-		emailAndPassword: { enabled: true, minPasswordLength: 12 },
+		emailAndPassword: { enabled: true, minPasswordLength: MIN_PASSWORD_LENGTH },
 		session: { expiresIn: SESSION_SECONDS, updateAge: 60 * 60 * 24 },
 		databaseHooks: {
 			user: {

@@ -76,6 +76,30 @@ describe('NumberInput', () => {
 		expect(state.value).toBe(70);
 	});
 
+	it('accepts a negative number when min is below zero', async () => {
+		const { state, input } = setup({ min: -10, max: 10 });
+		await input.fill('-2,5');
+		(input.element() as HTMLInputElement).blur();
+		expect(state.value).toBe(-2.5);
+		await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+	});
+
+	it('steps from a negative value', async () => {
+		const { state, input } = setup({ step: 1, min: -10, max: 10 });
+		await input.fill('-3');
+		(input.element() as HTMLInputElement).focus();
+		await userEvent.keyboard('{ArrowUp}');
+		expect(state.value).toBe(-2);
+	});
+
+	it('rejects a negative number when min is zero or more', async () => {
+		const { state, input } = setup({ min: 0 });
+		await input.fill('-2');
+		(input.element() as HTMLInputElement).blur();
+		expect(state.value).toBeNull();
+		await expect.element(page.getByRole('alert')).toBeInTheDocument();
+	});
+
 	it('commits null for empty text without an error', async () => {
 		const { state, input } = setup();
 		await input.fill('72');

@@ -41,6 +41,10 @@
 		new Intl.NumberFormat(undefined, { maximumFractionDigits: decimals, useGrouping: false })
 	);
 
+	// A minus sign is only valid when the range includes negative numbers.
+	const allowNegative = $derived(min !== undefined && min < 0);
+	const parse = (input: string) => parseDecimal(input, { allowNegative });
+
 	function format(v: number | null): string {
 		return v === null ? '' : formatter.format(v);
 	}
@@ -61,7 +65,7 @@
 		if (!activeDraft) return;
 		const typed = activeDraft.text;
 		if (typed.trim() === '') return accept(null);
-		const parsed = parseDecimal(typed);
+		const parsed = parse(typed);
 		if (parsed === null) return reject(typed, 'Enter a number like 72,5 or 72.5.');
 		const factor = 10 ** decimals;
 		const rounded = Math.round(parsed * factor) / factor;
@@ -73,7 +77,7 @@
 	function onkeydown(event: KeyboardEvent) {
 		if (step === undefined || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
 		event.preventDefault();
-		const base = parseDecimal(text) ?? min ?? 0;
+		const base = parse(text) ?? min ?? 0;
 		const factor = 10 ** decimals;
 		let next = Math.round((base + (event.key === 'ArrowUp' ? step : -step)) * factor) / factor;
 		if (min !== undefined) next = Math.max(min, next);

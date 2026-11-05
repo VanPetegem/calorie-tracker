@@ -9,7 +9,11 @@ const FORM_PATHS = new Set(['/login', '/setup']);
 
 /** Better Auth endpoints that check a credential or create a user. */
 const AUTH_PREFIXES = ['/api/auth/sign-in/', '/api/auth/sign-up/'];
-const AUTH_PATHS = new Set(['/api/auth/passkey/verify-authentication']);
+// change-password checks the current password: without a limit, a stolen session cookie could guess it.
+const AUTH_PATHS = new Set([
+	'/api/auth/passkey/verify-authentication',
+	'/api/auth/change-password'
+]);
 
 export function isRateLimitedPath(method: string, pathname: string): boolean {
 	if (method !== 'POST') return false;
