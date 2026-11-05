@@ -4,7 +4,7 @@
 	import type { Unit } from '#lib/domain/nutrition.ts';
 	import type { Food } from '#lib/server/db/schema.ts';
 	import type { RecentFood } from '#lib/server/foods/repo.ts';
-	import { Sheet } from '#lib/components/ui/index.ts';
+	import { Button, Sheet, Skeleton } from '#lib/components/ui/index.ts';
 	import { addSheet } from '#lib/stores/add-sheet.svelte.ts';
 	import { toasts } from '#lib/stores/toasts.svelte.ts';
 	import { loadSuggestions } from '../../../routes/(app)/foods.remote.ts';
@@ -43,13 +43,18 @@
 
 	type Fetched = { today: string; recents: RecentFood[]; frequents: RecentFood[] };
 	let fetched = $state.raw<Fetched | null>(null);
+	let fetchFailed = $state(false);
 
 	$effect(() => {
 		if (!addSheet.open || day) return;
+		fetchFailed = false;
 		// Untracked: calling a remote function reads and writes its own reactive state, which would rerun this effect.
 		void untrack(loadSuggestions).then(
 			(result) => (fetched = result),
-			() => (fetched = null)
+			() => {
+				fetched = null;
+				fetchFailed = true;
+			}
 		);
 	});
 
@@ -127,6 +132,22 @@
 	{:else if step.kind === 'quick'}
 		{#if date !== null}
 			<QuickAddForm {date} ondone={() => (addSheet.open = false)} oncancel={toSearch} />
+		{:else}
+			<!-- Pages without a day (Weight, Settings) fetch today when the sheet opens; the form needs it. -->
+			<div class="flex flex-col gap-4">
+				{#if fetchFailed}
+					<p role="alert" class="text-base text-danger">
+						Could not load today's date. Go back and try again.
+					</p>
+				{:else}
+					<div class="flex flex-col gap-3" aria-busy="true">
+						<span class="sr-only">Loading</span>
+						<Skeleton height="2.75rem" />
+						<Skeleton height="2.75rem" />
+					</div>
+				{/if}
+				<Button variant="secondary" onclick={toSearch}>Back</Button>
+			</div>
 		{/if}
 	{:else if step.kind === 'new'}
 		<FoodForm onsaved={(food) => (step = { kind: 'amount', food })} oncancel={toSearch} />

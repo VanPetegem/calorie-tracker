@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import AddSheet from '#lib/components/log/AddSheet.svelte';
+	import ResumeRefresh from '#lib/components/shell/ResumeRefresh.svelte';
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
 	import TabBar from '#lib/components/shell/TabBar.svelte';
 	import { addSheet } from '#lib/stores/add-sheet.svelte.ts';
@@ -25,6 +26,7 @@
 
 <!-- Below 1024 px a tab bar; from 1024 px a sidebar. The hidden one is display: none, so only one landmark exists. -->
 <svelte:window {onkeydown} />
+<ResumeRefresh />
 
 <Sidebar pathname={page.url.pathname} onadd={() => addSheet.show()} class="hidden lg:flex" />
 <TabBar pathname={page.url.pathname} onadd={() => addSheet.show()} class="lg:hidden" />
