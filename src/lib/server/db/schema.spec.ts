@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createTestDb } from '../test/d1.ts';
 import { foods, settings, user } from './schema.ts';
@@ -46,7 +47,8 @@ describe('schema constraints', () => {
 
 	it('allows several custom foods without a barcode or source ref', async () => {
 		await test.db.insert(foods).values([food(), food()]);
-		expect(await test.db.$count(foods)).toBe(2);
+		// The BLV migration seeds generic foods; only the custom ones are ours.
+		expect(await test.db.$count(foods, eq(foods.source, 'custom'))).toBe(2);
 	});
 
 	it('rejects settings with a manual target but no weight', async () => {

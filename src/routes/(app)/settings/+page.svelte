@@ -44,6 +44,28 @@
 			{/snippet}
 		</ListItem>
 	</div>
+	<section class="flex flex-col gap-2" aria-labelledby="sources-heading">
+		<h2 id="sources-heading" class="text-lg font-semibold text-text">Data sources</h2>
+		<p class="text-sm text-text-muted">
+			Generic foods: Swiss Food Composition Database (BLV), version 7.1, Federal Food Safety and
+			Veterinary Office FSVO,
+			<a class="underline" href="https://naehrwertdaten.ch" rel="noreferrer" target="_blank"
+				>naehrwertdaten.ch</a
+			>.
+		</p>
+		<p class="text-sm text-text-muted">
+			Products: Open Food Facts, available under the
+			<a
+				class="underline"
+				href="https://opendatacommons.org/licenses/odbl/1-0/"
+				rel="noreferrer"
+				target="_blank">Open Database Licence</a
+			>, with contributors credited at
+			<a class="underline" href="https://openfoodfacts.org" rel="noreferrer" target="_blank"
+				>openfoodfacts.org</a
+			>.
+		</p>
+	</section>
 	<Button variant="secondary" icon={LogOut} loading={signingOut} onclick={handleSignOut}>
 		Sign out
 	</Button>
