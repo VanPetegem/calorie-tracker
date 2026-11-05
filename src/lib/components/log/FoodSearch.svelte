@@ -1,9 +1,6 @@
 <script lang="ts">
 	import Globe from '@lucide/svelte/icons/globe';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
-	import Plus from '@lucide/svelte/icons/plus';
-	import ScanBarcode from '@lucide/svelte/icons/scan-barcode';
-	import Zap from '@lucide/svelte/icons/zap';
 	import type { Unit } from '#lib/domain/nutrition.ts';
 	import type { Food } from '#lib/server/db/schema.ts';
 	import type { FoodHit, MappedProduct, RecentFood } from '#lib/server/foods/repo.ts';
@@ -139,10 +136,11 @@
 	</form>
 
 	{#if q === ''}
-		<div class="flex gap-2">
-			<Button variant="secondary" icon={Zap} onclick={onquick}>Quick add</Button>
-			<Button variant="secondary" icon={Plus} onclick={onnew}>New food</Button>
-			<Button variant="secondary" icon={ScanBarcode} onclick={onscan}>Scan</Button>
+		<!-- Three equal cells, no icons: with them the row is 368 px, wider than the 343 px of a 375 px phone. -->
+		<div class="grid grid-cols-3 gap-2">
+			<Button variant="secondary" class="w-full" onclick={onquick}>Quick add</Button>
+			<Button variant="secondary" class="w-full" onclick={onnew}>New food</Button>
+			<Button variant="secondary" class="w-full" onclick={onscan}>Scan</Button>
 		</div>
 		{#each [{ id: 'recent', title: 'Recent', foods: recents }, { id: 'frequent', title: 'Often logged', foods: frequents }] as group (group.id)}
 			{#if group.foods.length > 0}
