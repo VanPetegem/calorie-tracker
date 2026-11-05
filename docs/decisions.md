@@ -2,6 +2,24 @@
 
 Living record of decisions. Newest first. Each entry: date, decision, reason.
 
+## 2026-11-05
+
+- **Sign up closes in a Better Auth `user.create.before` hook, not in the UI.** Every path that creates a
+  user (email sign up, a direct API call, passkey first registration) runs through it, so a second account
+  gets a 403 "Sign up is closed".
+- **One server side route guard in `hooks.server.ts`, pure rules in `src/lib/server/guard.ts`.** Page
+  navigations without a session redirect to `/login?redirectTo=...`; fetches, form posts and remote calls get
+  a 401 so page code sees the failure. `__data.json` requests count as navigations, so SvelteKit's client
+  router follows the redirect. Public prefixes match whole path segments only (`/setupx` is not public), and
+  `/_app/remote/` (remote functions) is not public although `/_app/` is.
+- **Sessions last a year and slide daily.** The installed iPhone app must survive relaunches.
+- **Sign out deletes the `kcal-*` service worker caches.** Pages rendered for the session must not be
+  reopened from the cache afterwards.
+- **`wrangler.jsonc` declares `secrets.required`.** Otherwise `wrangler types` infers the Env type from
+  whatever local `.env` or `.dev.vars` exists, and `wrangler types --check` fails on other machines.
+- **Login and setup live in an `(auth)` route group.** They share a layout without the app shell that pads
+  for the safe-area insets; URLs stay `/login` and `/setup`.
+
 ## 2026-11-04
 
 - **Service worker caches same origin GET navigations, never `/api/*` or non GET.** `/` is server

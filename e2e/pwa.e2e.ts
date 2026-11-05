@@ -136,3 +136,26 @@ test.describe('installable PWA', () => {
 		expect(cached.filter((path) => path.startsWith('/api/'))).toEqual([]);
 	});
 });
+
+test.describe('installing while logged out', () => {
+	test.skip(({ browserName }) => browserName !== 'chromium', 'chromium only');
+	test.use({ storageState: { cookies: [], origins: [] } });
+
+	test('the worker still installs, and the redirect to /login is not cached as /', async ({
+		page
+	}) => {
+		// At install the worker fetches `/`, which redirects a logged out visitor to /login.
+		await page.goto('/login');
+		await page.evaluate(() => navigator.serviceWorker.ready);
+		await expect
+			.poll(() => page.evaluate(async () => (await navigator.serviceWorker.ready).active?.state))
+			.toBe('activated');
+		const homeCached = await page.evaluate(async () => {
+			for (const name of await caches.keys()) {
+				if (await (await caches.open(name)).match('/', { ignoreVary: true })) return true;
+			}
+			return false;
+		});
+		expect(homeCached).toBe(false);
+	});
+});
