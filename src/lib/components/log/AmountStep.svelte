@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { MAX_AMOUNT_GRAMS_OR_ML, MAX_AMOUNT_SERVINGS } from '#lib/domain/constants.ts';
-	import { snapshotFor, toGrams } from '#lib/domain/nutrition.ts';
+	import { snapshotFor, toGrams, type Per100 } from '#lib/domain/nutrition.ts';
 	import type { LogUnit } from '#lib/schemas/fields.ts';
 	import type { Food } from '#lib/server/db/schema.ts';
 	import { parseDecimal } from '#lib/utils/decimal.ts';
@@ -20,6 +20,11 @@
 			Food,
 			'name' | 'nutritionBasis' | 'kcal' | 'protein' | 'carbs' | 'fat' | 'fiber' | 'servingG'
 		>;
+		/**
+		 * The values per 100 the preview scales. Defaults to the food's own; editing a logged entry passes the ones its
+		 * stored snapshot implies, which is what the server rescales.
+		 */
+		per100?: Per100;
 		/** "Log" adds a new entry, "Save" changes an existing one. */
 		mode: 'add' | 'edit';
 		/** The last used amount (recents) or the entry's own amount (edit). */
@@ -31,7 +36,7 @@
 		onedit?: () => void;
 	};
 
-	let { food, mode, initial = null, onsubmit, onback, onedit }: Props = $props();
+	let { food, per100, mode, initial = null, onsubmit, onback, onedit }: Props = $props();
 
 	// The food and initial amount are fixed for one step: the parent mounts a new step for another food.
 	const start = untrack(() => defaultAmount(food, initial));
@@ -56,7 +61,7 @@
 	const grams = $derived(
 		error === undefined && amount !== null ? toGrams(amount, unit, food.servingG) : 0
 	);
-	const preview = $derived(snapshotFor(food, grams));
+	const preview = $derived(snapshotFor(per100 ?? food, grams));
 
 	function format(value: number) {
 		return String(Math.round(value * 100) / 100);

@@ -15,8 +15,9 @@
 	/**
 	 * Edits a logged entry. A food entry opens the amount step; its food is loaded when the sheet opens, for its
 	 * serving weight and basis and for "Edit food". The server rescales the stored snapshot from the new grams over
-	 * the old grams, and the preview does the same: its per 100 values come from the entry, never from the food. The amount step's "Edit food" changes the food itself, which
-	 * never touches this or any other logged entry. A quick entry opens the quick add form instead.
+	 * the old grams, and the preview does the same: its per 100 values come from the entry, never from the food. The
+	 * amount step's "Edit food" changes the food itself, which never touches this or any other logged entry.
+	 * A quick entry opens the quick add form instead.
 	 */
 	type Props = {
 		/** A food or quick entry. */
@@ -53,11 +54,12 @@
 	});
 
 	// The server rescales the stored snapshot, so the preview must start from it too: per 100 from the entry, while
-	// the serving weight and basis come from the food. An entry without grams falls back to the food's values.
-	const previewFood = $derived.by(() => {
-		if (!food || !entry || entry.grams === null || entry.grams <= 0) return food;
-		return { ...food, ...per100FromSnapshot(entry, entry.grams) };
-	});
+	// the serving weight, basis and the header line come from the food. An entry without grams uses the food's values.
+	const entryPer100 = $derived(
+		entry && entry.grams !== null && entry.grams > 0
+			? per100FromSnapshot(entry, entry.grams)
+			: undefined
+	);
 
 	async function save(target: LogEntry, { amount, unit }: AmountValue) {
 		await editAmount({ id: target.id, amount, unit });
@@ -99,9 +101,10 @@
 			}}
 			oncancel={() => (editingFood = false)}
 		/>
-	{:else if entry && previewFood}
+	{:else if entry && food}
 		<AmountStep
-			food={previewFood}
+			{food}
+			per100={entryPer100}
 			mode="edit"
 			initial={entry.amount !== null && entry.unit !== null
 				? { amount: entry.amount, unit: entry.unit }

@@ -45,6 +45,15 @@ describe('AmountStep', () => {
 		await expect.element(page.getByText('60 g')).toBeVisible();
 	});
 
+	it('previews from the given per 100 values while the header keeps the food values', async () => {
+		render(
+			AmountStep,
+			props(plain, { per100: { kcal: 200, protein: 8, carbs: 30, fat: 4, fiber: null } })
+		);
+		await expect.element(page.getByText('250 kcal per 100 g')).toBeVisible();
+		await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('200 kcal');
+	});
+
 	it('starts at 100 g without a serving weight and offers no serving unit', async () => {
 		render(AmountStep, props(plain));
 		await expect.element(amountField()).toHaveValue('100');
