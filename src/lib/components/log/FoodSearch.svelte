@@ -14,14 +14,16 @@
 	 * Typing searches the library (custom, cached OFF, BLV) after 200 ms. Open Food Facts is searched only when the
 	 * person presses Enter or taps its row, so typing never spends the OFF quota. A picked OFF product is stored
 	 * through `pickOff` first; `onpick` always receives a library food. Below the field, while it is empty, sit the
-	 * quick actions: Quick add (kcal without a food), New food and Scan (the barcode scanner).
+	 * quick actions: Quick add (kcal without a food), New food and Scan (the barcode scanner). Quick add shows only
+	 * when `onquick` is given: a recipe ingredient is always a food.
 	 */
 	type Props = {
 		recents: RecentFood[];
 		frequents: RecentFood[];
 		/** `last` is the last logged amount, known for recents, frequents and library hits that were logged before. */
 		onpick: (food: Food, last?: { amount: number; unit: Unit }) => void;
-		onquick: () => void;
+		/** Shows the Quick add button when given. */
+		onquick?: () => void;
 		onnew: () => void;
 		onscan: () => void;
 		/** True while the sheet shows this step: the search field takes focus each time it turns true. */
@@ -136,9 +138,11 @@
 	</form>
 
 	{#if q === ''}
-		<!-- Three equal cells, no icons: with them the row is 368 px, wider than the 343 px of a 375 px phone. -->
-		<div class="grid grid-cols-3 gap-2">
-			<Button variant="secondary" class="w-full" onclick={onquick}>Quick add</Button>
+		<!-- Equal cells, no icons: with them the row is 368 px, wider than the 343 px of a 375 px phone. -->
+		<div class={['grid gap-2', onquick ? 'grid-cols-3' : 'grid-cols-2']}>
+			{#if onquick}
+				<Button variant="secondary" class="w-full" onclick={onquick}>Quick add</Button>
+			{/if}
 			<Button variant="secondary" class="w-full" onclick={onnew}>New food</Button>
 			<Button variant="secondary" class="w-full" onclick={onscan}>Scan</Button>
 		</div>
