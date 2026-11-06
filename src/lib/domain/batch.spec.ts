@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ingredientNutrients, perPortion, totals, type IngredientLine } from './batch';
+import {
+	ingredientGrams,
+	ingredientNutrients,
+	perPortion,
+	totals,
+	type IngredientLine
+} from './batch';
 import { type Nutrients, type Per100 } from './nutrition';
 
 const chicken: Per100 = { kcal: 165, protein: 31, carbs: 0, fat: 3.6, fiber: 0 };
@@ -73,5 +79,26 @@ describe('perPortion', () => {
 		expect(() => perPortion(dinner, -1)).toThrow(RangeError);
 		expect(() => perPortion(dinner, Number.NaN)).toThrow(RangeError);
 		expect(() => perPortion(dinner, Number.POSITIVE_INFINITY)).toThrow(RangeError);
+	});
+});
+
+describe('ingredientGrams', () => {
+	it('takes g and ml as they are', () => {
+		expect(ingredientGrams({ amount: 80, unit: 'g', servingG: null })).toBe(80);
+		expect(ingredientGrams({ amount: 250, unit: 'ml', servingG: 40 })).toBe(250);
+	});
+
+	it('multiplies servings by the current serving weight, ignoring the stored grams', () => {
+		expect(ingredientGrams({ amount: 2, unit: 'serving', servingG: 40, storedGrams: 30 })).toBe(80);
+	});
+
+	it('keeps the stored grams for a serving of a food that lost its serving weight', () => {
+		expect(ingredientGrams({ amount: 2, unit: 'serving', servingG: null, storedGrams: 30 })).toBe(
+			30
+		);
+	});
+
+	it('counts such a serving as 0 g when nothing was stored', () => {
+		expect(ingredientGrams({ amount: 2, unit: 'serving', servingG: null })).toBe(0);
 	});
 });

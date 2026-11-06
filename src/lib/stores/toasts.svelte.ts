@@ -52,16 +52,18 @@ export const toasts = new Toasts();
 
 /**
  * Runs `apply` now and offers an Undo toast. Undo dismisses the toast and runs `revert`.
- * If the toast expires, `revert` is never called.
+ * If the toast expires, `revert` is never called. Returns a function that removes whichever toast is showing for this
+ * undo (the Undo toast, or the Retry toast after a failed revert) without reverting, for a caller that goes away.
  */
 export function withUndo(opts: {
 	message: string;
 	apply: () => void;
 	revert: () => void | Promise<void>;
-}): void {
+}): () => void {
 	opts.apply();
 	// The button stays in the DOM while the toast animates out, so a double tap must not revert twice.
 	let running = false;
+	let current: string | null = null;
 	const offer = (message: string, label: string, tone: ToastTone) => {
 		const id = toasts.show({
 			message,
@@ -81,6 +83,10 @@ export function withUndo(opts: {
 				}
 			}
 		});
+		current = id;
 	};
 	offer(opts.message, 'Undo', 'neutral');
+	return () => {
+		if (current !== null) toasts.dismiss(current);
+	};
 }

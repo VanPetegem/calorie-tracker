@@ -10,5 +10,13 @@
 	let ingredients = $state(untrack(() => initial));
 </script>
 
+<!-- Fills the list without the picker, for the limit specs. -->
+<button
+	type="button"
+	onclick={() =>
+		(ingredients = [...ingredients, { ...ingredients[0]!, key: `filler-${ingredients.length}` }])}
+>
+	Add filler
+</button>
 <IngredientList bind:ingredients />
 <Toaster />

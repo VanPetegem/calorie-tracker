@@ -1,5 +1,5 @@
-import { ingredientNutrients, totals } from '#lib/domain/batch.ts';
-import { toGrams, type Nutrients, type Per100 } from '#lib/domain/nutrition.ts';
+import { ingredientGrams, ingredientNutrients, totals } from '#lib/domain/batch.ts';
+import type { Nutrients, Per100 } from '#lib/domain/nutrition.ts';
 import type { LogUnit } from '#lib/schemas/fields.ts';
 import type { Food } from '#lib/server/db/schema.ts';
 
@@ -15,6 +15,8 @@ export type DraftIngredient = {
 	food: DraftFood;
 	amount: number;
 	unit: LogUnit;
+	/** Grams stored with the line by the server. Used only for a serving of a food without a serving weight. */
+	grams?: number;
 };
 
 /** Maps an ingredient to the values per 100 its nutrition is computed from. */
@@ -22,13 +24,14 @@ export type Per100Of = (ingredient: DraftIngredient) => Per100;
 
 export const foodPer100: Per100Of = (ingredient) => ingredient.food;
 
-/** Grams of an ingredient. A serving of a food without a serving weight counts as 0 g instead of throwing. */
+/** Grams of an ingredient; the math lives in the domain. */
 export function draftGrams(ingredient: DraftIngredient): number {
-	try {
-		return toGrams(ingredient.amount, ingredient.unit, ingredient.food.servingG);
-	} catch {
-		return 0;
-	}
+	return ingredientGrams({
+		amount: ingredient.amount,
+		unit: ingredient.unit,
+		servingG: ingredient.food.servingG,
+		storedGrams: ingredient.grams
+	});
 }
 
 /** Nutrition of one ingredient. */

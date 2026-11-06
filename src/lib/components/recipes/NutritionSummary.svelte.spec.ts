@@ -34,4 +34,16 @@ describe('NutritionSummary', () => {
 		await rerender({ totals, portions: 2, per100g: { ...totals, kcal: 250 } });
 		await expect.element(page.getByTestId('per100g-kcal')).toHaveTextContent('250 kcal');
 	});
+
+	it('announces the hint from one status node that stays while the portions change', async () => {
+		const { rerender } = render(NutritionSummary, { totals, portions: 2 });
+		const status = page.getByRole('status');
+		const node = status.element();
+		await expect.element(status).toHaveTextContent('');
+		await rerender({ totals, portions: 0 });
+		await expect
+			.element(page.getByRole('status'))
+			.toHaveTextContent('Enter portions to see per portion values');
+		expect(page.getByRole('status').element()).toBe(node);
+	});
 });

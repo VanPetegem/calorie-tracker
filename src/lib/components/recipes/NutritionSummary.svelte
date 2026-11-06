@@ -52,6 +52,10 @@
 {/snippet}
 
 <Card>
+	<!-- One status node for every state, so the hint is announced when it appears. Empty, it takes no space. -->
+	<p role="status" class="text-base text-text-muted not-empty:mb-5">
+		{#if !portion}Enter portions to see per portion values{/if}
+	</p>
 	<div class="flex flex-col gap-5">
 		{#if portion}
 			<section class="flex flex-col gap-2" aria-labelledby="{uid}-portion">
@@ -64,8 +68,6 @@
 				</p>
 				{@render macros(portion)}
 			</section>
-		{:else}
-			<p class="text-base text-text-muted">Enter portions to see per portion values</p>
 		{/if}
 
 		<section class="flex flex-col gap-2" aria-labelledby="{uid}-total">

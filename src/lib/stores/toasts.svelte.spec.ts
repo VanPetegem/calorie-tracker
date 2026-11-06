@@ -69,6 +69,26 @@ describe('withUndo', () => {
 		expect(toasts.items[0]?.action?.label).toBe('Undo');
 	});
 
+	it('returns a function that removes the toast without reverting', () => {
+		const revert = vi.fn();
+		const dismiss = withUndo({ message: 'Entry deleted', apply: vi.fn(), revert });
+		dismiss();
+		expect(toasts.items).toHaveLength(0);
+		expect(revert).not.toHaveBeenCalled();
+	});
+
+	it('the returned function also removes the Retry toast of a failed revert', async () => {
+		const dismiss = withUndo({
+			message: 'Entry deleted',
+			apply: vi.fn(),
+			revert: vi.fn().mockRejectedValue(new Error('offline'))
+		});
+		await toasts.items[0]!.action!.run();
+		expect(toasts.items[0]?.tone).toBe('danger');
+		dismiss();
+		expect(toasts.items).toHaveLength(0);
+	});
+
 	it('reverts once and removes the toast when the action runs', async () => {
 		const apply = vi.fn();
 		const revert = vi.fn();

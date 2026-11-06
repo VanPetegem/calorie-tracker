@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import ArrowDown from '@lucide/svelte/icons/arrow-down';
 	import ArrowUp from '@lucide/svelte/icons/arrow-up';
 	import Carrot from '@lucide/svelte/icons/carrot';
@@ -7,7 +8,7 @@
 	import { MAX_INGREDIENTS } from '#lib/domain/constants.ts';
 	import type { Food } from '#lib/server/db/schema.ts';
 	import { Button, Card, EmptyState, Sheet } from '#lib/components/ui/index.ts';
-	import { withUndo } from '#lib/stores/toasts.svelte.ts';
+	import { toasts, withUndo } from '#lib/stores/toasts.svelte.ts';
 	import AmountStep from '../log/AmountStep.svelte';
 	import type { AmountValue } from '../log/amount.ts';
 	import AddIngredientSheet from './AddIngredientSheet.svelte';
@@ -68,7 +69,10 @@
 	}
 
 	function saveAmount(key: string, { amount, unit }: AmountValue) {
-		ingredients = ingredients.map((i) => (i.key === key ? { ...i, amount, unit } : i));
+		// The stored grams belonged to the old amount: the row is computed from the new one from here on.
+		ingredients = ingredients.map((i) =>
+			i.key === key ? { key: i.key, food: i.food, amount, unit } : i
+		);
 		editOpen = false;
 	}
 
@@ -91,27 +95,68 @@
 		ingredients = next;
 	}
 
+	let list = $state<HTMLElement>();
+	let addHost = $state<HTMLElement>();
+	// Focus waits for the menu sheet to close: the page behind a modal sheet cannot take focus until then.
+	let focusAfterMenu: (() => void) | null = null;
+
+	function focusAfterRemoval(index: number) {
+		focusAfterMenu = async () => {
+			await tick();
+			const rows = list?.querySelectorAll(':scope > li');
+			// The next row now sits at `index`; after removing the last row, the previous one is the last.
+			const row = rows?.length ? rows[Math.min(index, rows.length - 1)] : null;
+			(row ?? addHost)?.querySelector('button')?.focus();
+		};
+	}
+
+	function menuClosed() {
+		const run = focusAfterMenu;
+		focusAfterMenu = null;
+		run?.();
+	}
+
+	// An Undo toast must not outlive the list: Undo would write to a list that is gone.
+	const dismissers: (() => void)[] = [];
+	$effect(() => () => {
+		for (const dismiss of dismissers) dismiss();
+	});
+
 	function remove() {
 		const index = menuIndex;
 		const removed = ingredients[index];
 		menuOpen = false;
 		if (!removed) return;
-		withUndo({
-			message: `Removed ${removed.food.name}`,
-			apply: () => (ingredients = ingredients.filter((i) => i.key !== removed.key)),
-			revert: () => {
-				if (ingredients.some((i) => i.key === removed.key)) return;
-				const next = [...ingredients];
-				next.splice(Math.min(index, next.length), 0, removed);
-				ingredients = next;
-			}
-		});
+		focusAfterRemoval(index);
+		dismissers.push(
+			withUndo({
+				message: `Removed ${removed.food.name}`,
+				apply: () => (ingredients = ingredients.filter((i) => i.key !== removed.key)),
+				revert: () => {
+					if (ingredients.some((i) => i.key === removed.key)) return;
+					// Room was used up in the meantime: leave the list as it is and say so.
+					if (ingredients.length >= MAX_INGREDIENTS) {
+						toasts.show({
+							message: `Not restored: at most ${MAX_INGREDIENTS} ingredients`,
+							tone: 'danger'
+						});
+						return;
+					}
+					const next = [...ingredients];
+					next.splice(index, 0, removed);
+					ingredients = next;
+				}
+			})
+		);
 	}
 </script>
 
 <div class="flex flex-col gap-3">
 	{#if ingredients.length > 0}
-		<ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
+		<ul
+			bind:this={list}
+			class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface"
+		>
 			{#each ingredients as ingredient (ingredient.key)}
 				<IngredientRow
 					{ingredient}
@@ -131,15 +176,17 @@
 			/>
 		</Card>
 	{/if}
-	<Button
-		variant="secondary"
-		icon={Plus}
-		disabled={full}
-		disabledReason="At most {MAX_INGREDIENTS} ingredients"
-		onclick={() => (addOpen = true)}
-	>
-		Add ingredient
-	</Button>
+	<div bind:this={addHost}>
+		<Button
+			variant="secondary"
+			icon={Plus}
+			disabled={full}
+			disabledReason="At most {MAX_INGREDIENTS} ingredients"
+			onclick={() => (addOpen = true)}
+		>
+			Add ingredient
+		</Button>
+	</div>
 </div>
 
 <AddIngredientSheet bind:open={addOpen} onadd={add} />
@@ -155,7 +202,7 @@
 				food={editing.food}
 				per100={per100(editing)}
 				mode="edit"
-				initial={{ amount: editing.amount, unit: editing.unit }}
+				initial={{ amount: editing.amount, unit: editing.unit, grams: editing.grams }}
 				onsubmit={(value) => saveAmount(editing.key, value)}
 			/>
 		{/key}
@@ -164,6 +211,7 @@
 
 <Sheet
 	bind:open={menuOpen}
+	onclose={menuClosed}
 	title={menu?.name ?? 'Ingredient'}
 	description={menuIndex >= 0 ? `Position ${menuIndex + 1} of ${ingredients.length}` : undefined}
 >

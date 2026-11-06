@@ -106,7 +106,7 @@
 <form class="flex flex-col gap-5" onsubmit={submit} novalidate>
 	<div class="flex items-center justify-between gap-3">
 		<p class="text-sm text-text-muted tabular-nums">
-			{Math.round(food.kcal)} kcal per 100 {food.nutritionBasis}
+			{Math.round((per100 ?? food).kcal)} kcal per 100 {food.nutritionBasis}
 		</p>
 		{#if onedit}
 			<div class="shrink-0">

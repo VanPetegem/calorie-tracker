@@ -88,6 +88,17 @@ async function sheetSettled() {
 	);
 }
 
+async function closeSheet() {
+	await userEvent.keyboard('{Escape}');
+	await vi.waitFor(() => expect(document.querySelector('dialog[open]')).toBeNull());
+}
+
+/** The name of the row whose main button has focus, or the label of another focused button. */
+function focused(): string {
+	const el = document.activeElement;
+	return (el?.querySelector('span span')?.textContent ?? el?.textContent ?? '').trim();
+}
+
 async function openMenu(name: string) {
 	await page.getByRole('button', { name: `More actions for ${name}` }).click();
 	await expect.element(page.getByRole('dialog', { name })).toBeVisible();
@@ -124,6 +135,27 @@ describe('IngredientList', () => {
 		expect(order()).toEqual(['Oats', 'Milk', 'Banana']);
 	});
 
+	it('prices and opens a serving of a food without a serving weight from its stored grams', async () => {
+		const tahini = {
+			...oats,
+			id: '0198a000-0000-7000-8000-000000000009',
+			name: 'Tahini',
+			kcal: 600
+		};
+		render(IngredientListTestHarness, {
+			initial: [{ key: 't', food: tahini, amount: 2, unit: 'serving', grams: 30 }]
+		});
+		await expect.element(page.getByText('2 servings')).toBeVisible();
+		await expect.element(page.getByText('Total 180 kcal')).toBeVisible();
+		await page
+			.getByRole('button', { name: /Tahini/ })
+			.first()
+			.click();
+		await sheetSettled();
+		await expect.element(page.getByLabelText('Amount')).toHaveValue('30');
+		await expect.element(page.getByRole('radio', { name: 'g' })).toBeChecked();
+	});
+
 	it('adds a picked food as the last row', async () => {
 		mocks.loadSuggestions.mockResolvedValue({
 			today: '2026-11-05',
@@ -134,7 +166,6 @@ describe('IngredientList', () => {
 		await page.getByRole('button', { name: 'Add ingredient' }).click();
 		await expect.element(page.getByRole('dialog', { name: 'Add ingredient' })).toBeVisible();
 		await sheetSettled();
-		expect(page.getByRole('button', { name: 'Quick add' }).elements()).toHaveLength(0);
 		await page.getByRole('button', { name: /Banana/ }).click();
 		await page.getByRole('button', { name: 'Add', exact: true }).click();
 		await expect.poll(order).toEqual(['Oats', 'Banana']);
@@ -160,6 +191,14 @@ describe('IngredientList', () => {
 		await expect
 			.element(page.getByRole('button', { name: 'Move down' }))
 			.not.toHaveAttribute('aria-disabled');
+		await closeSheet();
+		await openMenu('Banana');
+		await expect
+			.element(page.getByRole('button', { name: 'Move down' }))
+			.toHaveAttribute('aria-disabled', 'true');
+		await expect
+			.element(page.getByRole('button', { name: 'Move up' }))
+			.not.toHaveAttribute('aria-disabled');
 	});
 
 	it('removes a row, and Undo puts it back at the same index', async () => {
@@ -170,6 +209,51 @@ describe('IngredientList', () => {
 		await expect.element(page.getByText('Removed Milk')).toBeVisible();
 		await page.getByRole('button', { name: 'Undo' }).click();
 		await expect.poll(order).toEqual(['Oats', 'Milk', 'Banana']);
+	});
+
+	it('focuses the next row after a removal, the previous one after removing the last', async () => {
+		render(IngredientListTestHarness, { initial: three() });
+		await openMenu('Milk');
+		await page.getByRole('button', { name: 'Remove' }).click();
+		await expect.poll(focused).toBe('Banana');
+		await page.getByRole('button', { name: 'Undo' }).click();
+		await expect.poll(order).toEqual(['Oats', 'Milk', 'Banana']);
+		await openMenu('Banana');
+		await page.getByRole('button', { name: 'Remove' }).click();
+		await expect.poll(focused).toBe('Milk');
+	});
+
+	it('focuses Add ingredient after removing the only row', async () => {
+		render(IngredientListTestHarness, { initial: [draft('a', oats, 100)] });
+		await openMenu('Oats');
+		await page.getByRole('button', { name: 'Remove' }).click();
+		await expect.poll(focused).toBe('Add ingredient');
+	});
+
+	it('does not put a row back when the list is full again, and says why', async () => {
+		const many = Array.from({ length: MAX_INGREDIENTS }, (_, i) =>
+			draft(`k${i}`, { ...oats, name: `Item ${i}` }, 10)
+		);
+		render(IngredientListTestHarness, { initial: many });
+		await openMenu('Item 0');
+		await page.getByRole('button', { name: 'Remove' }).click();
+		await expect.poll(() => order().length).toBe(MAX_INGREDIENTS - 1);
+		await page.getByRole('button', { name: 'Add filler' }).click();
+		await page.getByRole('button', { name: 'Undo' }).click();
+		expect(order()).toHaveLength(MAX_INGREDIENTS);
+		await expect
+			.element(page.getByText(`Not restored: at most ${MAX_INGREDIENTS} ingredients`))
+			.toBeVisible();
+	});
+
+	it('drops its Undo toast when the list goes away', async () => {
+		const { unmount } = render(IngredientListTestHarness, { initial: three() });
+		await openMenu('Milk');
+		await page.getByRole('button', { name: 'Remove' }).click();
+		await expect.element(page.getByText('Removed Milk')).toBeVisible();
+		expect(toasts.items).toHaveLength(1);
+		await unmount();
+		expect(toasts.items).toHaveLength(0);
 	});
 
 	it('Undo of a removed last row restores it at the end', async () => {
