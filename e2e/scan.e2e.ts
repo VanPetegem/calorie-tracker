@@ -6,7 +6,7 @@ import { gotoHydrated } from './helpers.ts';
 // stream of a canvas, and a global BarcodeDetector, which the scanner prefers over its zxing ponyfill, reports the
 // chosen code. Open Food Facts answers from e2e/off-stub.mjs: 3017620422003 and 5449000000996 are products,
 // 0000000000000 is an outage and any other valid code is unknown. The OFF product limiter (12 a minute, shared)
-// allows the few reads below: at most four per browser project.
+// allows the few reads below: at most five per browser project.
 
 const NUTELLA = '3017620422003';
 const COLA = '5449000000996';
@@ -25,10 +25,17 @@ function freshBarcode(): string {
 	return `${body}${(10 - (sum % 10)) % 10}`;
 }
 
-type Camera = { code?: string; deny?: boolean; busy?: boolean; torch?: boolean };
+type Camera = {
+	code?: string;
+	deny?: boolean;
+	busy?: boolean;
+	torch?: boolean;
+	/** No native BarcodeDetector, so the zxing ponyfill is used. */
+	noNative?: boolean;
+};
 
 async function mockCamera(page: Page, camera: Camera) {
-	await page.addInitScript(({ code, deny, busy, torch }) => {
+	await page.addInitScript(({ code, deny, busy, torch, noNative }) => {
 		const w = window as unknown as Record<string, unknown>;
 		w.__tracks = [] as MediaStreamTrack[];
 		w.__vibrated = [] as number[];
@@ -71,6 +78,10 @@ async function mockCamera(page: Page, camera: Camera) {
 			value: { getUserMedia },
 			configurable: true
 		});
+		if (noNative) {
+			delete (globalThis as unknown as Record<string, unknown>).BarcodeDetector;
+			return;
+		}
 		(globalThis as unknown as Record<string, unknown>).BarcodeDetector = class {
 			static async getSupportedFormats() {
 				return ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'qr_code'];
@@ -264,4 +275,31 @@ test('a camera the system takes away offers a restart', async ({ page }) => {
 	await expect(sheet.getByText(/The camera stopped/)).toBeVisible();
 	await sheet.getByRole('button', { name: 'Restart camera' }).click();
 	await expect(sheet.getByText('Point the camera at the barcode')).toBeVisible();
+});
+
+test('manual entry still works after the detector fails to load', async ({ page }) => {
+	// No native detector, and the zxing wasm of the ponyfill cannot load (the compile step fails; a route on the
+	// .wasm file is not reliable, WebKit loads it past page.route).
+	await mockCamera(page, { noNative: true });
+	await page.addInitScript(() => {
+		const fail = () => Promise.reject(new Error('wasm blocked'));
+		WebAssembly.instantiateStreaming = fail;
+		WebAssembly.instantiate = fail as typeof WebAssembly.instantiate;
+	});
+	await gotoHydrated(page, '/');
+	const sheet = await openScanner(page);
+
+	await expect(sheet.getByText(/cannot open the camera/)).toBeVisible();
+	await sheet.getByLabel('Barcode number').fill(NUTELLA);
+	await sheet.getByRole('button', { name: 'Look up' }).click();
+	await expect(sheet.getByRole('heading', { name: 'Nutella' })).toBeVisible();
+	await expect(sheet.getByLabel('Amount')).toBeVisible();
+	// The failed start released the camera.
+	expect(
+		await page.evaluate(() =>
+			(window as never as { __tracks: MediaStreamTrack[] }).__tracks.every(
+				(track) => track.readyState === 'ended'
+			)
+		)
+	).toBe(true);
 });

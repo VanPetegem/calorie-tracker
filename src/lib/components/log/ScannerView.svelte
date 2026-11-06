@@ -110,7 +110,8 @@
 		try {
 			detector = await createDetector();
 		} catch {
-			stop();
+			// Release, not stop: the view stays mounted and the manual field still looks codes up.
+			release();
 			camera = 'unsupported';
 			return;
 		}
