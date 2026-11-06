@@ -14,13 +14,15 @@ import type { Unit } from '../../domain/nutrition.ts';
 export async function resolveOffPick(
 	db: Db,
 	off: OffClient,
-	barcode: string
+	raw: string
 ): Promise<Food | { unavailable: true }> {
+	// Normalized like a scan, so a pick and a later scan of the same product share one row.
+	const barcode = normalizeBarcode(raw) ?? raw;
 	const existing = await getFoodByBarcode(db, barcode);
 	if (existing) return existing;
 	const result = await off.getProduct(barcode);
 	if (!result.ok || result.value.kind !== 'found') return { unavailable: true };
-	return upsertOffFood(db, result.value.product);
+	return upsertOffFood(db, { ...result.value.product, barcode });
 }
 
 export type BarcodeLookup =
@@ -71,7 +73,8 @@ export async function lookupBarcode(
 async function refreshOffFood(db: Db, off: OffClient, barcode: string): Promise<void> {
 	try {
 		const result = await off.getProduct(barcode);
-		if (result.ok && result.value.kind === 'found') await upsertOffFood(db, result.value.product);
+		if (result.ok && result.value.kind === 'found')
+			await upsertOffFood(db, { ...result.value.product, barcode });
 	} catch {
 		// The stale row stays; the next scan tries again.
 	}

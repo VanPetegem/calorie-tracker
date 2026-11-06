@@ -60,6 +60,17 @@ describe('resolveOffPick', () => {
 		expect(await getFoodByBarcode(test.db, BARCODE)).toEqual(food);
 	});
 
+	it('looks up and stores a picked UPC-A under its EAN-13 form', async () => {
+		const off = fakeOff({
+			ok: true,
+			value: { kind: 'found', product: { ...product, barcode: '036000291452' } }
+		});
+		const food = await resolveOffPick(test.db, off, '036000291452');
+		expect(food).toMatchObject({ barcode: '0036000291452' });
+		expect(await resolveOffPick(test.db, off, '036000291452')).toEqual(food);
+		expect(off.getProduct).toHaveBeenCalledTimes(1);
+	});
+
 	it.each<OffResult<OffProductResult>>([
 		{ ok: false, reason: 'unavailable' },
 		{ ok: false, reason: 'rate_limited' },
@@ -237,6 +248,21 @@ describe('lookupBarcode', () => {
 			await deferred[0];
 			expect(off.getProduct).toHaveBeenCalledWith(BARCODE);
 			expect((await getFoodByBarcode(test.db, BARCODE))?.kcal).toBe(400);
+		});
+
+		it('refreshes a food stored under the normalized code when OFF answers with another form', async () => {
+			const upcA = { ...product, barcode: '036000291452' };
+			await upsertOffFood(test.db, { ...upcA, barcode: '0036000291452' });
+			await test.db.update(foods).set({ fetchedAt: daysAgoIso(181) });
+			const off = fakeOff({
+				ok: true,
+				value: { kind: 'found', product: { ...refreshed, barcode: '036000291452' } }
+			});
+			const deferred: Promise<unknown>[] = [];
+			await lookupBarcode(test.db, off, '036000291452', undefined, (task) => deferred.push(task));
+			await deferred[0];
+			expect((await getFoodByBarcode(test.db, '0036000291452'))?.kcal).toBe(400);
+			expect(await getFoodByBarcode(test.db, '036000291452')).toBeNull();
 		});
 
 		it('swallows a failing refresh', async () => {

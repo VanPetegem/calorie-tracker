@@ -27,6 +27,8 @@ function freshBarcode(): string {
 
 type Camera = {
 	code?: string;
+	/** Codes the detector reads before `code`, one per frame. */
+	misreads?: string[];
 	deny?: boolean;
 	busy?: boolean;
 	torch?: boolean;
@@ -35,7 +37,7 @@ type Camera = {
 };
 
 async function mockCamera(page: Page, camera: Camera) {
-	await page.addInitScript(({ code, deny, busy, torch, noNative }) => {
+	await page.addInitScript(({ code, misreads = [], deny, busy, torch, noNative }) => {
 		const w = window as unknown as Record<string, unknown>;
 		w.__tracks = [] as MediaStreamTrack[];
 		w.__vibrated = [] as number[];
@@ -87,7 +89,8 @@ async function mockCamera(page: Page, camera: Camera) {
 				return ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'qr_code'];
 			}
 			async detect() {
-				return code ? [{ rawValue: code, format: 'ean_13' }] : [];
+				const read = misreads.shift() ?? code;
+				return read ? [{ rawValue: read, format: 'ean_13' }] : [];
 			}
 		};
 	}, camera);
@@ -127,6 +130,18 @@ test('scanning a known product goes straight to the amount step and logs it', as
 	await sheet.getByRole('button', { name: 'Log' }).click();
 	await expect(sheet).toBeHidden();
 	await expect(page.getByRole('button', { name: /^Nutella/ }).first()).toBeVisible();
+});
+
+test('a misread barcode is skipped and scanning keeps going', async ({ page }, testInfo) => {
+	await mockCamera(page, { code: NUTELLA, misreads: ['3017620422004', '3017620422005'] });
+	await gotoHydrated(page, `/day/${scanDate(testInfo.project.name)}`);
+	const sheet = await openScanner(page);
+
+	await expect(sheet.getByRole('heading', { name: 'Nutella' })).toBeVisible();
+	await expect(sheet.getByText('That is not a valid barcode.')).toBeHidden();
+	expect(
+		await page.evaluate(() => (window as never as { __vibrated: number[] }).__vibrated)
+	).toEqual([50]);
 });
 
 test('an unknown barcode opens the food form with the barcode, and the next scan finds the food', async ({

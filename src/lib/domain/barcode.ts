@@ -1,5 +1,6 @@
 export type BarcodeFormat = 'ean_13' | 'ean_8' | 'upc_a' | 'upc_e';
 
+const GTIN_14_LENGTH = 14;
 const EAN_13_LENGTH = 13;
 const EAN_8_LENGTH = 8;
 const UPC_A_LENGTH = 12;
@@ -7,11 +8,18 @@ const UPC_E_LENGTH = 8;
 
 /**
  * Trims a scanned or typed code and returns it as EAN-13 (EAN-8 stays as is) when the check digit is valid,
- * else null. Without a format the length decides: 13 is EAN-13, 12 is UPC-A, 8 is EAN-8.
+ * else null. Without a format the length decides: 14 with a leading zero is a GTIN-14 of an EAN-13, 13 is EAN-13,
+ * 12 is UPC-A, and 8 is EAN-8 or, when that check digit fails, UPC-E.
  */
 export function normalizeBarcode(raw: string, format?: BarcodeFormat): string | null {
 	const code = raw.trim();
 	if (!/^\d+$/.test(code)) return null;
+	if (format === undefined) {
+		if (code.length === GTIN_14_LENGTH)
+			return code.startsWith('0') ? normalizeBarcode(code.slice(1), 'ean_13') : null;
+		if (code.length === EAN_8_LENGTH)
+			return normalizeBarcode(code, 'ean_8') ?? normalizeBarcode(code, 'upc_e');
+	}
 
 	switch (format ?? formatForLength(code.length)) {
 		case 'ean_13':

@@ -33,6 +33,16 @@ describe('normalizeBarcode without a format', () => {
 		expect(normalizeBarcode('40063813339312')).toBeNull();
 	});
 
+	it('reads an 8-digit code that is not a valid EAN-8 as UPC-E', () => {
+		expect(normalizeBarcode('04252614')).toBe('0042100005264');
+		expect(normalizeBarcode('04252615')).toBeNull();
+	});
+
+	it('strips the leading zero of a GTIN-14 to EAN-13', () => {
+		expect(normalizeBarcode('04006381333931')).toBe('4006381333931');
+		expect(normalizeBarcode('04006381333932')).toBeNull();
+	});
+
 	it('returns null for a 12-digit code with a wrong UPC-A check digit', () => {
 		expect(normalizeBarcode('400638133393')).toBeNull();
 	});

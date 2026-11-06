@@ -138,7 +138,10 @@
 		if (disposed || paused || !detector) return;
 		if (video && video.readyState >= HAVE_CURRENT_DATA) {
 			try {
-				const found = (await detector.detect(video)).find((item) => item.rawValue.trim() !== '');
+				// A misread or non-product code is skipped like an unreadable frame, so scanning keeps going.
+				const found = (await detector.detect(video)).find(
+					(item) => normalizeBarcode(item.rawValue, toBarcodeFormat(item.format)) !== null
+				);
 				if (disposed || paused) return;
 				if (found) {
 					navigator.vibrate?.(HAPTIC_MS);
