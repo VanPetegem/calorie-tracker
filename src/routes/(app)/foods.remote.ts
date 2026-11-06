@@ -6,14 +6,13 @@ import { appContext } from '#lib/server/context.ts';
 import type { Food } from '#lib/server/db/schema.ts';
 import {
 	createFood as insertFood,
-	frequents,
 	getFood,
 	getFoodByBarcode,
-	recents,
 	searchLibrary,
 	updateFood as saveFood
 } from '#lib/server/foods/repo.ts';
 import { resolveOffPick } from '#lib/server/foods/service.ts';
+import { suggestions } from '#lib/server/log/day.ts';
 
 /*
  * Food lookups for the add sheet. Open Food Facts calls are commands, not queries: a query result is cached by
@@ -52,14 +51,7 @@ export const loadFood = command(id, async (foodId) => {
 /** Today and the recents and frequents, for the add sheet on pages whose own load does not carry them. */
 export const loadSuggestions = command(async () => {
 	const { db, today } = await appContext();
-	const recentFoods = await recents(db);
-	const frequentFoods = await frequents(
-		db,
-		today,
-		undefined,
-		recentFoods.map((food) => food.id)
-	);
-	return { today, recents: recentFoods, frequents: frequentFoods };
+	return { today, ...(await suggestions(db, today)) };
 });
 
 /** Saving a food: the saved row, or the library food that already has the barcode (the library wins). */

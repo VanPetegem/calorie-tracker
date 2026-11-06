@@ -16,11 +16,15 @@ export function unitOptions(food: AmountFood): LogUnit[] {
  */
 export function defaultAmount(
 	food: AmountFood,
-	last?: { amount: number; unit: string } | null
+	last?: { amount: number; unit: string; grams?: number | null } | null
 ): AmountValue {
 	if (last && last.amount > 0) {
 		const unit = unitOptions(food).find((option) => option === last.unit);
 		if (unit) return { amount: last.amount, unit };
+		// A serving amount on a food that lost its serving weight: keep the same quantity in the base unit.
+		if (last.unit === 'serving' && last.grams != null && last.grams > 0) {
+			return { amount: last.grams, unit: food.nutritionBasis };
+		}
 		// g and ml are the same number for a food whose basis changed.
 		if ((last.unit === 'g' || last.unit === 'ml') && last.unit !== food.nutritionBasis) {
 			return { amount: last.amount, unit: food.nutritionBasis };

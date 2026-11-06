@@ -44,14 +44,21 @@
 	type Fetched = { today: string; recents: RecentFood[]; frequents: RecentFood[] };
 	let fetched = $state.raw<Fetched | null>(null);
 	let fetchFailed = $state(false);
+	let latestRequest = 0;
 
 	$effect(() => {
 		if (!addSheet.open || day) return;
 		fetchFailed = false;
+		// A date fetched earlier may be yesterday by now: log nothing until this request answers.
+		fetched = null;
+		const request = ++latestRequest;
 		// Untracked: calling a remote function reads and writes its own reactive state, which would rerun this effect.
 		void untrack(loadSuggestions).then(
-			(result) => (fetched = result),
+			(result) => {
+				if (request === latestRequest) fetched = result;
+			},
 			() => {
+				if (request !== latestRequest) return;
 				fetched = null;
 				fetchFailed = true;
 			}

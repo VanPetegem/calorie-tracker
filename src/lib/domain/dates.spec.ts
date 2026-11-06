@@ -53,6 +53,10 @@ describe('loggedAtFor', () => {
 		expect(loggedAtFor('2026-11-05', '2026-11-05', now, ZURICH)).toBe('2026-11-05T11:15:00.000Z');
 	});
 
+	it('keeps years below 100 as given', () => {
+		expect(loggedAtFor('0050-03-01', '2026-11-05', now, 'UTC')).toBe('0050-03-01T11:15:00.000Z');
+	});
+
 	it('keeps the local time of day for an earlier date', () => {
 		expect(loggedAtFor('2026-11-03', '2026-11-05', now, ZURICH)).toBe('2026-11-03T11:15:00.000Z');
 	});

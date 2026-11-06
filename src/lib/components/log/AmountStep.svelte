@@ -28,7 +28,7 @@
 		/** "Log" adds a new entry, "Save" changes an existing one. */
 		mode: 'add' | 'edit';
 		/** The last used amount (recents) or the entry's own amount (edit). */
-		initial?: { amount: number; unit: string } | null;
+		initial?: { amount: number; unit: string; grams?: number | null } | null;
 		onsubmit: (value: AmountValue) => void | Promise<void>;
 		/** Shows a Back button when given. */
 		onback?: () => void;

@@ -107,7 +107,7 @@
 			per100={entryPer100}
 			mode="edit"
 			initial={entry.amount !== null && entry.unit !== null
-				? { amount: entry.amount, unit: entry.unit }
+				? { amount: entry.amount, unit: entry.unit, grams: entry.grams }
 				: null}
 			onsubmit={(value) => save(entry, value)}
 			onedit={() => (editingFood = true)}

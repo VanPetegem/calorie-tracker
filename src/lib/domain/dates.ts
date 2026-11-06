@@ -37,7 +37,8 @@ function wallClock(instant: Date, timeZone: string): WallClock {
 /** Offset of the zone from UTC at an instant, in milliseconds. */
 function offsetMs(instant: number, timeZone: string): number {
 	const w = wallClock(new Date(instant), timeZone);
-	const asUtc = Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute, w.second);
+	const asUtc =
+		utcDate(w.year, w.month, w.day).getTime() + ((w.hour * 60 + w.minute) * 60 + w.second) * 1000;
 	return asUtc - Math.floor(instant / 1000) * 1000;
 }
 
@@ -89,9 +90,11 @@ export function isAllowedLogDate(date: string, today: string): boolean {
  */
 export function loggedAtFor(date: string, today: string, now: Date, timeZone: string): string {
 	if (date === today) return now.toISOString();
-	const [year, month, day] = date.split('-').map(Number);
 	const w = wallClock(now, timeZone);
-	const wall = Date.UTC(year, month - 1, day, w.hour, w.minute, w.second, now.getUTCMilliseconds());
+	const wall =
+		parseDate(date).getTime() +
+		((w.hour * 60 + w.minute) * 60 + w.second) * 1000 +
+		now.getUTCMilliseconds();
 	// Two passes settle the offset when the target instant falls on the other side of a DST change.
 	const firstGuess = wall - offsetMs(wall, timeZone);
 	return new Date(wall - offsetMs(firstGuess, timeZone)).toISOString();

@@ -60,22 +60,27 @@ export function withUndo(opts: {
 	revert: () => void | Promise<void>;
 }): void {
 	opts.apply();
-	// The Undo button stays in the DOM while the toast animates out, so a double tap must not revert twice.
-	let undone = false;
-	const id = toasts.show({
-		message: opts.message,
-		action: {
-			label: 'Undo',
-			run: async () => {
-				if (undone) return;
-				undone = true;
-				toasts.dismiss(id);
-				try {
-					await opts.revert();
-				} catch {
-					toasts.show({ message: 'Could not undo. Try again.', tone: 'danger' });
+	// The button stays in the DOM while the toast animates out, so a double tap must not revert twice.
+	let running = false;
+	const offer = (message: string, label: string, tone: ToastTone) => {
+		const id = toasts.show({
+			message,
+			tone,
+			action: {
+				label,
+				run: async () => {
+					if (running) return;
+					running = true;
+					toasts.dismiss(id);
+					try {
+						await opts.revert();
+					} catch {
+						running = false;
+						offer('Could not undo.', 'Retry', 'danger');
+					}
 				}
 			}
-		}
-	});
+		});
+	};
+	offer(opts.message, 'Undo', 'neutral');
 }

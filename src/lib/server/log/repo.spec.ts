@@ -92,6 +92,11 @@ describe('log repository', () => {
 			expect(await allEntries()).toEqual([]);
 		});
 
+		it('fails with 400 for ml of a food measured in g and writes nothing', async () => {
+			await expect(logOats({ unit: 'ml', amount: 100 })).rejects.toMatchObject({ status: 400 });
+			expect(await allEntries()).toEqual([]);
+		});
+
 		it('fails with 400 for servings of a food without a serving weight', async () => {
 			const plain = await createFood(test.db, {
 				name: 'Rice',
@@ -193,6 +198,13 @@ describe('log repository', () => {
 	});
 
 	describe('updateEntryAmount', () => {
+		it("fails with 400 for a unit that does not fit the food's basis", async () => {
+			const entry = await logOats();
+			await expect(
+				updateEntryAmount(test.db, { id: entry.id, amount: 100, unit: 'ml' })
+			).rejects.toMatchObject({ status: 400 });
+		});
+
 		it('rescales the stored snapshot when switching from g to servings', async () => {
 			const entry = await logOats();
 			const updated = await updateEntryAmount(test.db, {

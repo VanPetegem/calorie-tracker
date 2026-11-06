@@ -25,6 +25,13 @@ describe('defaultAmount', () => {
 			unit: 'g'
 		});
 	});
+
+	it("uses the entry's grams when its servings no longer fit the food", () => {
+		expect(defaultAmount(plain, { amount: 2, unit: 'serving', grams: 80 })).toEqual({
+			amount: 80,
+			unit: 'g'
+		});
+	});
 });
 
 describe('convertAmount', () => {

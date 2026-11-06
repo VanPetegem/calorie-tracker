@@ -68,6 +68,11 @@ export function dayTotals(entries: LogEntry[]): Nutrients {
 	return sumNutrients(entries);
 }
 
+/** A g or ml amount must match the food's basis. Servings fit any food. */
+function assertUnitFits(unit: LogUnit, basis: 'g' | 'ml'): void {
+	if (unit !== 'serving' && unit !== basis) error(400, `This food is measured in ${basis}`);
+}
+
 /** Logs an amount of a food with a nutrition snapshot taken from the food row. Logging unarchives the food. */
 export async function addFoodEntry(
 	db: Db,
@@ -77,6 +82,7 @@ export async function addFoodEntry(
 	assertLogDate(input.date, ctx.today);
 	const food = await getFood(db, input.foodId);
 	if (!food) error(404, 'Food not found');
+	assertUnitFits(input.unit, food.nutritionBasis);
 	const grams = gramsFor(input.amount, input.unit, food.servingG);
 	const [entry] = await db
 		.insert(logEntries)
@@ -131,14 +137,14 @@ export async function updateQuickEntry(
 
 /**
  * Changes the amount of a food entry. The stored snapshot scales by new grams / stored grams, so later edits to
- * the food never reach the entry. The food is read only for its serving weight when the new unit is a serving.
+ * the food never reach the entry. The food is read only for its basis and serving weight.
  */
 export async function updateEntryAmount(db: Db, input: EditAmountInput): Promise<LogEntry> {
 	const entry = await getEntry(db, input.id, 'food');
 	if (entry.grams === null || entry.foodId === null) error(400, 'This entry has no amount');
-	let servingG: number | null = null;
-	if (input.unit === 'serving') servingG = (await getFood(db, entry.foodId))?.servingG ?? null;
-	const grams = gramsFor(input.amount, input.unit, servingG);
+	const food = await getFood(db, entry.foodId);
+	if (food) assertUnitFits(input.unit, food.nutritionBasis);
+	const grams = gramsFor(input.amount, input.unit, food?.servingG ?? null);
 	const [updated] = await db
 		.update(logEntries)
 		.set({
