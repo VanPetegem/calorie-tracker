@@ -277,3 +277,20 @@ describe('IngredientList', () => {
 		expect(document.querySelector('dialog[open]')).toBeNull();
 	});
 });
+
+describe('IngredientList line errors', () => {
+	it('marks the failing row with its message and leaves the others alone', async () => {
+		render(IngredientListTestHarness, {
+			initial: [draft('a', oats, 80), draft('b', milk, 250)],
+			errors: { b: 'Milk has no serving size' }
+		});
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Milk has no serving size');
+		expect(page.getByRole('alert').elements()).toHaveLength(1);
+		await expect
+			.element(page.getByRole('button', { name: /^Milk/ }))
+			.toHaveAccessibleDescription('Milk has no serving size');
+		await expect
+			.element(page.getByRole('button', { name: /^Oats/ }))
+			.not.toHaveAccessibleDescription('Milk has no serving size');
+	});
+});

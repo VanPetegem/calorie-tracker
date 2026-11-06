@@ -903,13 +903,14 @@
 
 	<Section
 		name="IngredientRow"
-		description="One ingredient: name, amount with unit and kcal. The whole row is a button for the amount; the menu button has its own 44 px target. Long names truncate."
+		description="One ingredient: name, amount with unit and kcal. The whole row is a button for the amount; the menu button has its own 44 px target. Long names truncate. After a save the server refused, the row is marked with the reason."
 	>
 		<ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
-			{#each makeIngredients(4) as ingredient (ingredient.key)}
+			{#each makeIngredients(4) as ingredient, index (ingredient.key)}
 				<IngredientRow
 					{ingredient}
 					kcal={draftNutrients(ingredient).kcal}
+					error={index === 2 ? `${ingredient.food.name} has no serving size` : undefined}
 					onedit={() => (addIngredientLog = `Edit ${ingredient.food.name}`)}
 					onmenu={() => (addIngredientLog = `Menu for ${ingredient.food.name}`)}
 				/>

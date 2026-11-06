@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { totals } from '#lib/domain/batch.ts';
-import { draftGrams, draftNutrients, draftTotals, type DraftIngredient } from './draft.ts';
+import type { RecipeDetail } from '#lib/server/recipes/repo.ts';
+import {
+	draftGrams,
+	draftNutrients,
+	draftTotals,
+	recipeDraft,
+	type DraftIngredient
+} from './draft.ts';
 
 const food = {
 	id: 'f1',
@@ -59,5 +66,54 @@ describe('draftNutrients and draftTotals', () => {
 	it('uses the per100 mapper instead of the food, for batch snapshots', () => {
 		const list = [ingredient({ unit: 'g', amount: 100 })];
 		expect(draftTotals(list, () => ({ ...food, kcal: 100 })).kcal).toBe(100);
+	});
+});
+
+describe('recipeDraft', () => {
+	const detail = (overrides: Partial<RecipeDetail['ingredients'][number]>) =>
+		({
+			id: 'r1',
+			name: 'Dressing',
+			defaultPortions: 2.5,
+			notes: 'Shake well',
+			ingredients: [
+				{
+					id: 'i1',
+					recipeId: 'r1',
+					foodId: food.id,
+					amount: 2,
+					unit: 'serving',
+					grams: 30,
+					position: 0,
+					food: { ...food, brand: null },
+					nutrients: { kcal: 180 },
+					...overrides
+				}
+			]
+		}) as unknown as RecipeDetail;
+
+	it('carries name, portions, notes and the ingredients with their stored grams', () => {
+		const draft = recipeDraft(detail({}));
+		expect(draft).toMatchObject({
+			id: 'r1',
+			name: 'Dressing',
+			defaultPortions: 2.5,
+			notes: 'Shake well'
+		});
+		expect(draft.ingredients).toHaveLength(1);
+		expect(draft.ingredients[0]).toMatchObject({ amount: 2, unit: 'serving', grams: 30 });
+		expect(draft.ingredients[0]!.food).toEqual(food);
+	});
+
+	it('gives the editor the same totals as the stored recipe for a serving of a food without weight', () => {
+		const [line] = recipeDraft(detail({})).ingredients;
+		expect(draftNutrients(line!).kcal).toBe(180);
+	});
+
+	it('gives every line its own key', () => {
+		const two = detail({});
+		two.ingredients.push({ ...two.ingredients[0]!, id: 'i2', position: 1 });
+		const keys = recipeDraft(two).ingredients.map((i) => i.key);
+		expect(new Set(keys).size).toBe(2);
 	});
 });

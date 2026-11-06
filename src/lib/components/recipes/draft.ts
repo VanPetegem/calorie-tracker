@@ -2,6 +2,7 @@ import { ingredientGrams, ingredientNutrients, totals } from '#lib/domain/batch.
 import type { Nutrients, Per100 } from '#lib/domain/nutrition.ts';
 import type { LogUnit } from '#lib/schemas/fields.ts';
 import type { Food } from '#lib/server/db/schema.ts';
+import type { RecipeDetail } from '#lib/server/recipes/repo.ts';
 
 /** The part of a food an ingredient needs: identity, values per 100 and the serving weight. */
 export type DraftFood = Pick<
@@ -53,4 +54,36 @@ export function draftTotals(
 /** A new client key. */
 export function newKey(): string {
 	return crypto.randomUUID();
+}
+
+/** A recipe as the editor holds it. Without an id it is a new recipe. */
+export type RecipeDraft = {
+	id?: string;
+	name: string;
+	defaultPortions: number;
+	notes: string | null;
+	ingredients: DraftIngredient[];
+};
+
+/**
+ * The editor's starting point for a stored recipe. Each line keeps the grams the server computed (live serving
+ * weight, or the stored grams when the food lost its serving size), so the editor's totals equal the list's.
+ */
+export function recipeDraft(recipe: RecipeDetail): RecipeDraft {
+	return {
+		id: recipe.id,
+		name: recipe.name,
+		defaultPortions: recipe.defaultPortions,
+		notes: recipe.notes,
+		ingredients: recipe.ingredients.map(({ food, amount, unit, grams }) => {
+			const { id, name, nutritionBasis, kcal, protein, carbs, fat, fiber, servingG } = food;
+			return {
+				key: newKey(),
+				food: { id, name, nutritionBasis, kcal, protein, carbs, fat, fiber, servingG },
+				amount,
+				unit,
+				grams
+			};
+		})
+	};
 }

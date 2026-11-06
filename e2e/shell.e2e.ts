@@ -122,7 +122,9 @@ test('the sidebar replaces the tab bar exactly at 1024 px', async ({ page }) => 
 
 const pages = [
 	{ path: '/', h1: 'Today', empty: 'Nothing logged yet' },
-	{ path: '/recipes', h1: 'Recipes', empty: 'No recipes yet' },
+	// The recipes e2e tests save recipes into the shared database, so no empty state is expected here. The empty state
+	// is covered by the page spec.
+	{ path: '/recipes', h1: 'Recipes', empty: undefined },
 	{ path: '/weight', h1: 'Weight', empty: 'No weigh-ins yet' },
 	{ path: '/settings', h1: 'Settings', empty: undefined }
 ];

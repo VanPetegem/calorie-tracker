@@ -4,6 +4,30 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-06
 
+- **Recipe saves report a refused line as a result, not an HTTP error; a missing recipe is a 404.** The recipe
+  repository throws typed errors with user facing messages (`UnknownFoodError`, `UnitNotAvailableError`, both with the
+  ingredient's `index`, and `RecipeNotFoundError`); it stays free of HTTP. The remote layer
+  (`saveRecipeResult` in `src/lib/server/recipes/result.ts`, used by the `saveRecipe` command) maps them: the two line
+  errors become `{ ok: false, reason: 'unknown_food' | 'unit_not_available', message, index }`, the same shape as
+  `createFood`'s `barcode_taken`; `RecipeNotFoundError` becomes `error(404, message)`, because there is no line to
+  mark. A result carries the index without widening `App.Error` for the whole app, and it is typed on the client.
+  `RecipeForm` takes the line at `index` from the list it sent, marks that row with the message (`IngredientList`
+  `errors`, keyed by the ingredient's client key) and keeps the mark until that line's amount or unit changes or it is
+  removed. Any other failure shows "Could not save" and the button says Retry; the form is never cleared.
+- **The editor starts from the server's grams, and leaving a dirty form asks first.** `recipeDraft`
+  (`components/recipes/draft.ts`) maps `RecipeDetail` to the editor including each line's stored `grams`, so the
+  editor's totals equal the list's for a serving of a food that lost its serving size. `UnsavedGuard`
+  (`stores/unsaved.svelte.ts`) cancels an in app navigation while the form differs from what was loaded or last saved
+  and asks "Discard changes?" in a Sheet; `beforeunload` covers reload and close. Dirty is a comparison with the saved
+  snapshot, so changing a field back clears it and a successful save never blocks. Archiving allows the navigation
+  without asking. Batches (3b) reuse the guard.
+- **Recipe notes are a single line field for now.** There is no textarea in the design system yet; adding one is a
+  design system change of its own. The schema allows 2000 characters.
+- **A new recipe starts at 1 portion, and `/recipes/new` has no `load`.** Nothing to read for it; the add sheet inside
+  the editor fetches its own recents. After the first save the form goes to `/recipes/<id>` with `replaceState`.
+- **The AmountStep header shows the entry's own kcal per 100 when editing a logged entry.** Commit f0bb4e7: the line
+  "N kcal per 100 g" reads `per100 ?? food`, the same values as the preview, so a food edited after logging no longer
+  shows a header that disagrees with the preview. Adding and recipe ingredient edits pass no `per100` and are unchanged.
 - **Recipe serving lines follow the food's current serving size.** A recipe is a live template, not history, so
   `getRecipe` and `listRecipes` (`src/lib/server/recipes/repo.ts`) compute a `serving` line's grams at read time as
   amount times the food's current `serving_g`. When the food no longer has a serving size, the grams stored at the

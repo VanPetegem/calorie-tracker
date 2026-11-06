@@ -28,14 +28,15 @@
 	 * "Add ingredient" opens the picker. The list is edited in place through the bound `ingredients`.
 	 *
 	 * `per100` says which values per 100 an ingredient's nutrition comes from: its food by default, a stored snapshot
-	 * for a batch.
+	 * for a batch. `errors` maps an ingredient's `key` to the reason the server refused that line; the row is marked.
 	 */
 	type Props = {
 		ingredients: DraftIngredient[];
 		per100?: Per100Of;
+		errors?: Record<string, string>;
 	};
 
-	let { ingredients = $bindable(), per100 = foodPer100 }: Props = $props();
+	let { ingredients = $bindable(), per100 = foodPer100, errors = {} }: Props = $props();
 
 	const full = $derived(ingredients.length >= MAX_INGREDIENTS);
 	const totalKcal = $derived(Math.round(draftTotals(ingredients, per100).kcal));
@@ -161,6 +162,7 @@
 				<IngredientRow
 					{ingredient}
 					kcal={draftNutrients(ingredient, per100).kcal}
+					error={errors[ingredient.key]}
 					onedit={() => edit(ingredient)}
 					onmenu={() => openMenu(ingredient)}
 				/>

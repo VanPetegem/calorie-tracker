@@ -5,7 +5,8 @@
 	import IngredientList from './IngredientList.svelte';
 
 	/** IngredientList with a bound list next to the Toaster, which the app layout normally provides. Only for specs. */
-	let { initial }: { initial: DraftIngredient[] } = $props();
+	let { initial, errors }: { initial: DraftIngredient[]; errors?: Record<string, string> } =
+		$props();
 
 	let ingredients = $state(untrack(() => initial));
 </script>
@@ -18,5 +19,5 @@
 >
 	Add filler
 </button>
-<IngredientList bind:ingredients />
+<IngredientList bind:ingredients {errors} />
 <Toaster />
