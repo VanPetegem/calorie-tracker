@@ -11,7 +11,8 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     # Hard cap: the full suite runs locally before a push, so a slow CI run is a stall, not work. Fail fast.
-    timeout-minutes: 5
+    # A healthy run takes about 4.5 minutes since the scanner e2e (phase 2b); 8 leaves room for runner variance.
+    timeout-minutes: 8
     # Browsers and their system packages come preinstalled: `playwright install --with-deps` spent 18 minutes in
     # apt once. The tag must match the Playwright version in pnpm-lock.yaml; bump both together, digest included.
     container:
