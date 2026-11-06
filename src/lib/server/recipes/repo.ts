@@ -24,22 +24,38 @@ export type RecipeDetail = RecipeSummary & {
 	ingredients: (RecipeIngredient & { food: Food; nutrients: Nutrients })[];
 };
 
-/** An ingredient names a food that is not in the library. Nothing was written. */
+/**
+ * An ingredient names a food that is not in the library. Nothing was written. `index` is the ingredient's
+ * position in the input, so the form can mark the line.
+ */
 export class UnknownFoodError extends Error {
 	override readonly name = 'UnknownFoodError';
-	constructor(readonly foodId: string) {
-		super(`Unknown food ${foodId}`);
+	constructor(
+		readonly foodId: string,
+		readonly index: number
+	) {
+		super('This food is no longer in your library');
 	}
 }
 
-/** An ingredient uses a unit its food cannot take: a serving without a serving size, or g and ml swapped. */
+/**
+ * An ingredient uses a unit its food cannot take: a serving without a serving size, or g and ml swapped. Nothing
+ * was written. `index` is the ingredient's position in the input.
+ */
 export class UnitNotAvailableError extends Error {
 	override readonly name = 'UnitNotAvailableError';
+	readonly foodId: string;
 	constructor(
-		readonly foodId: string,
-		readonly unit: IngredientInput['unit']
+		food: Pick<Food, 'id' | 'name' | 'nutritionBasis'>,
+		readonly unit: IngredientInput['unit'],
+		readonly index: number
 	) {
-		super(`Food ${foodId} cannot be measured in ${unit}`);
+		super(
+			unit === 'serving'
+				? `${food.name} has no serving size`
+				: `${food.name} is measured in ${food.nutritionBasis}`
+		);
+		this.foodId = food.id;
 	}
 }
 
@@ -47,11 +63,26 @@ export class UnitNotAvailableError extends Error {
 export class RecipeNotFoundError extends Error {
 	override readonly name = 'RecipeNotFoundError';
 	constructor(readonly recipeId: string) {
-		super(`Recipe ${recipeId} not found`);
+		super('This recipe no longer exists');
 	}
 }
 
+/**
+ * D1 binds at most 100 values per statement and an ingredient row binds 7 (one per column), so a recipe's
+ * ingredients are inserted 14 rows per statement.
+ */
+const INGREDIENT_ROWS_PER_INSERT = Math.floor(100 / 7);
+
 type IngredientRow = { ingredient: RecipeIngredient; food: Food };
+
+/**
+ * Grams of an ingredient with the food as it is now. A recipe is a live template, so a serving line follows the
+ * food's current serving size; when the food no longer has one, the grams saved with the recipe stand.
+ */
+function liveGrams({ ingredient, food }: IngredientRow): number {
+	if (ingredient.unit !== 'serving' || food.servingG === null) return ingredient.grams;
+	return toGrams(ingredient.amount, 'serving', food.servingG);
+}
 
 /** Ingredients with their current foods, grouped by recipe in position order. */
 async function ingredientRows(db: Db, where: SQL | undefined): Promise<IngredientRow[]> {
@@ -65,9 +96,7 @@ async function ingredientRows(db: Db, where: SQL | undefined): Promise<Ingredien
 }
 
 function summarize(recipe: Recipe, rows: IngredientRow[]): RecipeSummary {
-	const sum = totals(
-		rows.map(({ ingredient, food }) => ({ per100: food, grams: ingredient.grams }))
-	);
+	const sum = totals(rows.map((row) => ({ per100: row.food, grams: liveGrams(row) })));
 	return {
 		...recipe,
 		totals: sum,
@@ -95,21 +124,25 @@ export async function getRecipe(db: Db, id: string): Promise<RecipeDetail | null
 	const rows = await ingredientRows(db, eq(recipes.id, id));
 	return {
 		...summarize(recipe, rows),
-		ingredients: rows.map(({ ingredient, food }) => ({
-			...ingredient,
-			food,
-			nutrients: ingredientNutrients({ per100: food, grams: ingredient.grams })
-		}))
+		ingredients: rows.map((row) => {
+			const grams = liveGrams(row);
+			return {
+				...row.ingredient,
+				grams,
+				food: row.food,
+				nutrients: ingredientNutrients({ per100: row.food, grams })
+			};
+		})
 	};
 }
 
 /** Gram equivalent of an ingredient amount. g and ml must match the food's basis; a serving needs a serving size. */
-function gramsFor(ingredient: IngredientInput, food: Food): number {
+function gramsFor(ingredient: IngredientInput, food: Food, index: number): number {
 	const fits =
 		ingredient.unit === 'serving'
 			? food.servingG !== null
 			: ingredient.unit === food.nutritionBasis;
-	if (!fits) throw new UnitNotAvailableError(food.id, ingredient.unit);
+	if (!fits) throw new UnitNotAvailableError(food, ingredient.unit, index);
 	return toGrams(ingredient.amount, ingredient.unit, food.servingG);
 }
 
@@ -135,14 +168,14 @@ export async function saveRecipe(db: Db, input: RecipeInput): Promise<Recipe> {
 	const recipeId = parsed.id ?? newId();
 	const lines = parsed.ingredients.map((ingredient, position) => {
 		const food = foodById.get(ingredient.foodId);
-		if (!food) throw new UnknownFoodError(ingredient.foodId);
+		if (!food) throw new UnknownFoodError(ingredient.foodId, position);
 		return {
 			id: newId(),
 			recipeId,
 			foodId: food.id,
 			amount: ingredient.amount,
 			unit: ingredient.unit,
-			grams: gramsFor(ingredient, food),
+			grams: gramsFor(ingredient, food, position),
 			position
 		};
 	});
@@ -161,9 +194,17 @@ export async function saveRecipe(db: Db, input: RecipeInput): Promise<Recipe> {
 	const [[recipe]] = await db.batch([
 		writeRecipe,
 		db.delete(recipeIngredients).where(eq(recipeIngredients.recipeId, recipeId)),
-		db.insert(recipeIngredients).values(lines)
+		...chunk(lines, INGREDIENT_ROWS_PER_INSERT).map((rows) =>
+			db.insert(recipeIngredients).values(rows)
+		)
 	]);
 	return recipe;
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+	return Array.from({ length: Math.ceil(items.length / size) }, (_, i) =>
+		items.slice(i * size, (i + 1) * size)
+	);
 }
 
 /** Hides a recipe from the list. Archiving an archived or unknown recipe does nothing. */

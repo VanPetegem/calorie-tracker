@@ -2,6 +2,15 @@
 
 Living record of decisions. Newest first. Each entry: date, decision, reason.
 
+## 2026-11-06
+
+- **Recipe serving lines follow the food's current serving size.** A recipe is a live template, not history, so
+  `getRecipe` and `listRecipes` (`src/lib/server/recipes/repo.ts`) compute a `serving` line's grams at read time as
+  amount times the food's current `serving_g`. When the food no longer has a serving size, the grams stored at the
+  last save stand. g and ml lines keep grams equal to the amount. Saving again with a serving line whose food lost
+  its serving size is refused (`UnitNotAvailableError`, carrying the line's index), and the recipe page shows that
+  per line. Batches (phase 3b) still snapshot grams and nutrition when cooked.
+
 ## 2026-11-05
 
 - **The scanner uses the `barcode-detector` ponyfill with a lazily loaded, self hosted zxing-wasm, and Scan lives in

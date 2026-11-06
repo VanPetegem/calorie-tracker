@@ -1,5 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { MAX_INGREDIENTS } from '../../domain/constants.ts';
 import type { RecipeInput } from '../../schemas/recipe.ts';
 import { foods, recipeIngredients, recipes, type Food } from '../db/schema.ts';
 import { createFood, type FoodInsert } from '../foods/repo.ts';
@@ -142,9 +143,12 @@ describe('recipe repository', () => {
 	});
 
 	it('rejects an id that does not exist and writes nothing', async () => {
-		await expect(saveRecipe(test.db, chickenAndRice({ id: missingId }))).rejects.toBeInstanceOf(
-			RecipeNotFoundError
-		);
+		const save = saveRecipe(test.db, chickenAndRice({ id: missingId }));
+		await expect(save).rejects.toBeInstanceOf(RecipeNotFoundError);
+		await expect(save).rejects.toMatchObject({
+			recipeId: missingId,
+			message: 'This recipe no longer exists'
+		});
 		expect(await snapshot()).toEqual({ recipes: [], ingredients: [] });
 	});
 
@@ -164,17 +168,31 @@ describe('recipe repository', () => {
 			})
 		);
 		await expect(save).rejects.toBeInstanceOf(UnknownFoodError);
-		await expect(save).rejects.toMatchObject({ foodId: missingId });
+		await expect(save).rejects.toMatchObject({
+			foodId: missingId,
+			index: 2,
+			message: 'This food is no longer in your library'
+		});
 		expect(await snapshot()).toEqual(before);
 	});
 
 	it('rejects a serving of a food without a serving size and writes nothing', async () => {
 		const save = saveRecipe(
 			test.db,
-			chickenAndRice({ ingredients: [{ foodId: rice.id, amount: 1, unit: 'serving' }] })
+			chickenAndRice({
+				ingredients: [
+					{ foodId: chicken.id, amount: 100, unit: 'g' },
+					{ foodId: rice.id, amount: 1, unit: 'serving' }
+				]
+			})
 		);
 		await expect(save).rejects.toBeInstanceOf(UnitNotAvailableError);
-		await expect(save).rejects.toMatchObject({ foodId: rice.id, unit: 'serving' });
+		await expect(save).rejects.toMatchObject({
+			foodId: rice.id,
+			unit: 'serving',
+			index: 1,
+			message: 'Rice has no serving size'
+		});
 		expect(await snapshot()).toEqual({ recipes: [], ingredients: [] });
 	});
 
@@ -184,7 +202,13 @@ describe('recipe repository', () => {
 				test.db,
 				chickenAndRice({ ingredients: [{ foodId: milk.id, amount: 200, unit: 'g' }] })
 			)
-		).rejects.toMatchObject({ name: 'UnitNotAvailableError', foodId: milk.id, unit: 'g' });
+		).rejects.toMatchObject({
+			name: 'UnitNotAvailableError',
+			foodId: milk.id,
+			unit: 'g',
+			index: 0,
+			message: 'Milk is measured in ml'
+		});
 		const saved = await saveRecipe(
 			test.db,
 			chickenAndRice({ ingredients: [{ foodId: milk.id, amount: 200, unit: 'ml' }] })
@@ -192,23 +216,111 @@ describe('recipe repository', () => {
 		expect((await getRecipe(test.db, saved.id))?.totals.kcal).toBe(128);
 	});
 
-	it('rejects a tampered input and writes nothing', async () => {
-		const tampered = [
-			chickenAndRice({ defaultPortions: 0 }),
-			chickenAndRice({ defaultPortions: 101 }),
+	it('validates the input itself and writes nothing for nutrition sent along', async () => {
+		const tampered = { ...chickenAndRice(), kcal: 1 } as RecipeInput;
+		await expect(saveRecipe(test.db, tampered)).rejects.toMatchObject({ name: 'ValiError' });
+		expect(await snapshot()).toEqual({ recipes: [], ingredients: [] });
+	});
+
+	it('saves the maximum number of ingredients', async () => {
+		const saved = await saveRecipe(
+			test.db,
 			chickenAndRice({
-				ingredients: Array.from({ length: 51 }, () => ({
+				ingredients: Array.from({ length: MAX_INGREDIENTS }, (_, i) => ({
 					foodId: rice.id,
-					amount: 10,
+					amount: i + 1,
 					unit: 'g' as const
 				}))
-			}),
-			{ ...chickenAndRice(), kcal: 1 } as RecipeInput
-		];
-		for (const input of tampered) {
-			await expect(saveRecipe(test.db, input)).rejects.toMatchObject({ name: 'ValiError' });
+			})
+		);
+		const detail = await getRecipe(test.db, saved.id);
+		expect(detail?.ingredientCount).toBe(MAX_INGREDIENTS);
+		expect(detail?.ingredients.map((i) => i.amount)).toEqual(
+			Array.from({ length: MAX_INGREDIENTS }, (_, i) => i + 1)
+		);
+	});
+
+	it('keeps the stored recipe when the database fails halfway through a save', async () => {
+		const saved = await saveRecipe(
+			test.db,
+			chickenAndRice({
+				ingredients: [
+					{ foodId: chicken.id, amount: 200, unit: 'g' },
+					{ foodId: rice.id, amount: 100, unit: 'g' },
+					{ foodId: egg.id, amount: 1, unit: 'serving' }
+				]
+			})
+		);
+		const before = await snapshot();
+		await test.db.run(
+			sql.raw(
+				"CREATE TRIGGER fail_third_ingredient BEFORE INSERT ON recipe_ingredients WHEN new.position = 2 BEGIN SELECT RAISE(ABORT, 'boom'); END"
+			)
+		);
+		try {
+			await expect(
+				saveRecipe(
+					test.db,
+					chickenAndRice({
+						id: saved.id,
+						name: 'Changed',
+						ingredients: [
+							{ foodId: rice.id, amount: 300, unit: 'g' },
+							{ foodId: chicken.id, amount: 100, unit: 'g' },
+							{ foodId: rice.id, amount: 50, unit: 'g' }
+						]
+					})
+				)
+			).rejects.toThrow();
+		} finally {
+			await test.db.run(sql.raw('DROP TRIGGER fail_third_ingredient'));
 		}
-		expect(await snapshot()).toEqual({ recipes: [], ingredients: [] });
+		expect(await snapshot()).toEqual(before);
+	});
+
+	it('follows the current serving size of a food', async () => {
+		const saved = await saveRecipe(
+			test.db,
+			chickenAndRice({ ingredients: [{ foodId: egg.id, amount: 2, unit: 'serving' }] })
+		);
+		await test.db.update(foods).set({ servingG: 60 }).where(eq(foods.id, egg.id));
+		const detail = await getRecipe(test.db, saved.id);
+		expect(detail?.ingredients[0].grams).toBe(120);
+		expect(detail?.totals.kcal).toBe(171.6);
+		expect((await listRecipes(test.db))[0].totals.kcal).toBe(171.6);
+	});
+
+	it('falls back to the saved grams when a food loses its serving size', async () => {
+		const saved = await saveRecipe(
+			test.db,
+			chickenAndRice({ ingredients: [{ foodId: egg.id, amount: 2, unit: 'serving' }] })
+		);
+		await test.db.update(foods).set({ servingG: null }).where(eq(foods.id, egg.id));
+		expect((await getRecipe(test.db, saved.id))?.totals.kcal).toBe(143);
+	});
+
+	it('returns ingredients by position, not by insertion order', async () => {
+		const saved = await saveRecipe(test.db, chickenAndRice());
+		await test.db.delete(recipeIngredients);
+		// Inserted and keyed in the opposite order of their positions.
+		for (const [id, foodId, position] of [
+			['00000000-0000-4000-8000-000000000001', rice.id, 1],
+			['00000000-0000-4000-8000-000000000002', chicken.id, 0]
+		] as const) {
+			await test.db.insert(recipeIngredients).values({
+				id,
+				recipeId: saved.id,
+				foodId,
+				amount: 100,
+				unit: 'g',
+				grams: 100,
+				position
+			});
+		}
+		expect((await getRecipe(test.db, saved.id))?.ingredients.map((i) => i.food.name)).toEqual([
+			'Chicken',
+			'Rice'
+		]);
 	});
 
 	it('lists recipes by name regardless of case', async () => {
