@@ -153,7 +153,9 @@ test('an unknown barcode opens the food form with the barcode, and the next scan
 	await expect(sheet).toBeHidden();
 	await expect(page.getByRole('button', { name: new RegExp(`^${name}`) })).toBeVisible();
 
-	// The same code now finds the custom food in the library.
+	// The same code now finds the custom food in the library. A fresh page load first: Linux WebKit (CI) delivers
+	// no frames from a second canvas capture stream in the same page, so the fake camera would stay blank.
+	await gotoHydrated(page, `/day/${scanDate(testInfo.project.name)}`);
 	const again = await openScanner(page);
 	await expect(again.getByRole('heading', { name })).toBeVisible();
 	// The amount step starts from the amount logged last for this food.
