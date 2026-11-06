@@ -112,9 +112,9 @@ export function portionsLeft(batch: BatchShape, entries: BatchEntry[]): number {
 	return batch.portions - logged;
 }
 
-/** Net weight of a cooked batch: the gross weight on the scale minus the container's tare. Must be above zero. */
+/** Net weight of a cooked batch: the gross weight on the scale minus the container's tare, to 0.1 g. Must be above zero. */
 export function netWeight(gross: number, tareG: number): number {
-	const net = gross - tareG;
+	const net = round1(gross - tareG);
 	if (!Number.isFinite(net) || net <= 0)
 		throw new RangeError('The net weight must be greater than zero');
 	return net;

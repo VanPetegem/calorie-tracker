@@ -191,6 +191,10 @@ describe('netWeight', () => {
 		expect(netWeight(1850, 650)).toBe(1200);
 	});
 
+	it('rounds to 0.1 g so decimal weights store no float noise', () => {
+		expect(netWeight(1850.3, 650.1)).toBe(1200.2);
+	});
+
 	it('throws a RangeError when the net weight is not above zero', () => {
 		expect(() => netWeight(600, 650)).toThrow(RangeError);
 		expect(() => netWeight(650, 650)).toThrow(RangeError);
