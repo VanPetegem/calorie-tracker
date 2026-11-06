@@ -28,9 +28,9 @@ const SEED = [
 	`INSERT INTO log_entries (id, date, logged_at, kind, food_id, batch_id, amount, unit, grams, label, kcal, protein,
 	   carbs, fat, fiber, deleted_at) VALUES
 	 ('019a5b2e-0000-7000-8000-000000000020', '2026-11-05', '2026-11-05T07:30:00.000Z', 'food', '${FOOD_ID}', NULL,
-	   1.5, 'serving', 60, 'Oats', 222, 7.8, 35.4, 4.2, 6, NULL),
+	   1.5, 'serving', 60, 'Oats', 222.4, 7.8, 35.4, 4.2, 6, NULL),
 	 ('019a5b2e-0000-7000-8000-000000000021', '2026-11-05', '2026-11-05T08:00:00.000Z', 'food', '${ARCHIVED_FOOD_ID}',
-	   NULL, 200, 'ml', 200, 'Milk', 128, 6.6, 9.6, 7, NULL, '2026-11-05T08:05:00.000Z'),
+	   NULL, 200, 'ml', 200, 'Milk', 128.3, 6.6, 9.6, 7, NULL, '2026-11-05T08:05:00.000Z'),
 	 ('019a5b2e-0000-7000-8000-000000000022', '2026-11-04', '2026-11-04T19:00:00.000Z', 'quick', NULL, NULL, NULL,
 	   NULL, NULL, 'Pizza', 900, 35, 100, 38, NULL, NULL),
 	 ('019a5b2e-0000-7000-8000-000000000023', '2026-11-04', '2026-11-04T20:00:00.000Z', 'quick', NULL, NULL, NULL,
@@ -109,16 +109,29 @@ describe('migrations after 3a', () => {
 		expect(after.has('trigger user_single_account')).toBe(true);
 	});
 
+	const noAction = { on_delete: 'NO ACTION', on_update: 'NO ACTION' };
+
 	it('make log_entries.batch_id a reference to batches, with an index', async () => {
 		const keys = await all(test, 'PRAGMA foreign_key_list(log_entries)');
 		expect(keys).toEqual(
 			expect.arrayContaining([
-				expect.objectContaining({ table: 'batches', from: 'batch_id', to: 'id' }),
-				expect.objectContaining({ table: 'foods', from: 'food_id', to: 'id' })
+				expect.objectContaining({ ...noAction, table: 'batches', from: 'batch_id', to: 'id' }),
+				expect.objectContaining({ ...noAction, table: 'foods', from: 'food_id', to: 'id' })
 			])
 		);
 		const indexes = (await all(test, 'PRAGMA index_list(log_entries)')).map((row) => row.name);
 		expect(indexes).toContain('log_entries_batch_id_idx');
+	});
+
+	it('add the indexes for batches and for recipes by food', async () => {
+		const indexes = [...(await objects(test)).keys()];
+		expect(indexes).toEqual(
+			expect.arrayContaining([
+				'index batches_finished_at_idx',
+				'index batch_ingredients_batch_id_position_idx',
+				'index recipe_ingredients_food_id_idx'
+			])
+		);
 	});
 
 	it('leave no broken foreign key', async () => {
