@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
+	BATCH_AUTO_FINISH_DAYS,
 	FREQUENTS_SIZE,
 	FREQUENTS_WINDOW_DAYS,
 	MACRO_RULE_DEFAULTS,
 	MAX_AMOUNT_GRAMS_OR_ML,
 	MAX_AMOUNT_SERVINGS,
+	MAX_COOKED_WEIGHT_G,
+	MAX_INGREDIENTS,
 	MAX_KCAL_PER_100,
 	MAX_MACRO_PER_100,
+	MAX_NOTES,
+	MAX_PORTIONS,
 	MAX_QUICK_KCAL,
+	MAX_TARE_G,
 	MIN_KCAL_PER_100,
 	MIN_MACRO_PER_100,
 	MIN_QUICK_KCAL,
@@ -30,5 +36,14 @@ describe('domain constants', () => {
 		expect(RECENTS_SIZE).toBe(10);
 		expect(FREQUENTS_SIZE).toBe(10);
 		expect(FREQUENTS_WINDOW_DAYS).toBe(30);
+	});
+
+	it('holds the phase 3 recipe and batch limits', () => {
+		expect(MAX_PORTIONS).toBe(100);
+		expect(MAX_COOKED_WEIGHT_G).toBe(20000);
+		expect(MAX_TARE_G).toBe(10000);
+		expect(BATCH_AUTO_FINISH_DAYS).toBe(7);
+		expect(MAX_INGREDIENTS).toBe(50);
+		expect(MAX_NOTES).toBe(2000);
 	});
 });
