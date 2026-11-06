@@ -12,7 +12,8 @@ export type Nutrients = Per100;
 
 export type Unit = 'g' | 'ml' | 'serving' | 'portion';
 
-function round1(value: number): number {
+/** Rounds to one decimal, the precision of every stored nutrition value. */
+export function round1(value: number): number {
 	return Math.round(value * 10) / 10;
 }
 

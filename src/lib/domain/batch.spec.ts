@@ -68,9 +68,10 @@ describe('perPortion', () => {
 		expect(perPortion({ ...dinner, fiber: null }, 2).fiber).toBeNull();
 	});
 
-	it('throws a RangeError for zero, negative or NaN portions', () => {
+	it('throws a RangeError for zero, negative, NaN or infinite portions', () => {
 		expect(() => perPortion(dinner, 0)).toThrow(RangeError);
 		expect(() => perPortion(dinner, -1)).toThrow(RangeError);
 		expect(() => perPortion(dinner, Number.NaN)).toThrow(RangeError);
+		expect(() => perPortion(dinner, Number.POSITIVE_INFINITY)).toThrow(RangeError);
 	});
 });
