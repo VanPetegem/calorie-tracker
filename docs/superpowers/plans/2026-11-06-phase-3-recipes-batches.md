@@ -197,6 +197,7 @@ e2e/recipes.e2e.ts (3a), e2e/batches.e2e.ts (3b)
   - `activeBatches(db, now): Promise<BatchSummary[]>`: first sets `finished_at` on stale active batches (activity = max of `created_at`, `updated_at`, latest live entry `logged_at`), then returns active ones by `cooked_on` desc.
   - `finishedBatches(db, limit = 20)`, `getBatch(db, id)`, `draftFromRecipe(db, recipeId, today)`: a `BatchInput` prefilled from the recipe.
   - `saveBatch(db, input)`: unknown ingredient ids (or ids of another batch) are rejected; existing ingredients keep their per 100 snapshot and get the new amount, unit and grams; new ones are snapshotted from the food; totals recomputed with `totals`; one `db.batch`.
+  - Serving lines of a batch ingredient price servings from a serving weight snapshotted on the batch ingredient (`grams / amount` at save), not from the live food's `servingG`. The batch editor maps `food.servingG` from that snapshot, so the editor and the server agree.
   - `finishBatch`, `reopenBatch` (idempotent), `deleteBatch` (refuses with `BatchLoggedError` when a live entry references it; else hard deletes its soft deleted entries and the batch in one `db.batch`).
   - `listContainers`, `saveContainer`, `deleteContainer`.
   - `addBatchEntry(db, input, ctx)`: snapshot via `batchEntrySnapshot`, label = batch name, `kind = 'batch'`; logging a finished batch is allowed.

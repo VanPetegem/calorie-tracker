@@ -23,9 +23,18 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
   without asking. Batches (3b) reuse the guard.
 - **Recipe notes are a single line field for now.** There is no textarea in the design system yet; adding one is a
   design system change of its own. The schema allows 2000 characters.
+- **A new recipe moves to its own address only once nothing is unsaved.** Edits made while the first save runs are not
+  in the saved recipe, and moving to `/recipes/<id>` then would make the unsaved changes guard cancel the move and ask to
+  discard them. `RecipeForm` keeps `savedId` from the first save (later saves update that recipe) and does the
+  `replaceState` move after the first save that leaves the form clean. Disabling the fields while saving would have
+  needed a `disabled` mode in `IngredientList` and its sheets.
+- **Ingredient lines have their own unit list.** `INGREDIENT_UNITS` (`g`, `ml`, `serving`) in `schemas/fields.ts`
+  is separate from `LOG_UNITS`, so adding `portion` to the log units for batches cannot make it a valid ingredient
+  unit. `DraftIngredient` also carries an optional `id` and `snapshot` (a batch ingredient's own values per 100,
+  priced instead of the food's), and an amount edit keeps every field but the stale `grams`.
 - **A new recipe starts at 1 portion, and `/recipes/new` has no `load`.** Nothing to read for it; the add sheet inside
   the editor fetches its own recents. After the first save the form goes to `/recipes/<id>` with `replaceState`.
-- **The AmountStep header shows the entry's own kcal per 100 when editing a logged entry.** Commit f0bb4e7: the line
+- **The AmountStep header shows the entry's own kcal per 100 when editing a logged entry.** In `AmountStep.svelte` (with `EditEntrySheet.svelte` passing the entry's values): the line
   "N kcal per 100 g" reads `per100 ?? food`, the same values as the preview, so a food edited after logging no longer
   shows a header that disagrees with the preview. Adding and recipe ingredient edits pass no `per100` and are unchanged.
 - **Recipe serving lines follow the food's current serving size.** A recipe is a live template, not history, so

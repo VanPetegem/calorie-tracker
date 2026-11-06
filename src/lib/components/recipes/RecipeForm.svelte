@@ -46,6 +46,9 @@
 	// as it is stored.
 	let savedId = $state(start?.id);
 	let savedName = $state(start?.name);
+	// A new recipe is saved at /recipes/new and then moves to its own address. The move waits for a form without
+	// unsaved edits (see `save`); until then the recipe exists, and later saves update it through `savedId`.
+	let moved = start?.id !== undefined;
 	let root = $state<HTMLElement>();
 
 	const text = (value: number | string | null | undefined) => (value == null ? '' : String(value));
@@ -180,14 +183,16 @@
 		// Busy stays on until the form has settled (refresh, and the move to the new recipe's address), so a second
 		// tap on Save cannot start another save in between.
 		try {
-			const created = savedId === undefined;
 			savedId = outcome.id;
 			savedName = output.name;
 			baseline = sent;
 			toasts.show({ message: 'Recipe saved', tone: 'success' });
 			await refresh();
-			if (created) {
+			// Edits made while the first save ran are not in the saved recipe. Moving now would make the guard cancel the
+			// move and ask to discard them, so the form stays here until a save leaves nothing unsaved.
+			if (!moved && !dirty) {
 				await goto(resolve('/(app)/recipes/[id]', { id: outcome.id }), { replaceState: true });
+				moved = true;
 			}
 		} finally {
 			busy = false;

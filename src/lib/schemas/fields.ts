@@ -77,9 +77,18 @@ export type LogUnit = (typeof LOG_UNITS)[number];
 
 export const logUnit = v.picklist(LOG_UNITS, 'Choose a unit');
 
+/**
+ * Units a recipe or batch ingredient can be entered in: an ingredient is raw food, never a portion. Its own list, so
+ * adding `portion` to `LOG_UNITS` for batches cannot make it a valid ingredient unit.
+ */
+export const INGREDIENT_UNITS = ['g', 'ml', 'serving'] as const satisfies readonly Unit[];
+export type IngredientUnit = (typeof INGREDIENT_UNITS)[number];
+
+export const ingredientUnit = v.picklist(INGREDIENT_UNITS, 'Choose a unit');
+
 /** Any amount greater than zero; `fitsUnit` then applies the limit of the chosen unit. */
 export const amount = positiveUpTo(Math.max(MAX_AMOUNT_GRAMS_OR_ML, MAX_AMOUNT_SERVINGS));
 
-export function fitsUnit(input: { amount: number; unit: LogUnit }): boolean {
+export function fitsUnit(input: { amount: number; unit: LogUnit | IngredientUnit }): boolean {
 	return input.amount <= (input.unit === 'serving' ? MAX_AMOUNT_SERVINGS : MAX_AMOUNT_GRAMS_OR_ML);
 }

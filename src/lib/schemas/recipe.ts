@@ -1,13 +1,13 @@
 import * as v from 'valibot';
 import { MAX_INGREDIENTS, MAX_NOTES, MAX_PORTIONS } from '../domain/constants.ts';
-import { amount, fitsUnit, id, logUnit, orNull, positiveUpTo, text } from './fields.ts';
+import { amount, fitsUnit, id, ingredientUnit, orNull, positiveUpTo, text } from './fields.ts';
 
 /**
  * One recipe line: a library food and an amount. Nutrition is never accepted from the client; the server reads
  * the food and checks that it exists and that the unit fits it.
  */
 export const IngredientInput = v.pipe(
-	v.strictObject({ foodId: id, amount, unit: logUnit }),
+	v.strictObject({ foodId: id, amount, unit: ingredientUnit }),
 	v.forward(
 		v.check((input) => fitsUnit(input), 'Too much for this unit'),
 		['amount']

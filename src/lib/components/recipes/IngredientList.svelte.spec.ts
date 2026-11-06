@@ -278,6 +278,23 @@ describe('IngredientList', () => {
 	});
 });
 
+describe('IngredientList amount edit', () => {
+	it('keeps every other field of the line, so a batch snapshot survives an amount edit', async () => {
+		// The line's own values per 100 (200 kcal) differ from its food's (400 kcal).
+		const snapshot = { kcal: 200, protein: 6, carbs: 30, fat: 3, fiber: 5 };
+		render(IngredientListTestHarness, {
+			initial: [{ ...draft('a', oats, 100), id: 'line-1', snapshot }]
+		});
+		await expect.element(page.getByText('200 kcal', { exact: true }).first()).toBeVisible();
+		await page.getByRole('button', { name: /Oats/ }).first().click();
+		await sheetSettled();
+		await page.getByLabelText('Amount').fill('50');
+		await page.getByRole('button', { name: 'Save' }).click();
+		// 50 g at the snapshot's 200 kcal per 100 g. Without the snapshot it would read 200 kcal.
+		await expect.element(page.getByText('Total 100 kcal')).toBeVisible();
+	});
+});
+
 describe('IngredientList line errors', () => {
 	it('marks the failing row with its message and leaves the others alone', async () => {
 		render(IngredientListTestHarness, {

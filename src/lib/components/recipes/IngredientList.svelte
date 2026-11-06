@@ -70,10 +70,14 @@
 	}
 
 	function saveAmount(key: string, { amount, unit }: AmountValue) {
-		// The stored grams belonged to the old amount: the row is computed from the new one from here on.
-		ingredients = ingredients.map((i) =>
-			i.key === key ? { key: i.key, food: i.food, amount, unit } : i
-		);
+		// The stored grams belonged to the old amount: the row is computed from the new one from here on. Every other
+		// field of the line (id, snapshot) stays.
+		ingredients = ingredients.map((i) => {
+			if (i.key !== key) return i;
+			const next = { ...i, amount, unit };
+			delete next.grams;
+			return next;
+		});
 		editOpen = false;
 	}
 

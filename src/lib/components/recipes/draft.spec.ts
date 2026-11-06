@@ -69,6 +69,14 @@ describe('draftNutrients and draftTotals', () => {
 	});
 });
 
+describe('a line with its own snapshot', () => {
+	it('is priced from the snapshot instead of its food', () => {
+		const snapshot = { kcal: 100, protein: 1, carbs: 1, fat: 1, fiber: null };
+		expect(draftNutrients(ingredient({ unit: 'g', amount: 50, snapshot })).kcal).toBe(50);
+		expect(draftNutrients(ingredient({ unit: 'g', amount: 50 })).kcal).toBe(300);
+	});
+});
+
 describe('recipeDraft', () => {
 	const detail = (overrides: Partial<RecipeDetail['ingredients'][number]>) =>
 		({

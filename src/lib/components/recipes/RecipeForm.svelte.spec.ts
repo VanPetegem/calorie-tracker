@@ -413,6 +413,34 @@ describe('RecipeForm saving twice', () => {
 	});
 });
 
+describe('RecipeForm first save with an edit in flight', () => {
+	it('stays put instead of asking to discard, and moves on once the form is saved', async () => {
+		const pending = deferred<unknown>();
+		mocks.saveRecipe.mockReturnValueOnce(pending.promise);
+		render(RecipeFormTestHarness, { recipe: { ...saved, id: undefined } });
+		await field('Portions').fill('5');
+		await save().click();
+		await vi.waitFor(() => expect(mocks.saveRecipe).toHaveBeenCalled());
+		await field('Portions').fill('6');
+		pending.resolve({ ok: true, id: saved.id });
+		await expect.element(page.getByText('Recipe saved')).toBeVisible();
+		await vi.waitFor(() => expect(mocks.invalidateAll).toHaveBeenCalled());
+
+		// Not moved: the edit made while saving is not in the saved recipe yet, and no question was asked.
+		expect(mocks.goto).not.toHaveBeenCalled();
+		expect(document.querySelector('dialog[open]')).toBeNull();
+		expect(field('Portions').element()).toHaveValue('6');
+
+		// The next save updates the same recipe, and now the form is clean, so it opens the saved recipe.
+		await save().click();
+		await vi.waitFor(() =>
+			expect(mocks.goto).toHaveBeenCalledWith(`/recipes/${saved.id}`, { replaceState: true })
+		);
+		expect(mocks.saveRecipe.mock.calls[1]![0]).toMatchObject({ id: saved.id, defaultPortions: 6 });
+		expect(mocks.goto).toHaveBeenCalledTimes(1);
+	});
+});
+
 describe('RecipeForm archive toast', () => {
 	it('names the recipe as it was last saved', async () => {
 		render(RecipeFormTestHarness, { recipe: saved });

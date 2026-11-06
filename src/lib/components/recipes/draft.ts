@@ -1,6 +1,6 @@
 import { ingredientGrams, ingredientNutrients, totals } from '#lib/domain/batch.ts';
 import type { Nutrients, Per100 } from '#lib/domain/nutrition.ts';
-import type { LogUnit } from '#lib/schemas/fields.ts';
+import type { IngredientUnit } from '#lib/schemas/fields.ts';
 import type { Food } from '#lib/server/db/schema.ts';
 import type { RecipeDetail } from '#lib/server/recipes/repo.ts';
 
@@ -15,15 +15,19 @@ export type DraftIngredient = {
 	key: string;
 	food: DraftFood;
 	amount: number;
-	unit: LogUnit;
+	unit: IngredientUnit;
 	/** Grams stored with the line by the server. Used only for a serving of a food without a serving weight. */
 	grams?: number;
+	/** The stored line's id. Batch ingredients (3b) keep it so a save can tell existing lines from new ones. */
+	id?: string;
+	/** The line's own values per 100 (a batch ingredient's snapshot). Priced instead of the food's when present. */
+	snapshot?: Per100;
 };
 
 /** Maps an ingredient to the values per 100 its nutrition is computed from. */
 export type Per100Of = (ingredient: DraftIngredient) => Per100;
 
-export const foodPer100: Per100Of = (ingredient) => ingredient.food;
+export const foodPer100: Per100Of = (ingredient) => ingredient.snapshot ?? ingredient.food;
 
 /** Grams of an ingredient; the math lives in the domain. */
 export function draftGrams(ingredient: DraftIngredient): number {

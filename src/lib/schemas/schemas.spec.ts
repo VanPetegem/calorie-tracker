@@ -229,6 +229,17 @@ describe('RecipeInput', () => {
 		).toBe(false);
 	});
 
+	it('accepts g, ml and serving for an ingredient and rejects portion', () => {
+		const unit = (value: string) => ({
+			...recipe,
+			ingredients: [{ foodId, amount: 1, unit: value }]
+		});
+		for (const accepted of ['g', 'ml', 'serving']) {
+			expect(v.safeParse(RecipeInput, unit(accepted)).success, accepted).toBe(true);
+		}
+		expect(v.safeParse(RecipeInput, unit('portion')).success).toBe(false);
+	});
+
 	it('applies the amount limits of the ingredient unit', () => {
 		const serving = (amount: number) => ({
 			...recipe,
