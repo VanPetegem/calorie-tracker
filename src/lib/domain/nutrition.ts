@@ -17,14 +17,15 @@ export function round1(value: number): number {
 	return Math.round(value * 10) / 10;
 }
 
-/** Converts a logged amount to grams. Portions need a portion weight, which phase 3 adds. */
-export function toGrams(amount: number, unit: Unit, servingG: number | null): number {
+/**
+ * Converts a logged amount to grams. `unitG` is the weight of one serving or one portion, which the unit needs. Grams
+ * and millilitres are taken as they are.
+ */
+export function toGrams(amount: number, unit: Unit, unitG: number | null): number {
 	if (unit === 'g' || unit === 'ml') return amount;
-	if (unit === 'serving') {
-		if (servingG === null) throw new RangeError('A serving needs a serving weight');
-		return amount * servingG;
-	}
-	throw new RangeError(`Unit ${unit} is not supported yet`);
+	if (unitG === null) throw new RangeError(`A ${unit} needs a weight`);
+	if (unit === 'serving' || unit === 'portion') return amount * unitG;
+	throw new RangeError(`Unit ${unit} is not supported`);
 }
 
 /** Nutrition for an amount of food, rounded to one decimal. */
