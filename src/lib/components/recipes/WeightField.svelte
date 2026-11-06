@@ -15,7 +15,9 @@
 	 * The cooked weight of a batch. `value` is the net weight (bindable), `null` while the field is empty or wrong.
 	 *
 	 * With no container the typed number is the net weight. With a container the person types the weight on the scale
-	 * and sees the net after the container's tare; the batch stores the net. "New container" shows the container form
+	 * and sees the net after the container's tare; the batch stores the net. A stored net weight is not a scale
+	 * weight: choosing a container while the field still holds it empties the field and keeps `value` until the
+	 * scale weight is typed (a number the person typed is read as the scale weight). "New container" shows the container form
 	 * inline; `oncreatecontainer` saves it and the new container is selected. `error` (bindable) is the reason the
 	 * field holds no usable weight, so the form can keep Save off; it is shown under the field after the field loses
 	 * focus.
@@ -35,9 +37,19 @@
 	let text = $state(untrack(() => (value === null ? '' : String(value))));
 	let containerId = $state('');
 	let touched = $state(false);
+	// False while the field holds the stored net weight (or nothing); true once the person typed a number.
+	let typed = $state(false);
 	let creating = $state(false);
 
 	const container = $derived(containers.find((c) => c.id === containerId));
+
+	const hint = $derived(
+		!container
+			? 'Weigh the finished dish. Leave it empty to log by portion only.'
+			: !typed && value !== null
+				? `The net weight stays ${value} g until you enter the weight on the scale.`
+				: undefined
+	);
 
 	/** The net weight, or why there is none. An empty field is no weight and no problem. */
 	const reading = $derived.by((): { net: number | null; problem?: string } => {
@@ -62,11 +74,23 @@
 		error = reading.problem;
 	}
 
+	/**
+	 * The container changed. A stored net weight is not a scale weight, so with a container the field is emptied and
+	 * `value` stays as it is; with no container the stored weight is back in the field. A typed number is re-read.
+	 */
+	function containerChanged() {
+		if (typed) {
+			report();
+			return;
+		}
+		text = container || value === null ? '' : String(value);
+	}
+
 	async function create(input: ContainerInput) {
 		const created = await oncreatecontainer(input);
 		containerId = created.id;
 		creating = false;
-		report();
+		containerChanged();
 	}
 </script>
 
@@ -76,7 +100,7 @@
 		<select
 			id="weight-container"
 			bind:value={containerId}
-			onchange={report}
+			onchange={containerChanged}
 			class="min-h-11 rounded-md border border-border-strong bg-surface px-3 py-2 text-lg text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
 		>
 			<option value="">None</option>
@@ -92,13 +116,14 @@
 			() => text,
 			(next) => {
 				text = next;
+				typed = true;
 				report();
 			}
 		}
 		inputmode="decimal"
 		autocomplete="off"
 		suffix="g"
-		hint={container ? undefined : 'Weigh the finished dish. Leave it empty to log by portion only.'}
+		{hint}
 		error={touched ? reading.problem : undefined}
 		onblur={() => (touched = true)}
 	/>

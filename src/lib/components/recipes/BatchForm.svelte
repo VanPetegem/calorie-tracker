@@ -183,6 +183,18 @@
 		}
 	}
 
+	/**
+	 * Puts focus back on Save once the form is editable again: the browser drops the focus of an element that turned
+	 * inert. Looked up in the document, not in `root`, because a save can replace this form with a fresh one (new
+	 * lines got their ids, or a new batch moved to its own address). Focus that went somewhere else is left alone.
+	 */
+	async function focusSave() {
+		await tick();
+		const active = document.activeElement;
+		if (active && active !== document.body) return;
+		document.querySelector<HTMLElement>('[data-batch-save] button')?.focus({ preventScroll: true });
+	}
+
 	/** Brings a marked row into view; no animation when the person prefers reduced motion. */
 	async function showRow(key: string) {
 		await tick();
@@ -206,6 +218,7 @@
 		} catch (cause) {
 			failure = isHttpError(cause, 404) ? cause.body.message : 'Could not save. Try again.';
 			busy = false;
+			await focusSave();
 			return;
 		}
 		if (!outcome.ok) {
@@ -220,6 +233,7 @@
 				};
 				await showRow(line.key);
 			}
+			await focusSave();
 			return;
 		}
 		// Busy stays on until the form has settled (refresh, and the move to a new batch's address), so a second tap on
@@ -238,6 +252,7 @@
 		} finally {
 			busy = false;
 		}
+		await focusSave();
 	}
 
 	async function createContainer(container: ContainerInput): Promise<Container> {
@@ -287,7 +302,7 @@
 		// Leaving on purpose: unsaved edits of a deleted batch are not worth a question.
 		guard.allow();
 		toasts.show({ message: `Deleted ${batch.name}`, tone: 'success' });
-		await refresh();
+		// No refresh first: the page of a deleted batch would reload as "Batch not found". The Recipes tab loads fresh.
 		await goto(resolve('/(app)/recipes'));
 	}
 
@@ -393,7 +408,7 @@
 			<p role="alert" class="text-sm text-danger">{failure}</p>
 		{/if}
 
-		<div class="flex flex-col">
+		<div class="flex flex-col" data-batch-save>
 			<!-- One status node for every state, so the summary is announced when it appears. Empty, it takes no space. -->
 			<p role="status" class="text-sm text-danger not-empty:mb-2">
 				{#if attention > 0}{attention}

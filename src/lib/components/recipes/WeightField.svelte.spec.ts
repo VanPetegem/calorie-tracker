@@ -71,6 +71,51 @@ describe('WeightField', () => {
 		await expect.element(problem()).toHaveTextContent('none');
 	});
 
+	it('shows the error and no value when the gross weight is exactly the tare', async () => {
+		show();
+		await page.getByLabelText('Container').selectOptions(pot.id);
+		await page.getByLabelText('Weight on the scale').fill('650');
+		await userEvent.tab();
+		await expect
+			.element(page.getByRole('alert'))
+			.toHaveTextContent('More than the container, 650 g');
+		await expect.element(value()).toHaveTextContent('none');
+		await expect.element(problem()).toHaveTextContent('More than the container, 650 g');
+	});
+
+	it('choosing a container on a stored net weight clears the field and keeps the value', async () => {
+		show({ value: 1200 });
+		await page.getByLabelText('Container').selectOptions(pot.id);
+		await expect.element(page.getByLabelText('Weight on the scale')).toHaveValue('');
+		await expect.element(value()).toHaveTextContent('1200');
+		await expect.element(problem()).toHaveTextContent('none');
+		await expect
+			.element(
+				page.getByText('The net weight stays 1200 g until you enter the weight on the scale.')
+			)
+			.toBeVisible();
+		// The scale weight, once typed, is the gross: 1900 - 650.
+		await page.getByLabelText('Weight on the scale').fill('1900');
+		await expect.element(value()).toHaveTextContent('1250');
+	});
+
+	it('choosing a container and then None, with nothing typed, restores the stored weight', async () => {
+		show({ value: 1200 });
+		await page.getByLabelText('Container').selectOptions(pot.id);
+		await page.getByLabelText('Container').selectOptions('');
+		await expect.element(page.getByLabelText('Cooked weight')).toHaveValue('1200');
+		await expect.element(value()).toHaveTextContent('1200');
+	});
+
+	it('choosing a container after typing a number reads it as the weight on the scale', async () => {
+		show({ value: 1200 });
+		await page.getByLabelText('Cooked weight').fill('1850');
+		await expect.element(value()).toHaveTextContent('1850');
+		await page.getByLabelText('Container').selectOptions(pot.id);
+		await expect.element(page.getByLabelText('Weight on the scale')).toHaveValue('1850');
+		await expect.element(value()).toHaveTextContent('1200');
+	});
+
 	it('reports a number that is not one, and a weight over the limit', async () => {
 		show();
 		await page.getByLabelText('Cooked weight').fill('abc');

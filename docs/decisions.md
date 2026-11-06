@@ -22,7 +22,9 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
   Cook batch is shown for a recipe that is not archived, from the stored recipe (not from unsaved edits).
 - **`WeightField` stores only the net weight, and reports a problem through a bindable `error`.** The container is not
   saved with the batch, so a stored batch opens with no container and its net weight in "Cooked weight". Choosing a
-  container keeps the typed number and reads it as the weight on the scale. A wrong weight (not a number, at or below
+  container keeps a number the person typed and reads it as the weight on the scale. While the field still holds the
+  stored net weight (nothing typed yet), choosing a container empties the field and leaves `value` as it is, with a
+  hint, until the scale weight is typed; choosing None again puts the stored weight back. A wrong weight (not a number, at or below
   the tare, over 20000 g) makes `value` null and sets `error`, which `BatchForm` uses to keep Save off with "Check the
   cooked weight" (a null value alone would save the batch as unweighed). The picker is a native `select`, which is the
   right control on iOS. `Input` gained `type="date"` for "Cooked on".

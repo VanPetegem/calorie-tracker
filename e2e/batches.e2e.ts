@@ -286,11 +286,23 @@ test('a batch nobody logged can be deleted', async ({ page }, testInfo) => {
 	await expect(ask).toBeHidden();
 	await expect(page).toHaveURL(/\/recipes\/batches\/[0-9a-f-]{36}$/);
 
+	// The page of the deleted batch must never reload into its 404 on the way out.
+	await page.evaluate(() => {
+		const seen = { notFound: false };
+		Object.assign(window, { seen });
+		new MutationObserver(() => {
+			if (document.body.textContent?.includes('Batch not found')) seen.notFound = true;
+		}).observe(document.body, { childList: true, subtree: true, characterData: true });
+	});
 	await remove.click();
 	await ask.getByRole('button', { name: 'Delete' }).click();
 	await expect(page).toHaveURL(/\/recipes$/);
 	await expect(page.getByText(`Deleted ${name}`)).toBeVisible();
 	await expect(page.getByRole('link', { name: new RegExp(name) })).toHaveCount(0);
+	await expect(page.getByText('Batch not found')).toHaveCount(0);
+	expect(
+		await page.evaluate(() => (window as unknown as { seen: { notFound: boolean } }).seen.notFound)
+	).toBe(false);
 });
 
 test('navigating away from a batch with an unsaved change asks first', async ({

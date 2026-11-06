@@ -99,7 +99,7 @@
 		<!-- Collapsed: finished batches are history, one tap away. -->
 		<details class="group flex flex-col gap-3" aria-label="Finished batches">
 			<summary
-				class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-md text-lg font-semibold text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand [&::-webkit-details-marker]:hidden"
+				class="details-marker-none flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-md text-lg font-semibold text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
 			>
 				Finished
 				<ChevronDown
@@ -124,7 +124,7 @@
 							disabled={reopening !== null}
 							onclick={() => reopen(batch.id, batch.name)}
 						>
-							Reopen
+							Reopen<span class="sr-only"> {batch.name}</span>
 						</Button>
 					</li>
 				{/each}

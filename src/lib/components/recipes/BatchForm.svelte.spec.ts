@@ -373,6 +373,35 @@ describe('BatchForm saving', () => {
 	});
 });
 
+describe('BatchForm focus', () => {
+	// A save that takes a few frames, as over the network: the browser drops the focus of an inert element at the
+	// next frame, so a mock that settles at once would hide the loss.
+	const slowSave = (result: unknown) =>
+		mocks.saveBatch.mockImplementationOnce(
+			() => new Promise((resolve) => setTimeout(() => resolve(result), 100))
+		);
+
+	it('puts focus back on Save once a save has settled', async () => {
+		slowSave({ ok: true, id: BATCH_ID });
+		show();
+		await field('Portions').fill('5');
+		await saveButton().click();
+		await expect.element(page.getByText('Batch saved')).toBeVisible();
+		await expect.element(saveButton()).toHaveFocus();
+	});
+
+	it('puts focus back on Save after a failed save', async () => {
+		mocks.saveBatch.mockImplementationOnce(
+			() => new Promise((_, reject) => setTimeout(() => reject(new Error('offline')), 100))
+		);
+		show();
+		await field('Portions').fill('5');
+		await saveButton().click();
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Could not save');
+		await expect.element(saveButton()).toHaveFocus();
+	});
+});
+
 describe('BatchForm header and actions', () => {
 	it('shows the portions left, per portion and per 100 g of the stored batch', async () => {
 		show();
@@ -437,6 +466,8 @@ describe('BatchForm header and actions', () => {
 		await vi.waitFor(() => expect(mocks.deleteBatch).toHaveBeenCalledWith({ id: BATCH_ID }));
 		await vi.waitFor(() => expect(mocks.goto).toHaveBeenCalledWith('/recipes'));
 		expect(navigate()).not.toHaveBeenCalled();
+		// The page of the deleted batch is not reloaded: it would show "Batch not found" before the move.
+		expect(mocks.invalidateAll).not.toHaveBeenCalled();
 	});
 
 	it('says why when the server refuses the delete', async () => {
@@ -460,6 +491,13 @@ describe('BatchForm header and actions', () => {
 });
 
 describe('BatchForm unsaved changes', () => {
+	it('does not count choosing a container on the stored weight as a change', async () => {
+		show();
+		await page.getByLabelText('Container').selectOptions(pot.id);
+		expect(navigate()).not.toHaveBeenCalled();
+		await expect.element(saveButton()).not.toHaveAttribute('aria-disabled', 'true');
+	});
+
 	it('lets a navigation through while nothing changed', async () => {
 		show();
 		expect(navigate()).not.toHaveBeenCalled();

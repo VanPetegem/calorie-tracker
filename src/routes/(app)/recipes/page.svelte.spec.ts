@@ -87,11 +87,13 @@ describe('recipes page batches', () => {
 		});
 		show([], [], [finished]);
 		const link = page.getByRole('link', { name: /Old chili/ });
-		await expect.element(page.getByText('Old chili')).not.toBeVisible();
+		await expect
+			.element(page.getByRole('group', { name: 'Finished batches' }))
+			.not.toHaveAttribute('open');
 		await page.getByText('Finished', { exact: true }).click();
 		await expect.element(link).toBeVisible();
 		await expect.element(link).toHaveAttribute('href', '/recipes/batches/batch-old');
-		await page.getByRole('button', { name: 'Reopen' }).click();
+		await page.getByRole('button', { name: 'Reopen Old chili' }).click();
 		await vi.waitFor(() => expect(mocks.reopenBatch).toHaveBeenCalledWith({ id: 'batch-old' }));
 		await vi.waitFor(() => expect(mocks.invalidateAll).toHaveBeenCalled());
 	});
