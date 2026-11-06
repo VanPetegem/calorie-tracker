@@ -92,10 +92,10 @@ export class ContainerNotFoundError extends Error {
 }
 
 /**
- * D1 binds at most 100 values per statement and a batch ingredient row binds 14 (one per column), so a batch's
+ * D1 binds at most 100 values per statement and a batch ingredient row binds 13 (one per column), so a batch's
  * ingredients are inserted 7 rows per statement.
  */
-const INGREDIENT_ROWS_PER_INSERT = Math.floor(100 / 14);
+const INGREDIENT_ROWS_PER_INSERT = Math.floor(100 / 13);
 
 type EntryRow = {
 	batchId: string;

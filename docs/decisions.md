@@ -21,6 +21,9 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
   nutrition is never re-read. The log repository keeps its HTTP errors rather than a typed `UnitNotAvailableError`.
 - **Auto finish runs inside `activeBatches`.** Activity is the latest of `created_at`, `updated_at` and the latest live
   entry's `logged_at`; `isStale` decides. Finish and reopen set `updated_at`, so a reopened batch gets 7 more days.
+  Logging a batch entry and editing its amount also set the batch's `updated_at` to now in the same D1 batch (the
+  entry's `logged_at` is on its own date, so a past date alone would not count); delete and restore do not, and
+  `finished_at` is never touched.
 - **`log_entries.batch_id` became a real reference by a table rebuild, with the pragma edited by hand.** drizzle-kit
   rebuilt `log_entries` in `drizzle/0020_batches.sql` between `PRAGMA foreign_keys=OFF` and `=ON`. D1 applies a
   migration as one transaction, where SQLite ignores `foreign_keys`, so the keys stay on; the migration uses

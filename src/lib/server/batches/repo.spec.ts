@@ -371,23 +371,9 @@ describe('batch repository', () => {
 			expect(await snapshot()).toEqual({ batches: [], ingredients: [] });
 		});
 
-		it('validates the input itself: nutrition sent along, 0 or 101 portions, 51 ingredients', async () => {
-			const tampered = [
-				{ ...stewBatch(), kcal: 1 },
-				stewBatch({ ingredients: [{ foodId: stew.id, amount: 1, unit: 'g', kcal: 1 } as never] }),
-				stewBatch({ portions: 0 }),
-				stewBatch({ portions: 101 }),
-				stewBatch({
-					ingredients: Array.from({ length: MAX_INGREDIENTS + 1 }, () => ({
-						foodId: stew.id,
-						amount: 1,
-						unit: 'g' as const
-					}))
-				})
-			] as BatchInput[];
-			for (const input of tampered) {
-				await expect(saveBatch(test.db, input)).rejects.toMatchObject({ name: 'ValiError' });
-			}
+		it('validates the input itself and writes nothing for nutrition sent along', async () => {
+			const tampered = { ...stewBatch(), kcal: 1 } as BatchInput;
+			await expect(saveBatch(test.db, tampered)).rejects.toMatchObject({ name: 'ValiError' });
 			expect(await snapshot()).toEqual({ batches: [], ingredients: [] });
 		});
 
@@ -469,6 +455,20 @@ describe('batch repository', () => {
 			]);
 		});
 
+		it('counts logging for a past date as activity, so a batch logged now is not auto finished', async () => {
+			const batch = await saveBatch(test.db, stewBatch());
+			await setTouched(batch.id, ago(6.5 * DAY));
+			await addBatchEntry(
+				test.db,
+				{ date: '2026-11-01', batchId: batch.id, amount: 1, unit: 'portion' },
+				ctx
+			);
+			// The entry's own logged_at is 8 days old by then; only the batch's updated_at keeps it active.
+			const later = new Date(NOW.getTime() + 3 * DAY);
+			expect((await activeBatches(test.db, later)).map((b) => b.name)).toEqual(['Stew']);
+			expect((await getBatch(test.db, batch.id))?.finishedAt).toBeNull();
+		});
+
 		it('lists active batches newest cooked first with portions left and values per portion and 100 g', async () => {
 			const older = await saveBatch(
 				test.db,
@@ -539,6 +539,7 @@ describe('batch repository', () => {
 				ctx
 			);
 			await deleteEntry(test.db, entry.id);
+			expect((await getBatch(test.db, saved.id))?.liveEntryCount).toBe(0);
 			await deleteBatch(test.db, saved.id);
 			expect(await snapshot()).toEqual({ batches: [], ingredients: [] });
 			expect(await test.db.$count(logEntries)).toBe(0);

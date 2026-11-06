@@ -48,6 +48,8 @@ function assertBatchUnit(unit: string | null): asserts unit is BatchLogUnit {
 }
 
 const NO_COOKED_WEIGHT = 'Add the cooked weight to log grams';
+const NO_COOKED_WEIGHT_FOR_PORTIONS =
+	'Add the cooked weight to the batch to change this entry to portions';
 
 /**
  * Converts an amount of a food to grams, as a 400 when the unit does not fit: portions (only batches have them), g or
@@ -147,9 +149,16 @@ async function getBatchRow(db: Db, id: string): Promise<Batch> {
 	return row;
 }
 
+/** The statement that counts a write to one of a batch's entries as activity: sets `updated_at`, nothing else. */
+function touchBatch(db: Db, id: string, now: Date) {
+	return db.update(batches).set({ updatedAt: now.toISOString() }).where(eq(batches.id, id));
+}
+
 /**
  * Logs portions or grams of a batch with a nutrition snapshot taken from the batch's totals (`batchEntrySnapshot`).
- * Grams need a cooked weight. A finished batch can be logged too; logging reopens nothing.
+ * Grams need a cooked weight. A finished batch can be logged too; logging reopens nothing. The batch's `updated_at`
+ * is set to now in the same D1 batch, so logging a past date still counts as activity for auto finish (the entry's own
+ * `logged_at` is on the entry's date).
  */
 export async function addBatchEntry(
 	db: Db,
@@ -169,21 +178,24 @@ export async function addBatchEntry(
 		input.amount,
 		input.unit
 	);
-	const [entry] = await db
-		.insert(logEntries)
-		.values({
-			id: newId(),
-			date: input.date,
-			loggedAt: loggedAtFor(input.date, ctx.today, ctx.now, ctx.timeZone),
-			kind: 'batch',
-			batchId: batch.id,
-			amount: input.amount,
-			unit: input.unit,
-			grams,
-			label: batch.name,
-			...nutrients
-		})
-		.returning();
+	const [[entry]] = await db.batch([
+		db
+			.insert(logEntries)
+			.values({
+				id: newId(),
+				date: input.date,
+				loggedAt: loggedAtFor(input.date, ctx.today, ctx.now, ctx.timeZone),
+				kind: 'batch',
+				batchId: batch.id,
+				amount: input.amount,
+				unit: input.unit,
+				grams,
+				label: batch.name,
+				...nutrients
+			})
+			.returning(),
+		touchBatch(db, batch.id, ctx.now)
+	]);
 	return entry;
 }
 
@@ -226,18 +238,27 @@ export async function updateQuickEntry(
  * A food entry scales by new grams / stored grams; the food is read only for its basis and serving weight. A batch
  * entry takes only portions and grams: in the same unit it scales by new amount / stored amount; a unit switch needs
  * the stored grams and scales by grams. Grams to portions reads the batch only for its current portion weight.
+ * Editing a batch entry also sets the batch's `updated_at` to `now` (in the same D1 batch) as activity for auto finish.
  */
-export async function updateEntryAmount(db: Db, input: EditAmountInput): Promise<LogEntry> {
+export async function updateEntryAmount(
+	db: Db,
+	input: EditAmountInput,
+	now: Date = new Date()
+): Promise<LogEntry> {
 	const entry = await getEntry(db, input.id, 'food', 'batch');
 	const changes =
 		entry.kind === 'batch'
 			? await batchAmount(db, entry, input)
 			: await foodAmount(db, entry, input);
-	const [updated] = await db
+	const write = db
 		.update(logEntries)
 		.set({ amount: input.amount, unit: input.unit, ...changes })
 		.where(and(eq(logEntries.id, entry.id), isNull(logEntries.deletedAt)))
 		.returning();
+	const [updated] =
+		entry.kind === 'batch' && entry.batchId !== null
+			? (await db.batch([write, touchBatch(db, entry.batchId, now)]))[0]
+			: await write;
 	if (!updated) error(404, 'Entry not found');
 	return updated;
 }
@@ -269,7 +290,7 @@ async function batchAmount(
 	let grams = input.amount;
 	if (input.unit === 'portion') {
 		const batch = await getBatchRow(db, entry.batchId);
-		if (batch.cookedWeightG === null) error(400, NO_COOKED_WEIGHT);
+		if (batch.cookedWeightG === null) error(400, NO_COOKED_WEIGHT_FOR_PORTIONS);
 		grams = toGrams(input.amount, 'portion', batch.cookedWeightG / batch.portions);
 	}
 	return { grams, ...scaleSnapshot(entry, entry.grams, grams) };

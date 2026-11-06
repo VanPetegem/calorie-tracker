@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm';
 import * as v from 'valibot';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { addDays, loggedAtFor } from '../../domain/dates.ts';
@@ -419,7 +420,10 @@ describe('log repository', () => {
 		it('logs a finished batch', async () => {
 			const batch = await stewBatch();
 			await finishBatch(test.db, batch.id);
+			const finishedAt = (await getBatch(test.db, batch.id))!.finishedAt;
+			expect(finishedAt).not.toBeNull();
 			expect(await logBatch(batch)).toMatchObject({ kind: 'batch', kcal: 750 });
+			expect((await getBatch(test.db, batch.id))!.finishedAt).toBe(finishedAt);
 		});
 
 		it('fails with 404 for an unknown batch, 400 for a unit other than portion and g, and writes nothing', async () => {
@@ -448,8 +452,8 @@ describe('log repository', () => {
 				recipeId: null,
 				name: 'Renamed',
 				cookedOn: TODAY,
-				portions: 2,
-				cookedWeightG: 800,
+				portions: 8,
+				cookedWeightG: 1600,
 				ingredients: [{ id: line.id, foodId: line.foodId!, amount: 2000, unit: 'g' }]
 			});
 			expect(await allEntries()).toEqual([entry]);
@@ -496,6 +500,62 @@ describe('log repository', () => {
 				unit: 'portion'
 			});
 			expect(portion).toMatchObject({ amount: 1, unit: 'portion', grams: 400, kcal: 500 });
+		});
+
+		it('refuses switching grams to portions once the batch has lost its cooked weight, and says so', async () => {
+			const batch = await stewBatch();
+			const entry = await logBatch(batch, { amount: 200, unit: 'g' });
+			const [line] = (await getBatch(test.db, batch.id))!.ingredients;
+			await saveBatch(test.db, {
+				id: batch.id,
+				recipeId: null,
+				name: 'Stew',
+				cookedOn: TODAY,
+				portions: 4,
+				cookedWeightG: null,
+				ingredients: [{ id: line.id, foodId: line.foodId!, amount: 1000, unit: 'g' }]
+			});
+			await expect(
+				updateEntryAmount(test.db, { id: entry.id, amount: 1, unit: 'portion' })
+			).rejects.toMatchObject({
+				status: 400,
+				body: { message: 'Add the cooked weight to the batch to change this entry to portions' }
+			});
+			expect(await allEntries()).toEqual([entry]);
+		});
+
+		describe('activity of the batch', () => {
+			const batchUpdatedAt = async (id: string) =>
+				(await test.db.select().from(batches).where(eq(batches.id, id)))[0].updatedAt;
+			const touchLongAgo = (id: string) =>
+				test.d1
+					.prepare('UPDATE batches SET updated_at = ?1 WHERE id = ?2')
+					.bind('2026-10-01T00:00:00.000Z', id)
+					.run();
+
+			it('sets updated_at to now when logging a batch, even for a past date', async () => {
+				const batch = await stewBatch();
+				await touchLongAgo(batch.id);
+				await logBatch(batch, { date: addDays(TODAY, -5) });
+				expect(await batchUpdatedAt(batch.id)).toBe(NOW.toISOString());
+			});
+
+			it('sets updated_at to now when editing the amount of a batch entry', async () => {
+				const batch = await stewBatch();
+				const entry = await logBatch(batch, { date: addDays(TODAY, -5) });
+				await touchLongAgo(batch.id);
+				await updateEntryAmount(test.db, { id: entry.id, amount: 2, unit: 'portion' }, NOW);
+				expect(await batchUpdatedAt(batch.id)).toBe(NOW.toISOString());
+			});
+
+			it('leaves updated_at alone when a batch entry is deleted or restored', async () => {
+				const batch = await stewBatch();
+				const entry = await logBatch(batch);
+				await touchLongAgo(batch.id);
+				await deleteEntry(test.db, entry.id);
+				await restoreEntry(test.db, entry.id);
+				expect(await batchUpdatedAt(batch.id)).toBe('2026-10-01T00:00:00.000Z');
+			});
 		});
 
 		it('refuses ml and servings for a batch entry', async () => {
