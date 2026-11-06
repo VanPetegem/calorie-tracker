@@ -36,6 +36,17 @@
 	import FoodForm from '#lib/components/log/FoodForm.svelte';
 	import FoodRow from '#lib/components/log/FoodRow.svelte';
 	import QuickAddForm from '#lib/components/log/QuickAddForm.svelte';
+	import AddIngredientSheet from '#lib/components/recipes/AddIngredientSheet.svelte';
+	import IngredientList from '#lib/components/recipes/IngredientList.svelte';
+	import IngredientRow from '#lib/components/recipes/IngredientRow.svelte';
+	import NutritionSummary from '#lib/components/recipes/NutritionSummary.svelte';
+	import RecipeRow from '#lib/components/recipes/RecipeRow.svelte';
+	import {
+		draftNutrients,
+		draftTotals,
+		type DraftIngredient
+	} from '#lib/components/recipes/draft.ts';
+	import type { RecipeSummary } from '#lib/server/recipes/repo.ts';
 	import ScannerPanel from '#lib/components/log/ScannerPanel.svelte';
 	import type { LogEntry } from '#lib/server/db/schema.ts';
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
@@ -185,6 +196,62 @@
 		fiber: 0.8,
 		servingG: null
 	} as const;
+	const ingredientFoods = [
+		sampleFood,
+		sampleLiquid,
+		{ ...sampleFood, name: 'Banana', brand: null, kcal: 89, servingG: 118 },
+		{ ...sampleFood, name: 'Peanut butter, crunchy with sea salt and a long name', kcal: 600 },
+		{ ...sampleFood, name: 'Honey', kcal: 304, servingG: 21 }
+	] as const;
+	const ingredientAmounts: [number, 'g' | 'ml' | 'serving'][] = [
+		[80, 'g'],
+		[250, 'ml'],
+		[1, 'serving'],
+		[30, 'g'],
+		[2, 'serving']
+	];
+	const makeIngredients = (count: number): DraftIngredient[] =>
+		Array.from({ length: count }, (_, i) => {
+			const food = ingredientFoods[i % ingredientFoods.length]!;
+			const [amount, unit] = ingredientAmounts[i % ingredientAmounts.length]!;
+			return {
+				key: `design-ingredient-${count}-${i}`,
+				food: { ...food, id: `design-food-${i % ingredientFoods.length}` },
+				amount: unit === 'serving' && food.servingG === null ? 100 : amount,
+				unit: unit === 'serving' && food.servingG === null ? food.nutritionBasis : unit
+			};
+		});
+	let emptyIngredients = $state<DraftIngredient[]>([]);
+	let filledIngredients = $state<DraftIngredient[]>(makeIngredients(3));
+	let longIngredients = $state<DraftIngredient[]>(makeIngredients(12));
+	let addIngredientOpen = $state(false);
+	let addIngredientLog = $state('Nothing added yet.');
+	let portionsText = $state('1.5');
+	const summaryTotals = $derived(draftTotals(filledIngredients));
+	const summaryPortions = $derived.by(() => {
+		const value = Number(portionsText.replace(',', '.'));
+		return portionsText.trim() === '' || Number.isNaN(value) ? null : value;
+	});
+	const sampleRecipe: RecipeSummary = {
+		id: 'design-recipe',
+		name: 'Overnight oats',
+		defaultPortions: 4,
+		notes: null,
+		createdAt: '2026-11-01T08:00:00.000Z',
+		updatedAt: '2026-11-01T08:00:00.000Z',
+		archivedAt: null,
+		totals: { kcal: 2480, protein: 96, carbs: 300, fat: 88, fiber: 40 },
+		perPortion: { kcal: 620, protein: 24, carbs: 75, fat: 22, fiber: 10 },
+		ingredientCount: 6
+	};
+
+	function showRowMenu(event: MouseEvent) {
+		(event.currentTarget instanceof Element ? event.currentTarget : null)
+			?.closest('[data-menu-demo]')
+			?.querySelector<HTMLButtonElement>('button[aria-label^="More actions"]')
+			?.click();
+	}
+
 	async function failingSubmit() {
 		await new Promise((resolve) => setTimeout(resolve, 600));
 		throw new Error('Demo failure');
@@ -807,6 +874,115 @@
 				</div>
 			{/each}
 		</div>
+	</Section>
+
+	<Section
+		name="IngredientList"
+		description="The ingredients of a recipe or batch. A tap on a row changes its amount; the row menu moves it up or down or removes it, with an Undo toast that puts it back at the same index. The picker stops at 50 ingredients. Totals follow every change."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Empty</span>
+				<IngredientList bind:ingredients={emptyIngredients} />
+			</div>
+			<div class="flex min-w-0 flex-col gap-2" data-menu-demo>
+				<span class="text-sm font-medium text-text-muted">Filled, three ingredients</span>
+				<IngredientList bind:ingredients={filledIngredients} />
+				<div>
+					<Button variant="secondary" size="sm" onclick={showRowMenu}>
+						Show the menu of the first row
+					</Button>
+				</div>
+			</div>
+			<div class="flex min-w-0 flex-col gap-2 md:col-span-2">
+				<span class="text-sm font-medium text-text-muted">Long list, twelve ingredients</span>
+				<IngredientList bind:ingredients={longIngredients} />
+			</div>
+		</div>
+	</Section>
+
+	<Section
+		name="IngredientRow"
+		description="One ingredient: name, amount with unit and kcal. The whole row is a button for the amount; the menu button has its own 44 px target. Long names truncate. After a save the server refused, the row is marked with the reason."
+	>
+		<ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
+			{#each makeIngredients(4) as ingredient, index (ingredient.key)}
+				<IngredientRow
+					{ingredient}
+					kcal={draftNutrients(ingredient).kcal}
+					error={index === 2 ? `${ingredient.food.name} has no serving size` : undefined}
+					onedit={() => (addIngredientLog = `Edit ${ingredient.food.name}`)}
+					onmenu={() => (addIngredientLog = `Menu for ${ingredient.food.name}`)}
+				/>
+			{/each}
+		</ul>
+	</Section>
+
+	<Section
+		name="AddIngredientSheet"
+		description="The add sheet without Quick add: search, Scan and New food, then the amount step with an Add button. Recents load each time it opens."
+	>
+		<div class="flex min-w-0 flex-col gap-2">
+			<div>
+				<Button icon={Plus} onclick={() => (addIngredientOpen = true)}
+					>Open the ingredient sheet</Button
+				>
+			</div>
+			<span class="text-sm text-text-muted">{addIngredientLog}</span>
+		</div>
+		<AddIngredientSheet
+			bind:open={addIngredientOpen}
+			onadd={(food, value) =>
+				(addIngredientLog = `Added ${value.amount} ${value.unit} ${food.name}`)}
+		/>
+	</Section>
+
+	<Section
+		name="NutritionSummary"
+		description="Totals and, with valid portions, the values per portion. Portions that are empty or 0 show the totals and a hint. With a cooked weight (batches) it adds values per 100 g."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<div class="flex min-w-0 flex-col gap-2">
+				<Input label="Portions" bind:value={portionsText} inputmode="decimal" autocomplete="off" />
+				<span class="text-sm font-medium text-text-muted">Live from the filled list above</span>
+				<NutritionSummary totals={summaryTotals} portions={summaryPortions} />
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Without portions</span>
+				<NutritionSummary totals={summaryTotals} portions={null} />
+			</div>
+			<div class="flex min-w-0 flex-col gap-2 md:col-span-2">
+				<span class="text-sm font-medium text-text-muted"
+					>With values per 100 g of cooked weight</span
+				>
+				<NutritionSummary
+					totals={{ kcal: 2480, protein: 96, carbs: 300, fat: 88, fiber: 40 }}
+					portions={4}
+					per100g={{ kcal: 155, protein: 6, carbs: 18.8, fat: 5.5, fiber: 2.5 }}
+				/>
+			</div>
+		</div>
+	</Section>
+
+	<Section
+		name="RecipeRow"
+		description="A recipe in the Recipes tab: name, portions and ingredients, kcal per portion. A link at least 56 px tall."
+	>
+		<ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
+			<li><RecipeRow recipe={sampleRecipe} href="/design#RecipeRow" /></li>
+			<li>
+				<RecipeRow
+					recipe={{
+						...sampleRecipe,
+						id: 'design-recipe-2',
+						name: 'Chicken, rice and vegetables with a very long recipe name',
+						defaultPortions: 1,
+						ingredientCount: 1
+					}}
+					href="/design#RecipeRow"
+				/>
+			</li>
+		</ul>
 	</Section>
 
 	<Section

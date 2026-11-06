@@ -328,7 +328,8 @@ test('a custom food can be created from the add sheet and logged', async ({ page
 	await expect(editSheet.getByText(/Days you already logged keep their values/)).toBeVisible();
 	await editSheet.getByLabel('Calories', { exact: true }).fill('400');
 	await editSheet.getByRole('button', { name: 'Save food' }).click();
-	await expect(editSheet.getByText('400 kcal per 100 g')).toBeVisible();
+	// Back on the amount step, whose header and preview show the entry's own values (380 per 100), not the food's.
+	await expect(editSheet.getByText('380 kcal per 100 g')).toBeVisible();
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('button', { name: new RegExp(`^${name}`) })).toContainText(
 		'190 kcal'
@@ -341,7 +342,7 @@ test('a custom food can be created from the add sheet and logged', async ({ page
 		again
 			.getByRole('region', { name: 'Your foods' })
 			.getByRole('button', { name: new RegExp(name) })
-	).toBeVisible();
+	).toContainText('400 kcal');
 });
 
 test('quick add logs 650 kcal with a label and the entry can be edited to 700', async ({

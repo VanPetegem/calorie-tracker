@@ -8,6 +8,7 @@ import {
 	QuickInput,
 	RestoreEntryInput
 } from './log.ts';
+import { ArchiveRecipeInput, RecipeInput } from './recipe.ts';
 import { ManualTargetInput } from './settings.ts';
 
 const foodId = '019a5b2e-8f3c-7d4a-9b1e-2c3d4e5f6a7b';
@@ -189,5 +190,74 @@ describe('ManualTargetInput', () => {
 
 	it('rejects only one value', () => {
 		expect(v.safeParse(ManualTargetInput, { kcal: '2800', weightKg: '' }).success).toBe(false);
+	});
+});
+
+describe('RecipeInput', () => {
+	const ingredient = { foodId, amount: '200', unit: 'g' };
+	const recipe = { name: ' Chili ', defaultPortions: '4', notes: '', ingredients: [ingredient] };
+	const withIngredients = (count: number) => ({
+		...recipe,
+		ingredients: Array.from({ length: count }, () => ingredient)
+	});
+
+	it('accepts a new recipe without an id', () => {
+		expect(v.parse(RecipeInput, recipe)).toEqual({
+			name: 'Chili',
+			defaultPortions: 4,
+			notes: null,
+			ingredients: [{ foodId, amount: 200, unit: 'g' }]
+		});
+	});
+
+	it('rejects 0 and 101 portions', () => {
+		expect(v.safeParse(RecipeInput, { ...recipe, defaultPortions: 100 }).success).toBe(true);
+		expect(v.safeParse(RecipeInput, { ...recipe, defaultPortions: 0 }).success).toBe(false);
+		expect(v.safeParse(RecipeInput, { ...recipe, defaultPortions: 101 }).success).toBe(false);
+	});
+
+	it('rejects 0 and 51 ingredients', () => {
+		expect(v.safeParse(RecipeInput, withIngredients(50)).success).toBe(true);
+		expect(v.safeParse(RecipeInput, withIngredients(0)).success).toBe(false);
+		expect(v.safeParse(RecipeInput, withIngredients(51)).success).toBe(false);
+	});
+
+	it('rejects nutrition sent with the recipe or an ingredient', () => {
+		expect(v.safeParse(RecipeInput, { ...recipe, kcal: 500 }).success).toBe(false);
+		expect(
+			v.safeParse(RecipeInput, { ...recipe, ingredients: [{ ...ingredient, kcal: 500 }] }).success
+		).toBe(false);
+	});
+
+	it('accepts g, ml and serving for an ingredient and rejects portion', () => {
+		const unit = (value: string) => ({
+			...recipe,
+			ingredients: [{ foodId, amount: 1, unit: value }]
+		});
+		for (const accepted of ['g', 'ml', 'serving']) {
+			expect(v.safeParse(RecipeInput, unit(accepted)).success, accepted).toBe(true);
+		}
+		expect(v.safeParse(RecipeInput, unit('portion')).success).toBe(false);
+	});
+
+	it('applies the amount limits of the ingredient unit', () => {
+		const serving = (amount: number) => ({
+			...recipe,
+			ingredients: [{ foodId, amount, unit: 'serving' }]
+		});
+		expect(v.safeParse(RecipeInput, serving(50)).success).toBe(true);
+		expect(v.safeParse(RecipeInput, serving(51)).success).toBe(false);
+	});
+
+	it('rejects notes over 2000 characters and an id that is not a uuid', () => {
+		expect(v.safeParse(RecipeInput, { ...recipe, notes: 'x'.repeat(2001) }).success).toBe(false);
+		expect(v.safeParse(RecipeInput, { ...recipe, id: 'x' }).success).toBe(false);
+	});
+});
+
+describe('ArchiveRecipeInput', () => {
+	it('takes only an id', () => {
+		expect(v.parse(ArchiveRecipeInput, { id: foodId })).toEqual({ id: foodId });
+		expect(v.safeParse(ArchiveRecipeInput, { id: foodId, name: 'x' }).success).toBe(false);
 	});
 });

@@ -53,8 +53,8 @@
 		return () => (stale = true);
 	});
 
-	// The server rescales the stored snapshot, so the preview must start from it too: per 100 from the entry, while
-	// the serving weight, basis and the header line come from the food. An entry without grams uses the food's values.
+	// The server rescales the stored snapshot, so the preview must start from it too: per 100 from the entry (header
+	// line included), while the serving weight and basis come from the food. An entry without grams uses the food's values.
 	const entryPer100 = $derived(
 		entry && entry.grams !== null && entry.grams > 0
 			? per100FromSnapshot(entry, entry.grams)

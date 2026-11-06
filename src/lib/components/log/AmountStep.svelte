@@ -27,6 +27,8 @@
 		per100?: Per100;
 		/** "Log" adds a new entry, "Save" changes an existing one. */
 		mode: 'add' | 'edit';
+		/** Overrides the submit button's label, e.g. "Add" for a recipe ingredient. */
+		submitLabel?: string;
 		/** The last used amount (recents) or the entry's own amount (edit). */
 		initial?: { amount: number; unit: string; grams?: number | null } | null;
 		onsubmit: (value: AmountValue) => void | Promise<void>;
@@ -36,7 +38,16 @@
 		onedit?: () => void;
 	};
 
-	let { food, per100, mode, initial = null, onsubmit, onback, onedit }: Props = $props();
+	let {
+		food,
+		per100,
+		mode,
+		submitLabel,
+		initial = null,
+		onsubmit,
+		onback,
+		onedit
+	}: Props = $props();
 
 	// The food and initial amount are fixed for one step: the parent mounts a new step for another food.
 	const start = untrack(() => defaultAmount(food, initial));
@@ -95,7 +106,7 @@
 <form class="flex flex-col gap-5" onsubmit={submit} novalidate>
 	<div class="flex items-center justify-between gap-3">
 		<p class="text-sm text-text-muted tabular-nums">
-			{Math.round(food.kcal)} kcal per 100 {food.nutritionBasis}
+			{Math.round((per100 ?? food).kcal)} kcal per 100 {food.nutritionBasis}
 		</p>
 		{#if onedit}
 			<div class="shrink-0">
@@ -159,7 +170,7 @@
 			<Button variant="secondary" onclick={onback}>Back</Button>
 		{/if}
 		<Button type="submit" loading={busy} disabled={error !== undefined}>
-			{mode === 'add' ? 'Log' : 'Save'}
+			{submitLabel ?? (mode === 'add' ? 'Log' : 'Save')}
 		</Button>
 	</div>
 </form>

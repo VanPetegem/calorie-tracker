@@ -45,12 +45,12 @@ describe('AmountStep', () => {
 		await expect.element(page.getByText('60 g')).toBeVisible();
 	});
 
-	it('previews from the given per 100 values while the header keeps the food values', async () => {
+	it('shows the given per 100 values in the header and the preview, not the food values', async () => {
 		render(
 			AmountStep,
 			props(plain, { per100: { kcal: 200, protein: 8, carbs: 30, fat: 4, fiber: null } })
 		);
-		await expect.element(page.getByText('250 kcal per 100 g')).toBeVisible();
+		await expect.element(page.getByText('200 kcal per 100 g')).toBeVisible();
 		await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('200 kcal');
 	});
 
@@ -127,5 +127,11 @@ describe('AmountStep', () => {
 		view.unmount();
 		render(AmountStep, props());
 		expect(page.getByRole('button', { name: 'Edit food' }).elements()).toHaveLength(0);
+	});
+
+	it('labels the submit button with submitLabel instead of Log', async () => {
+		render(AmountStep, props(oats, { submitLabel: 'Add' }));
+		await expect.element(page.getByRole('button', { name: 'Add', exact: true })).toBeVisible();
+		expect(page.getByRole('button', { name: 'Log' }).elements()).toHaveLength(0);
 	});
 });

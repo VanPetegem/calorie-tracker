@@ -25,3 +25,13 @@ export const FREQUENTS_SIZE = 10;
 
 /** Frequents count logs from this many past days. */
 export const FREQUENTS_WINDOW_DAYS = 30;
+
+/** Recipe and batch limits (phase 3). Maximums are inclusive. */
+export const MAX_PORTIONS = 100;
+export const MAX_COOKED_WEIGHT_G = 20000;
+export const MAX_TARE_G = 10000;
+export const MAX_INGREDIENTS = 50;
+export const MAX_NOTES = 2000;
+
+/** A batch with no activity for this many days finishes automatically. */
+export const BATCH_AUTO_FINISH_DAYS = 7;

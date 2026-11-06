@@ -83,6 +83,45 @@ export const logEntries = sqliteTable(
 	]
 );
 
+/** A recipe is a template: its nutrition is computed from the current foods whenever it is read. */
+export const recipes = sqliteTable(
+	'recipes',
+	{
+		id: text('id').primaryKey(),
+		name: text('name').notNull(),
+		defaultPortions: real('default_portions').notNull(),
+		notes: text('notes'),
+		/** Recipes are archived instead of deleted, because batches reference them. */
+		archivedAt: text('archived_at'),
+		createdAt: text('created_at').notNull().default(nowIso),
+		updatedAt: text('updated_at')
+			.notNull()
+			.default(nowIso)
+			.$onUpdate(() => new Date().toISOString())
+	},
+	(table) => [check('recipes_default_portions_positive', sql`${table.defaultPortions} > 0`)]
+);
+
+/** One line of a recipe. Amount and unit are kept as entered ("2 servings"); grams is their gram equivalent. */
+export const recipeIngredients = sqliteTable(
+	'recipe_ingredients',
+	{
+		id: text('id').primaryKey(),
+		recipeId: text('recipe_id')
+			.notNull()
+			.references(() => recipes.id, { onDelete: 'cascade' }),
+		/** No cascade: a food used by a recipe cannot be deleted, only archived. */
+		foodId: text('food_id')
+			.notNull()
+			.references(() => foods.id),
+		amount: real('amount').notNull(),
+		unit: text('unit', { enum: ['g', 'ml', 'serving'] }).notNull(),
+		grams: real('grams').notNull(),
+		position: integer('position').notNull()
+	},
+	(table) => [index('recipe_ingredients_recipe_id_position_idx').on(table.recipeId, table.position)]
+);
+
 /** A single row (id 1). Phase 4 adds the remaining settings columns. */
 export const settings = sqliteTable(
 	'settings',
@@ -103,3 +142,5 @@ export const settings = sqliteTable(
 
 export type Food = typeof foods.$inferSelect;
 export type LogEntry = typeof logEntries.$inferSelect;
+export type Recipe = typeof recipes.$inferSelect;
+export type RecipeIngredient = typeof recipeIngredients.$inferSelect;

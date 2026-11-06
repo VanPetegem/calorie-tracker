@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createTestDb } from '../test/d1.ts';
-import { foods, settings, user } from './schema.ts';
+import { foods, recipeIngredients, recipes, settings, user } from './schema.ts';
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>;
 
@@ -81,5 +81,40 @@ describe('schema constraints', () => {
 		await expect(
 			test.db.insert(user).values({ ...person, id: 'u2', email: 'b@example.com' })
 		).rejects.toMatchObject(failedOn('sign up is closed'));
+	});
+
+	it('rejects a recipe with zero default portions', async () => {
+		await expect(
+			test.db.insert(recipes).values({ id: crypto.randomUUID(), name: 'Chili', defaultPortions: 0 })
+		).rejects.toMatchObject(failedOn('CHECK constraint failed: recipes_default_portions_positive'));
+	});
+
+	describe('recipe ingredients', () => {
+		const recipeId = crypto.randomUUID();
+		const oats = food();
+		beforeEach(async () => {
+			await test.db.insert(foods).values(oats);
+			await test.db.insert(recipes).values({ id: recipeId, name: 'Porridge', defaultPortions: 2 });
+			await test.db.insert(recipeIngredients).values({
+				id: crypto.randomUUID(),
+				recipeId,
+				foodId: oats.id,
+				amount: 80,
+				unit: 'g',
+				grams: 80,
+				position: 0
+			});
+		});
+
+		it('are deleted with their recipe', async () => {
+			await test.db.delete(recipes).where(eq(recipes.id, recipeId));
+			expect(await test.db.$count(recipeIngredients)).toBe(0);
+		});
+
+		it('keep their food from being deleted', async () => {
+			await expect(test.db.delete(foods).where(eq(foods.id, oats.id))).rejects.toMatchObject(
+				failedOn('FOREIGN KEY constraint failed')
+			);
+		});
 	});
 });

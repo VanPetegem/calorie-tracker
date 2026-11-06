@@ -2,6 +2,48 @@
 
 Living record of decisions. Newest first. Each entry: date, decision, reason.
 
+## 2026-11-06
+
+- **Recipe saves report a refused line as a result, not an HTTP error; a missing recipe is a 404.** The recipe
+  repository throws typed errors with user facing messages (`UnknownFoodError`, `UnitNotAvailableError`, both with the
+  ingredient's `index`, and `RecipeNotFoundError`); it stays free of HTTP. The remote layer
+  (`saveRecipeResult` in `src/lib/server/recipes/result.ts`, used by the `saveRecipe` command) maps them: the two line
+  errors become `{ ok: false, reason: 'unknown_food' | 'unit_not_available', message, index }`, the same shape as
+  `createFood`'s `barcode_taken`; `RecipeNotFoundError` becomes `error(404, message)`, because there is no line to
+  mark. A result carries the index without widening `App.Error` for the whole app, and it is typed on the client.
+  `RecipeForm` takes the line at `index` from the list it sent, marks that row with the message (`IngredientList`
+  `errors`, keyed by the ingredient's client key) and keeps the mark until that line's amount or unit changes or it is
+  removed. Any other failure shows "Could not save" and the button says Retry; the form is never cleared.
+- **The editor starts from the server's grams, and leaving a dirty form asks first.** `recipeDraft`
+  (`components/recipes/draft.ts`) maps `RecipeDetail` to the editor including each line's stored `grams`, so the
+  editor's totals equal the list's for a serving of a food that lost its serving size. `UnsavedGuard`
+  (`stores/unsaved.svelte.ts`) cancels an in app navigation while the form differs from what was loaded or last saved
+  and asks "Discard changes?" in a Sheet; `beforeunload` covers reload and close. Dirty is a comparison with the saved
+  snapshot, so changing a field back clears it and a successful save never blocks. Archiving allows the navigation
+  without asking. Batches (3b) reuse the guard.
+- **Recipe notes are a single line field for now.** There is no textarea in the design system yet; adding one is a
+  design system change of its own. The schema allows 2000 characters.
+- **A new recipe moves to its own address only once nothing is unsaved.** Edits made while the first save runs are not
+  in the saved recipe, and moving to `/recipes/<id>` then would make the unsaved changes guard cancel the move and ask to
+  discard them. `RecipeForm` keeps `savedId` from the first save (later saves update that recipe) and does the
+  `replaceState` move after the first save that leaves the form clean. Disabling the fields while saving would have
+  needed a `disabled` mode in `IngredientList` and its sheets.
+- **Ingredient lines have their own unit list.** `INGREDIENT_UNITS` (`g`, `ml`, `serving`) in `schemas/fields.ts`
+  is separate from `LOG_UNITS`, so adding `portion` to the log units for batches cannot make it a valid ingredient
+  unit. `DraftIngredient` also carries an optional `id` and `snapshot` (a batch ingredient's own values per 100,
+  priced instead of the food's), and an amount edit keeps every field but the stale `grams`.
+- **A new recipe starts at 1 portion, and `/recipes/new` has no `load`.** Nothing to read for it; the add sheet inside
+  the editor fetches its own recents. After the first save the form goes to `/recipes/<id>` with `replaceState`.
+- **The AmountStep header shows the entry's own kcal per 100 when editing a logged entry.** In `AmountStep.svelte` (with `EditEntrySheet.svelte` passing the entry's values): the line
+  "N kcal per 100 g" reads `per100 ?? food`, the same values as the preview, so a food edited after logging no longer
+  shows a header that disagrees with the preview. Adding and recipe ingredient edits pass no `per100` and are unchanged.
+- **Recipe serving lines follow the food's current serving size.** A recipe is a live template, not history, so
+  `getRecipe` and `listRecipes` (`src/lib/server/recipes/repo.ts`) compute a `serving` line's grams at read time as
+  amount times the food's current `serving_g`. When the food no longer has a serving size, the grams stored at the
+  last save stand. g and ml lines keep grams equal to the amount. Saving again with a serving line whose food lost
+  its serving size is refused (`UnitNotAvailableError`, carrying the line's index), and the recipe page shows that
+  per line. Batches (phase 3b) still snapshot grams and nutrition when cooked.
+
 ## 2026-11-05
 
 - **The scanner uses the `barcode-detector` ponyfill with a lazily loaded, self hosted zxing-wasm, and Scan lives in
