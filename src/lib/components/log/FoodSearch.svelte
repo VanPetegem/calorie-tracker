@@ -1,8 +1,6 @@
 <script lang="ts">
 	import Globe from '@lucide/svelte/icons/globe';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
-	import Plus from '@lucide/svelte/icons/plus';
-	import Zap from '@lucide/svelte/icons/zap';
 	import type { Unit } from '#lib/domain/nutrition.ts';
 	import type { Food } from '#lib/server/db/schema.ts';
 	import type { FoodHit, MappedProduct, RecentFood } from '#lib/server/foods/repo.ts';
@@ -16,7 +14,7 @@
 	 * Typing searches the library (custom, cached OFF, BLV) after 200 ms. Open Food Facts is searched only when the
 	 * person presses Enter or taps its row, so typing never spends the OFF quota. A picked OFF product is stored
 	 * through `pickOff` first; `onpick` always receives a library food. Below the field, while it is empty, sit the
-	 * quick actions: Quick add (kcal without a food) and New food. Scan joins them with the scanner (phase 2b).
+	 * quick actions: Quick add (kcal without a food), New food and Scan (the barcode scanner).
 	 */
 	type Props = {
 		recents: RecentFood[];
@@ -25,11 +23,12 @@
 		onpick: (food: Food, last?: { amount: number; unit: Unit }) => void;
 		onquick: () => void;
 		onnew: () => void;
+		onscan: () => void;
 		/** True while the sheet shows this step: the search field takes focus each time it turns true. */
 		active: boolean;
 	};
 
-	let { recents, frequents, onpick, onquick, onnew, active }: Props = $props();
+	let { recents, frequents, onpick, onquick, onnew, onscan, active }: Props = $props();
 
 	const DEBOUNCE_MS = 200;
 	const uid = $props.id();
@@ -137,9 +136,11 @@
 	</form>
 
 	{#if q === ''}
-		<div class="flex gap-2">
-			<Button variant="secondary" icon={Zap} onclick={onquick}>Quick add</Button>
-			<Button variant="secondary" icon={Plus} onclick={onnew}>New food</Button>
+		<!-- Three equal cells, no icons: with them the row is 368 px, wider than the 343 px of a 375 px phone. -->
+		<div class="grid grid-cols-3 gap-2">
+			<Button variant="secondary" class="w-full" onclick={onquick}>Quick add</Button>
+			<Button variant="secondary" class="w-full" onclick={onnew}>New food</Button>
+			<Button variant="secondary" class="w-full" onclick={onscan}>Scan</Button>
 		</div>
 		{#each [{ id: 'recent', title: 'Recent', foods: recents }, { id: 'frequent', title: 'Often logged', foods: frequents }] as group (group.id)}
 			{#if group.foods.length > 0}

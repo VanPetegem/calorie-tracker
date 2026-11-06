@@ -80,6 +80,26 @@ OFF. `upsertOffFood` can refresh an unedited OFF food older than 180 days, but i
 branch, because the library lookup comes first; the refresh arrives with the barcode lookup in 2b. Typing searches
 the library only; OFF is searched when the person submits.
 
+### Barcode scanner
+
+Scan is an action in the search step of the add sheet (`FoodSearch.svelte`) and opens the `scan` step
+(`ScannerView.svelte`, presented by `ScannerPanel.svelte`, which `/design` renders without a camera). The camera
+starts when the step mounts, that is after the tap, and every track is stopped when it unmounts, which closing the
+sheet does. Detection runs every 250 ms on the video element and stops after the first code, until "Scan again".
+The code goes to the `lookupBarcode` command (normalization, library, then OFF): a hit opens the amount step, a
+miss opens `FoodForm` with the barcode and any partial OFF values and then the amount step, an outage shows
+"Product database unreachable" with a way into the same form. The manual barcode field is always visible.
+
+`src/lib/scanner/detector.ts` creates the detector. It prefers the browser's `BarcodeDetector` (Chrome on Android)
+and otherwise dynamically imports the `barcode-detector` ponyfill, whose zxing-wasm decoder is a separate chunk
+plus a 0.9 MB `.wasm` asset that no route imports statically, so it never loads with Today. The wasm is bundled
+(`zxing-wasm` is a direct dependency, pinned to the version `barcode-detector` uses, loaded through `?url`) instead
+of fetched from the ponyfill's default CDN. The service worker precaches build files but filters out `.wasm`, so the
+wasm is fetched on the first scan and then served by the browser's HTTP cache (the file is hashed and immutable).
+Scanning needs a connection, because the lookup is a server command. To check a build, walk the
+static `imports` of every entry in `.svelte-kit/output/client/.vite/manifest.json` and confirm that the zxing
+chunks are not among them. e2e replaces `getUserMedia` and `BarcodeDetector` in the page (`e2e/scan.e2e.ts`).
+
 ### Rate limits
 
 | Binding               | Namespace | Limit    | Counts                                                     |
@@ -115,7 +135,8 @@ grows past 80 KB. Only foods with kcal, protein, carbs and fat in range are impo
 | `src/routes/(auth)`            | `/login` and `/setup` without the shell                                                                         |
 | `src/lib/server`               | Better Auth setup, guard rules, rate limits, Drizzle schema, `off/` client, `foods/`, `log/`, `settings/` repos |
 | `src/lib/schemas`              | Valibot schemas shared by forms and remote commands                                                             |
-| `src/lib/domain`               | Pure domain math: nutrition, targets, dates, search text, limits                                                |
+| `src/lib/domain`               | Pure domain math: nutrition, targets, dates, search text, barcodes, limits                                      |
+| `src/lib/scanner`              | Barcode detector factory (native API or lazy zxing-wasm ponyfill)                                               |
 | `src/lib/components`           | `shell/` (navigation), `ui/` (design system) and `log/` (add sheet, forms, day view)                            |
 | `src/lib/stores`               | Shared client state (add sheet, toasts)                                                                         |
 | `src/routes/(app)/*.remote.ts` | Remote commands and queries: `foods`, `log`, `settings/target`                                                  |
@@ -170,7 +191,7 @@ Pushes to `main` deploy automatically (`.github/workflows/ci.yml`): the `verify`
 `deploy` job runs `pnpm build`, `pnpm db:migrate:remote` and `pnpm wrangler deploy`. Pull requests and other
 branches only run `verify`.
 
-`verify` stops after 5 minutes: run `pnpm verify` locally before pushing, CI only confirms it. `deploy` keeps 10
+`verify` stops after 8 minutes (a healthy run takes about 4.5): run `pnpm verify` locally before pushing, CI only confirms it. `deploy` keeps 10
 minutes, so a timeout never lands between the remote migration and `wrangler deploy`. `verify` runs in the
 `mcr.microsoft.com/playwright` image, which ships the browsers and their system packages, so nothing is installed
 with apt. Its tag and digest must match the Playwright version in `pnpm-lock.yaml`: bump them together. A CI step

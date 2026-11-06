@@ -36,6 +36,7 @@
 	import FoodForm from '#lib/components/log/FoodForm.svelte';
 	import FoodRow from '#lib/components/log/FoodRow.svelte';
 	import QuickAddForm from '#lib/components/log/QuickAddForm.svelte';
+	import ScannerPanel from '#lib/components/log/ScannerPanel.svelte';
 	import type { LogEntry } from '#lib/server/db/schema.ts';
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
 	import TabBar from '#lib/components/shell/TabBar.svelte';
@@ -784,8 +785,33 @@
 	</Section>
 
 	<Section
+		name="Scanner"
+		description="The scanner step of the add sheet, opened from Scan. The camera starts only after the tap. The manual barcode field is always there: it accepts EAN-13, UPC-A or EAN-8, and an 8 digit code is read as EAN-8, else as UPC-E. The torch button shows only when the camera reports a torch. A camera another app holds, or one the system takes away (a call, switching apps), gets a message and a Restart camera button. These previews have no camera."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			{#each [{ id: 'starting', title: 'Starting', camera: 'starting' }, { id: 'scanning', title: 'Scanning, with a torch', camera: 'scanning', torch: true }, { id: 'denied', title: 'Camera denied', camera: 'denied' }, { id: 'unsupported', title: 'Camera unsupported', camera: 'unsupported' }, { id: 'looking', title: 'Looking up the barcode', camera: 'scanning', status: 'looking' }, { id: 'busy', title: 'Camera in use by another app', camera: 'busy' }, { id: 'interrupted', title: 'Camera interrupted', camera: 'interrupted' }, { id: 'unavailable', title: 'Product database unreachable', camera: 'scanning', status: 'unavailable', barcode: '4000540000000' }, { id: 'invalid', title: 'Not a valid barcode', camera: 'scanning', status: 'invalid' }] as const as state (state.id)}
+				<div class="flex flex-col gap-2">
+					<span class="text-sm font-medium text-text-muted">{state.title}</span>
+					<ScannerPanel
+						camera={state.camera}
+						status={'status' in state ? state.status : 'idle'}
+						barcode={'barcode' in state ? state.barcode : undefined}
+						torchAvailable={'torch' in state}
+						ontorch={() => {}}
+						onmanual={() => {}}
+						onenter={() => {}}
+						onrescan={() => {}}
+						onrestart={() => {}}
+						onback={() => {}}
+					/>
+				</div>
+			{/each}
+		</div>
+	</Section>
+
+	<Section
 		name="AddSheet"
-		description="Search field, then Quick add and New food, recents and frequents; typing searches the library after 200 ms, Enter or the Open Food Facts row searches OFF. Opens from the add button, the sidebar and Cmd or Ctrl K."
+		description="Search field, then Quick add, New food and Scan, recents and frequents; typing searches the library after 200 ms, Enter or the Open Food Facts row searches OFF. Opens from the add button, the sidebar and Cmd or Ctrl K."
 	>
 		<div>
 			<Button icon={Plus} onclick={() => addSheet.show()}>Open the add sheet</Button>

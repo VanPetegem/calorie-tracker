@@ -15,7 +15,11 @@ import { assets, immutable } from '$app/manifest';
 const CACHE = `kcal-${version}`;
 
 // Manifest paths are relative to the base path. The app is served from the domain root, so this is `/` + path.
-const PRECACHE = [...immutable, ...assets].map((file) => `/${file.path}`);
+// The zxing decoder's `.wasm` (about 1 MB, only needed once someone scans) is left out: the browser's HTTP cache keeps
+// the hashed, immutable file after the first scan.
+const PRECACHE = [...immutable, ...assets]
+	.map((file) => `/${file.path}`)
+	.filter((path) => !path.endsWith('.wasm'));
 const PRECACHED = new Set<string>(PRECACHE);
 
 /** A redirected response cannot answer a navigation, and an error page must not become the offline page. */

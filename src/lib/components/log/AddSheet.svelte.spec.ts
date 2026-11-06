@@ -16,6 +16,7 @@ vi.mock('../../../routes/(app)/foods.remote.ts', () => ({
 	searchFoods: mocks.searchFoods,
 	searchOff: vi.fn(),
 	pickOff: vi.fn(),
+	lookupBarcode: vi.fn(),
 	createFood: vi.fn(),
 	updateFood: vi.fn()
 }));

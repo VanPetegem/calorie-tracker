@@ -256,6 +256,31 @@ test('the add sheet also works on a page without a day', async ({ page }) => {
 	await expect(sheet.getByRole('searchbox', { name: 'Search foods' })).toHaveValue('poulet');
 });
 
+test('the quick actions fit a 375 px phone without scrolling sideways', async ({ page }) => {
+	await page.setViewportSize({ width: 375, height: 812 });
+	await gotoHydrated(page, '/');
+	const sheet = await openAddSheet(page);
+	await expect(sheet.getByRole('button', { name: 'Scan', exact: true })).toBeVisible();
+	const fit = await sheet.getByRole('button', { name: 'Quick add' }).evaluate((button) => {
+		const body = button.closest('div.overflow-y-auto')!;
+		const row = body.querySelector('.grid-cols-3')!;
+		const bounds = body.getBoundingClientRect();
+		return {
+			scrollWidth: body.scrollWidth,
+			clientWidth: body.clientWidth,
+			rowRight: row.getBoundingClientRect().right,
+			rowScrollWidth: row.scrollWidth,
+			rowClientWidth: row.clientWidth,
+			bodyRight: bounds.right,
+			heights: [...row.querySelectorAll('button')].map((b) => b.getBoundingClientRect().height)
+		};
+	});
+	expect(fit.scrollWidth).toBeLessThanOrEqual(fit.clientWidth);
+	expect(fit.rowScrollWidth).toBeLessThanOrEqual(fit.rowClientWidth);
+	expect(fit.rowRight).toBeLessThanOrEqual(fit.bodyRight);
+	for (const height of fit.heights) expect(height).toBeGreaterThanOrEqual(44);
+});
+
 test('Ctrl+K opens the add sheet on desktop', async ({ page }) => {
 	test.skip((page.viewportSize()?.width ?? 0) < 1024, 'desktop shortcut');
 	await gotoHydrated(page, '/');

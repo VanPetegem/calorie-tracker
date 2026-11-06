@@ -1,7 +1,8 @@
 import { command, query } from '$app/server';
+import { waitUntil } from 'cloudflare:workers';
 import * as v from 'valibot';
 import { id } from '#lib/schemas/fields.ts';
-import { FoodInput, UpdateFoodInput } from '#lib/schemas/food.ts';
+import { BarcodeLookupInput, FoodInput, UpdateFoodInput } from '#lib/schemas/food.ts';
 import { appContext } from '#lib/server/context.ts';
 import type { Food } from '#lib/server/db/schema.ts';
 import {
@@ -11,7 +12,7 @@ import {
 	searchLibrary,
 	updateFood as saveFood
 } from '#lib/server/foods/repo.ts';
-import { resolveOffPick } from '#lib/server/foods/service.ts';
+import { lookupBarcode as findByBarcode, resolveOffPick } from '#lib/server/foods/service.ts';
 import { suggestions } from '#lib/server/log/day.ts';
 
 /*
@@ -41,6 +42,15 @@ export const pickOff = command(
 		return resolveOffPick(db, off, barcode);
 	}
 );
+
+/**
+ * Finds a food by scanned or typed barcode: the library first, then Open Food Facts. A stale cached food comes
+ * back at once and is refreshed after the response through the platform's `waitUntil`.
+ */
+export const lookupBarcode = command(BarcodeLookupInput, async ({ raw, format }) => {
+	const { db, off } = await appContext();
+	return findByBarcode(db, off, raw, format, waitUntil);
+});
 
 /** One food by id, for editing a logged entry. Null when it no longer exists. */
 export const loadFood = command(id, async (foodId) => {
