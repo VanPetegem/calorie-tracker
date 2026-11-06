@@ -42,6 +42,8 @@
 	import FoodRow from '#lib/components/log/FoodRow.svelte';
 	import QuickAddForm from '#lib/components/log/QuickAddForm.svelte';
 	import BatchRow from '#lib/components/recipes/BatchRow.svelte';
+	import ContainerForm from '#lib/components/recipes/ContainerForm.svelte';
+	import WeightField from '#lib/components/recipes/WeightField.svelte';
 	import AddIngredientSheet from '#lib/components/recipes/AddIngredientSheet.svelte';
 	import IngredientList from '#lib/components/recipes/IngredientList.svelte';
 	import IngredientRow from '#lib/components/recipes/IngredientRow.svelte';
@@ -274,6 +276,16 @@
 		lastActivity: '2026-11-05T18:00:00.000Z'
 	};
 	let batchLog = $state('Nothing picked yet.');
+
+	// WeightField and ContainerForm: a parent that keeps the list, as a batch form does.
+	let designContainers = $state([
+		{ id: 'design-pot', name: 'Pot', tareG: 650, createdAt: '2026-11-06T09:00:00.000Z' },
+		{ id: 'design-box', name: 'Lunch box', tareG: 180, createdAt: '2026-11-06T09:00:00.000Z' }
+	]);
+	let weightNone = $state<number | null>(null);
+	let weightStored = $state<number | null>(1600);
+	let weightNoContainers = $state<number | null>(null);
+	let containerLog = $state('Nothing saved yet.');
 	// A logged entry of the batch: 1.5 portions at 500 kcal a portion, 600 g. Edited from its own snapshot.
 	const sampleBatchEntry = {
 		kcal: 750,
@@ -1122,6 +1134,76 @@
 			</li>
 		</ul>
 		<span class="text-sm text-text-muted">{batchLog}</span>
+	</Section>
+
+	<Section
+		name="WeightField"
+		description="The cooked weight of a batch. Without a container the number is the net weight; with one, type the weight on the scale and the net after the tare shows. A weight at or below the tare, or over 20000 g, is an error under the field and keeps Save off. New container opens the container form inline. Empty is allowed: the batch then logs by portion only."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Empty, containers saved</span>
+				<WeightField
+					bind:value={weightNone}
+					containers={designContainers}
+					oncreatecontainer={async (input) => {
+						const made = { ...input, id: `design-${designContainers.length}`, createdAt: '' };
+						designContainers = [...designContainers, made];
+						return made;
+					}}
+				/>
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">A stored batch weight, no container</span>
+				<WeightField
+					bind:value={weightStored}
+					containers={designContainers}
+					oncreatecontainer={async (input) => ({ ...input, id: 'design-new', createdAt: '' })}
+				/>
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">No containers saved yet</span>
+				<WeightField
+					bind:value={weightNoContainers}
+					containers={[]}
+					oncreatecontainer={async (input) => ({ ...input, id: 'design-first', createdAt: '' })}
+				/>
+			</div>
+		</div>
+	</Section>
+
+	<Section
+		name="ContainerForm"
+		description="Name and tare of a container, in the weight field and in Settings. Checked on blur with the schema the server uses. A failed save keeps the form and offers Retry."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">New</span>
+				<ContainerForm
+					onsave={async (input) => void (containerLog = `Saved ${input.name}, ${input.tareG} g`)}
+					oncancel={() => (containerLog = 'Cancelled')}
+				/>
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Editing</span>
+				<ContainerForm
+					container={designContainers[0]}
+					submitLabel="Save"
+					onsave={async (input) => void (containerLog = `Saved ${input.name}, ${input.tareG} g`)}
+				/>
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">The save fails</span>
+				<ContainerForm
+					container={designContainers[1]}
+					submitLabel="Save"
+					onsave={async () => {
+						throw new Error('offline');
+					}}
+				/>
+			</div>
+		</div>
+		<span class="text-sm text-text-muted">{containerLog}</span>
 	</Section>
 
 	<Section

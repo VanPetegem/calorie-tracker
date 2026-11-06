@@ -1,6 +1,8 @@
 <script lang="ts">
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import CookingPot from '@lucide/svelte/icons/cooking-pot';
 	import { resolve } from '$app/paths';
+	import { Button } from '#lib/components/ui/index.ts';
 	import { recipeDraft } from '#lib/components/recipes/draft.ts';
 	import RecipeForm from '#lib/components/recipes/RecipeForm.svelte';
 	import type { PageProps } from './$types';
@@ -25,6 +27,18 @@
 		</a>
 		<h1 class="text-3xl font-semibold tracking-tight text-text">{data.recipe.name}</h1>
 	</div>
+	{#if data.recipe.archivedAt === null}
+		<div>
+			<!-- From the stored recipe, not from what is typed below. -->
+			<Button
+				variant="secondary"
+				icon={CookingPot}
+				href={`${resolve('/(app)/recipes/batches/new')}?recipe=${data.recipe.id}`}
+			>
+				Cook batch
+			</Button>
+		</div>
+	{/if}
 	<!-- Keyed by id: another recipe mounts a fresh form. The same recipe reloaded after a save keeps what is typed. -->
 	{#key data.recipe.id}
 		<RecipeForm recipe={draft} archived={data.recipe.archivedAt !== null} />

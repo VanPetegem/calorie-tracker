@@ -10,7 +10,7 @@
 		error?: string;
 		disabled?: boolean;
 		readonly?: boolean;
-		type?: 'text' | 'email' | 'password' | 'search' | 'tel' | 'url';
+		type?: 'text' | 'email' | 'password' | 'search' | 'tel' | 'url' | 'date';
 		inputmode?: HTMLInputAttributes['inputmode'];
 		autocomplete?: HTMLInputAttributes['autocomplete'];
 		name?: string;

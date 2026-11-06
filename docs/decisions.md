@@ -2,6 +2,43 @@
 
 Living record of decisions. Newest first. Each entry: date, decision, reason.
 
+## 2026-11-07
+
+- **The batch editor keeps line ids by never losing them, and by starting from the stored lines after every save that
+  changed them.** `BatchForm` edits `DraftIngredient`s that carry the stored line's `id`; `IngredientList` already
+  spreads the line on an amount edit and re-inserts the same object on Undo, so only a new line has no id. A save
+  gives new lines their ids on the server, which the form cannot know, so the batch page keys the form on the batch id
+  plus its line ids: a save that added or removed lines remounts the form from the reloaded batch, a save without
+  line changes, Finish and Reopen keep what is typed. The form is `inert` while a save runs, so no edit can slip in
+  between the save and the ids. After the first save of a new batch it moves to `/recipes/batches/[id]` (replace
+  state), where the key starts it from the stored lines.
+- **Serving lines are priced from `ingredient.servingG`, mapped into the editor's `food.servingG`.** `batchDraft` sets
+  `food.servingG` to the line's own serving weight (`BatchDetailIngredient.servingG`), the line's name and its own
+  values as `snapshot`; `food` there is only what `AmountStep` and the row need. A line whose food is gone uses its
+  own id as the food id, which the server accepts for a line that keeps its unit.
+- **A new batch page loads `draftFromRecipe` and the recipe.** `draftFromRecipe` names foods by id only, so
+  `batchDraftFromRecipe(input, recipe)` takes the fields from the draft and the lines (with their foods) from the
+  recipe. An unknown `?recipe=` is a 404. Without it the page starts a one off with today, one portion and no lines.
+  Cook batch is shown for a recipe that is not archived, from the stored recipe (not from unsaved edits).
+- **`WeightField` stores only the net weight, and reports a problem through a bindable `error`.** The container is not
+  saved with the batch, so a stored batch opens with no container and its net weight in "Cooked weight". Choosing a
+  container keeps the typed number and reads it as the weight on the scale. A wrong weight (not a number, at or below
+  the tare, over 20000 g) makes `value` null and sets `error`, which `BatchForm` uses to keep Save off with "Check the
+  cooked weight" (a null value alone would save the batch as unweighed). The picker is a native `select`, which is the
+  right control on iOS. `Input` gained `type="date"` for "Cooked on".
+- **Containers are created inline with `saveContainer` at once, and managed in Settings.** The new container exists
+  before the batch is saved. Settings lists them with edit (name and tare, `ContainerForm` in a sheet) and delete
+  (a confirm sheet); batches keep their net weight.
+- **Delete asks first, and finishing is a single tap.** Delete (batch) opens a confirm sheet; the button is off with
+  "Logged batches can be finished, not deleted" while the batch has live entries, and a refusal from the server (an
+  entry logged elsewhere in the meantime) shows the same message. Finish and Reopen act at once with a toast.
+- **The Finished section is a collapsed `details`, each row with Reopen.** Latest 20, as `finishedBatches` returns
+  them. The Recipes tab order is Active batches (with New batch), Recipes, Finished.
+- **Batch e2e tests build their data through the UI and finish what they log on.** `e2e/batches.e2e.ts` uses days
+  2020-07-10 to 2020-07-25 (slot, retry and project), unique names, and finishes each batch it logged on at the end,
+  so other files' add sheets are not affected (`e2e/seed.sql` is unchanged). Logging from the batch page's Log button
+  would log on today, so that test only checks the sheet opens at the amount step.
+
 ## 2026-11-06
 
 - **Logging a batch reuses `AmountStep` through a `batch` prop, and an entry edit prices from the entry's own
