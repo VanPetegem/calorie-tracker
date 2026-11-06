@@ -181,6 +181,7 @@ e2e/recipes.e2e.ts (3a), e2e/batches.e2e.ts (3b)
 **Interfaces:**
 - Produces: tables `containers`, `batches`, `batchIngredients` per spec section 3 (3b); `logEntries.batchId` references `batches.id`; index `batches(finished_at)` and `log_entries(batch_id)`; types `Batch`, `BatchIngredient`, `Container`.
 - Also (from the 3a review): index `recipe_ingredients(food_id)` in the same migration.
+- `toGrams` now accepts `portion` (Task 5). Adding `portion` to `LOG_UNITS` must not let a food entry use it: food log input and `gramsFor` in `server/log/repo.ts` keep rejecting `portion` (separate unit list or explicit check), with a test.
 - `migrations.spec.ts`: applies migrations up to 0019, inserts food, quick and soft deleted entries, applies the rest, asserts every row and column is unchanged and that foreign keys pass (`PRAGMA foreign_key_check` returns nothing). If drizzle-kit's rebuild uses `PRAGMA foreign_keys=OFF` (ignored inside D1's transaction), switch it to `PRAGMA defer_foreign_keys = on` by hand. If no safe rebuild exists, keep the plain column, enforce the link in the repo and record why in `docs/decisions.md`.
 - [ ] **Step 1: Write failing tests** (migration check, a log entry with an unknown `batch_id` fails, deleting a batch cascades its ingredients).
 - [ ] **Step 2: Run**; fail. **Step 3: Implement**, `pnpm db:generate`, inspect the SQL, `pnpm db:migrate:local`. **Step 4: Gate.** **Step 5: Commit** `feat(db): batches, containers`.
@@ -203,6 +204,7 @@ e2e/recipes.e2e.ts (3a), e2e/batches.e2e.ts (3b)
   - `listContainers`, `saveContainer`, `deleteContainer`.
   - `addBatchEntry(db, input, ctx)`: snapshot via `batchEntrySnapshot`, label = batch name, `kind = 'batch'`; logging a finished batch is allowed.
   - `saveRecipe` (3a review): throws `RecipeNotFoundError` when the update returns no row.
+  - `portionsLeft` throws on units other than `portion` and `g`: `logBatch` and `updateEntryAmount` accept only those two for batch entries, so one bad row cannot break `activeBatches`. Batch summaries use `cookedWeightG === null ? null : per100g(...)`.
   - `updateEntryAmount`: same unit rescales by amount ratio; a unit switch needs stored `grams` (else `UnitNotAvailableError`), then rescales by grams ratio.
   - Remote commands in `batches.remote.ts`: `saveBatch`, `finishBatch`, `reopenBatch`, `deleteBatch`, `saveContainer`, `deleteContainer`; `logBatch` in `log.remote.ts`.
 - [ ] **Step 1: Write failing tests**: draft from recipe copies ingredients and default portions; save snapshots from foods; edit a food then save the batch with a changed amount and one new ingredient: old ingredient keeps its old per 100, new one has the new values; a foreign ingredient id is rejected and writes nothing; auto finish boundary (6 days 23 h stays, 7 days plus 1 min finishes, a log 2 days ago keeps it active); delete refused with a live entry, allowed with only soft deleted ones; log 1.5 portions and 200 g give the domain values; edit a portion entry without grams to 2 portions; switching it to grams is refused; editing the batch after logging leaves the entry unchanged.
