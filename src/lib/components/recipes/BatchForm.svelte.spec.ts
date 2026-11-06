@@ -363,6 +363,24 @@ describe('BatchForm saving', () => {
 		await expect.element(page.getByRole('alert')).toHaveTextContent('This batch no longer exists');
 	});
 
+	it('drops the Undo toast of a removed line when a save starts, so Undo cannot be lost to the remount', async () => {
+		let finish: (value: unknown) => void = () => {};
+		mocks.saveBatch.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+		show();
+		await openMenu('Pasta');
+		await page
+			.getByRole('dialog', { name: 'Pasta' })
+			.getByRole('button', { name: 'Remove' })
+			.click();
+		await closed();
+		await expect.element(page.getByText('Removed Pasta')).toBeVisible();
+		await saveButton().click();
+		await vi.waitFor(() => expect(mocks.saveBatch).toHaveBeenCalledTimes(1));
+		expect(toasts.items.map((item) => item.message)).toEqual([]);
+		finish({ ok: true, id: BATCH_ID });
+		await expect.element(page.getByText('Batch saved')).toBeVisible();
+	});
+
 	it('does not fail a save because the refresh afterwards failed', async () => {
 		mocks.invalidateAll.mockRejectedValue(new Error('offline'));
 		show();

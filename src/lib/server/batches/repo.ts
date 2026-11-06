@@ -1,10 +1,23 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
+import {
+	and,
+	asc,
+	desc,
+	eq,
+	gte,
+	inArray,
+	isNotNull,
+	isNull,
+	lt,
+	notExists,
+	sql,
+	type SQL
+} from 'drizzle-orm';
 import * as v from 'valibot';
 import {
-	isStale,
 	per100g,
 	perPortion,
 	portionsLeft,
+	staleCutoff,
 	totals,
 	type BatchShape
 } from '../../domain/batch.ts';
@@ -169,6 +182,40 @@ async function summaries(db: Db, list: Batch[]): Promise<BatchSummary[]> {
 }
 
 /**
+ * Finishes, at `now`, every active batch whose created time, updated time and latest live entry are all before the
+ * stale cutoff (see `staleCutoff`), and returns their ids. The condition is part of the UPDATE, so a log or edit that
+ * lands after the batches were read keeps its batch active. No id list is bound, so the count is not limited by D1's
+ * 100 bound values per statement.
+ */
+export async function finishStaleBatches(db: Db, now: Date): Promise<string[]> {
+	const cutoff = staleCutoff(now);
+	const rows = await db
+		.update(batches)
+		.set({ finishedAt: now.toISOString() })
+		.where(
+			and(
+				isNull(batches.finishedAt),
+				lt(batches.createdAt, cutoff),
+				lt(batches.updatedAt, cutoff),
+				notExists(
+					db
+						.select({ one: sql`1` })
+						.from(logEntries)
+						.where(
+							and(
+								eq(logEntries.batchId, batches.id),
+								isNull(logEntries.deletedAt),
+								gte(logEntries.loggedAt, cutoff)
+							)
+						)
+				)
+			)
+		)
+		.returning({ id: batches.id });
+	return rows.map((row) => row.id);
+}
+
+/**
  * Batches that are not finished, newest cooked first. First finishes, in the same request, every active batch
  * without activity (created, updated or a live entry logged) for more than `BATCH_AUTO_FINISH_DAYS` before `now`.
  */
@@ -178,23 +225,11 @@ export async function activeBatches(db: Db, now: Date): Promise<BatchSummary[]> 
 		.from(batches)
 		.where(isNull(batches.finishedAt))
 		.orderBy(desc(batches.cookedOn), desc(batches.createdAt), desc(batches.id));
-	const all = await summaries(db, list);
-	const stale = all.filter((batch) => isStale(batch.lastActivity, now));
-	if (stale.length > 0) {
-		await db
-			.update(batches)
-			.set({ finishedAt: now.toISOString() })
-			.where(
-				and(
-					inArray(
-						batches.id,
-						stale.map((batch) => batch.id)
-					),
-					isNull(batches.finishedAt)
-				)
-			);
-	}
-	return all.filter((batch) => !stale.includes(batch));
+	const byBatch = await liveEntries(db, isNull(batches.finishedAt));
+	const finished = new Set(await finishStaleBatches(db, now));
+	return list
+		.filter((batch) => !finished.has(batch.id))
+		.map((batch) => summarize(batch, byBatch.get(batch.id) ?? []));
 }
 
 /** The latest finished batches, last finished first. */

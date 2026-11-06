@@ -5,7 +5,13 @@
 		MAX_AMOUNT_SERVINGS,
 		MAX_PORTIONS
 	} from '#lib/domain/constants.ts';
-	import { snapshotFor, toGrams, type Nutrients, type Per100 } from '#lib/domain/nutrition.ts';
+	import {
+		round1,
+		snapshotFor,
+		toGrams,
+		type Nutrients,
+		type Per100
+	} from '#lib/domain/nutrition.ts';
 	import type { BatchLogUnit, FoodLogUnit } from '#lib/schemas/fields.ts';
 	import type { Food } from '#lib/server/db/schema.ts';
 	import { parseDecimal } from '#lib/utils/decimal.ts';
@@ -148,7 +154,7 @@
 			// A gram entry of a batch that lost its weight has no portion size: show per 100 g instead.
 			return props.batch.unavailable.portion !== undefined && cookedWeightG !== null
 				? `${Math.round((totals.kcal * 100) / cookedWeightG)} kcal per 100 g`
-				: `${Math.round(totals.kcal / portions)} kcal per portion`;
+				: `${Math.round(round1(totals.kcal / portions))} kcal per portion`;
 		}
 		return `${Math.round((props.per100 ?? props.food).kcal)} kcal per 100 ${props.food.nutritionBasis}`;
 	});

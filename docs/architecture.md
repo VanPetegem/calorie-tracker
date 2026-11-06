@@ -162,7 +162,7 @@ the food's values per 100 at the time, and the batch totals are the sum of them.
 changes a batch, and editing a batch never changes a log entry (entries hold their own snapshot).
 
 ```
-/recipes                 page load -> activeBatches (auto finish runs here), listRecipes, finishedBatches
+/recipes                 page load -> activeBatches (auto finish), listRecipes, finishedBatches
 /recipes/batches/new     page load -> listContainers, and with ?recipe=<id> draftFromRecipe + getRecipe (404 if unknown)
 /recipes/batches/[id]    page load -> getBatch, listContainers (404 if unknown)
 BatchForm                -> saveBatch / finishBatch / reopenBatch / deleteBatch / saveContainer (batches.remote.ts,
@@ -183,7 +183,10 @@ BatchForm                -> saveBatch / finishBatch / reopenBatch / deleteBatch 
   Log (`addSheet.openBatch`, logs on today from a page without a day), Finish or Reopen, and Delete, which is off with
   the reason while the batch has live log entries (the repository refuses it too).
 - Batches stay active until finished. `activeBatches` finishes those without activity for 7 days (created, edited,
-  or a live entry logged) in the same request; Reopen counts as activity. The Recipes tab lists active batches, the
+  or a live entry logged) in the same request; Reopen counts as activity. It runs wherever active batches load: the
+  Recipes tab, Today and the day pages, and `loadSuggestions`. The finishing UPDATE itself requires `created_at`,
+  `updated_at` and the latest live entry to be before the cutoff, so activity landing after the read keeps a batch
+  active. The Recipes tab lists active batches, the
   recipes, and a collapsed Finished section (latest 20) with Reopen.
 - `BatchForm` guards unsaved changes like `RecipeForm`. It is inert while a save runs, and the batch page remounts it
   when a save changed the lines' ids, so the form always starts from the stored lines.

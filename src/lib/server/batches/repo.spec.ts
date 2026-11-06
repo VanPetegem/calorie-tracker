@@ -30,6 +30,7 @@ import {
 	draftFromRecipe,
 	finishBatch,
 	finishedBatches,
+	finishStaleBatches,
 	getBatch,
 	listContainers,
 	portionWeights,
@@ -468,6 +469,54 @@ describe('batch repository', () => {
 			const later = new Date(NOW.getTime() + 3 * DAY);
 			expect((await activeBatches(test.db, later)).map((b) => b.name)).toEqual(['Stew']);
 			expect((await getBatch(test.db, batch.id))?.finishedAt).toBeNull();
+		});
+
+		it('does not finish a batch that was edited or logged after the stale ids were read', async () => {
+			const edited = await saveBatch(test.db, stewBatch({ name: 'Edited' }));
+			const logged = await saveBatch(test.db, stewBatch({ name: 'Logged' }));
+			const idle = await saveBatch(test.db, stewBatch({ name: 'Idle' }));
+			for (const batch of [edited, logged, idle]) await setTouched(batch.id, ago(10 * DAY));
+			// Activity lands between the read of the stale batches and the write that finishes them.
+			await test.d1
+				.prepare('UPDATE batches SET updated_at = ?1 WHERE id = ?2')
+				.bind(ago(HOUR), edited.id)
+				.run();
+			const entry = await addBatchEntry(
+				test.db,
+				{ date: '2026-11-04', batchId: logged.id, amount: 1, unit: 'portion' },
+				ctx
+			);
+			await test.db
+				.update(logEntries)
+				.set({ loggedAt: ago(HOUR) })
+				.where(eq(logEntries.id, entry.id));
+			await test.d1
+				.prepare('UPDATE batches SET updated_at = ?1 WHERE id = ?2')
+				.bind(ago(10 * DAY), logged.id)
+				.run();
+			expect(await finishStaleBatches(test.db, NOW)).toEqual([idle.id]);
+			expect((await getBatch(test.db, edited.id))?.finishedAt).toBeNull();
+			expect((await getBatch(test.db, logged.id))?.finishedAt).toBeNull();
+			expect((await getBatch(test.db, idle.id))?.finishedAt).toBe(NOW.toISOString());
+		});
+
+		it('lists more than 100 active batches with their entries', async () => {
+			const first = await saveBatch(test.db, stewBatch({ name: 'First' }));
+			await addBatchEntry(
+				test.db,
+				{ date: '2026-11-06', batchId: first.id, amount: 1, unit: 'portion' },
+				ctx
+			);
+			await test.d1
+				.prepare(
+					`INSERT INTO batches (id, name, cooked_on, portions, kcal, protein, carbs, fat)
+					 WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 150)
+					 SELECT printf('bulk-%03d', i), 'Bulk ' || i, '2026-11-06', 4, 100, 1, 1, 1 FROM n`
+				)
+				.run();
+			const active = await activeBatches(test.db, new Date());
+			expect(active).toHaveLength(151);
+			expect(active.find((b) => b.id === first.id)?.portionsLeft).toBe(3);
 		});
 
 		it('lists active batches newest cooked first with portions left and values per portion and 100 g', async () => {

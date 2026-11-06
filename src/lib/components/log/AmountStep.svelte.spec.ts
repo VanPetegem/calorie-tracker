@@ -154,6 +154,16 @@ describe('AmountStep for a batch', () => {
 		await expect.element(page.getByText('500 kcal per portion')).toBeVisible();
 	});
 
+	it('shows the same per portion kcal as the 1 portion preview, rounding to 0,1 first', async () => {
+		// 1501,4 / 3 = 500,47: to 0,1 first it is 500,5, so 501 everywhere (a single rounding would say 500).
+		render(
+			AmountStep,
+			batchProps(batchSource(sampleBatch({ portions: 3, kcal: 1501.4, cookedWeightG: null })))
+		);
+		await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('501 kcal');
+		await expect.element(page.getByText('501 kcal per portion')).toBeVisible();
+	});
+
 	it('previews 1,5 portions as 750 kcal and 600 g', async () => {
 		render(AmountStep, batchProps());
 		await amountField().fill('1,5');

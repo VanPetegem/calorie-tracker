@@ -4,6 +4,10 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-07
 
+- **The `BatchRow` stale state of the spec is dropped; it cannot be shown.** Spec section 9 listed "stale" next to
+  portions left and finished. Auto finish runs whenever active batches load (`activeBatches`), so an active batch past
+  the threshold is finished before any row renders, and a stale active row cannot exist. `BatchRow` has portions left
+  and finished only.
 - **The batch editor keeps line ids by never losing them, and by starting from the stored lines after every save that
   changed them.** `BatchForm` edits `DraftIngredient`s that carry the stored line's `id`; `IngredientList` already
   spreads the line on an amount edit and re-inserts the same object on Undo, so only a new line has no id. A save
@@ -63,10 +67,13 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 - **`addSheet.openBatch(batch)` sets `addSheet.batch`; the sheet's step is a writable `$derived` of it.** `show()`
   clears it and the sheet's `reset` clears it on close, so a later plain open starts at the search. On pages without a
   day the batch step waits for the fetched date (same loading and error state as Quick add) before it can log.
-- **e2e batches are seeded by SQL before the server starts.** Task 9 adds the batch pages, and `saveBatch` is not in
-  the build until the client imports it, so `e2e/seed.sql` (run by `scripts/e2e-db-reset.sh` before the server holds
-  the file, as for the trigger check) inserts one weighed stew per browser project and a one off without a cooked
-  weight. `e2e/log-batches.e2e.ts` logs on past days of its own. Task 9's e2e can create its own through the UI.
+- **e2e batches are seeded by SQL before the server starts.** `saveBatch` is not in the build until the client
+  imports it, and a second connection to the live database file would make D1 fail with SQLITE_BUSY, so
+  `e2e/seed.sql` (run by `scripts/e2e-db-reset.sh` before the server holds the file, as for the trigger check)
+  inserts one batch per test kind (`portions`, `grams`, `one off`, `search`), browser project and attempt (retry 0
+  and 1): 16 rows named `E2E <kind> <project> <retry>`. A test only ever touches its own batch, so it passes alone, in
+  any order and on a retry. `e2e/log-batches.e2e.ts` logs on past days of its own; `e2e/batches.e2e.ts` builds its
+  data through the UI.
 - **A batch line's serving weight is `grams / amount` of the stored line; no extra column.** `saveBatch`
   (`src/lib/server/batches/repo.ts`) prices a kept serving line from the weight it was saved with, so a food's later
   serving size change or loss never reaches it. A kept line in the same unit is accepted as it is (its food may have
@@ -97,8 +104,9 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
   `PRAGMA foreign_key_check`. The fallback (a plain column checked in the repository) was not needed. Batches with
   a live entry cannot be deleted (no cascade on `batch_id`); batch ingredients go with their batch.
 - **Food entries have their own unit list.** `LOG_UNITS` gained `portion` (limit `MAX_PORTIONS` in `fitsUnit`), but
-  `LogFoodInput`, `EditAmountInput` and the food amount step use `FOOD_LOG_UNITS` (`g`, `ml`, `serving`), and
-  `gramsFor` in `server/log/repo.ts` refuses a portion with a 400 even when a caller skips the schema.
+  `LogFoodInput` and the food amount step use `FOOD_LOG_UNITS` (`g`, `ml`, `serving`); `EditAmountInput` takes every
+  log unit and the repository enforces food versus batch units (`gramsFor` in `server/log/repo.ts` refuses a portion
+  for a food entry with a 400 even when a caller skips the schema).
 - **Recipe saves report a refused line as a result, not an HTTP error; a missing recipe is a 404.** The recipe
   repository throws typed errors with user facing messages (`UnknownFoodError`, `UnitNotAvailableError`, both with the
   ingredient's `index`, and `RecipeNotFoundError`); it stays free of HTTP. The remote layer

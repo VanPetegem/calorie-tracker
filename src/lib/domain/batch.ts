@@ -120,6 +120,11 @@ export function netWeight(gross: number, tareG: number): number {
 	return net;
 }
 
+/** The ISO instant `BATCH_AUTO_FINISH_DAYS` days of 24 hours before `now`; activity strictly before it is stale. */
+export function staleCutoff(now: Date): string {
+	return new Date(now.getTime() - BATCH_AUTO_FINISH_DAYS * DAY_MS).toISOString();
+}
+
 /** True once more than `BATCH_AUTO_FINISH_DAYS` days of 24 hours have passed since the last activity. */
 export function isStale(lastActivityIso: string, now: Date): boolean {
 	const last = Date.parse(lastActivityIso);

@@ -399,7 +399,7 @@
 
 		<section class="flex flex-col gap-3" aria-labelledby="ingredients-heading">
 			<h2 id="ingredients-heading" class="text-lg font-semibold text-text">Ingredients</h2>
-			<IngredientList bind:ingredients errors={lineErrors} />
+			<IngredientList bind:ingredients errors={lineErrors} locked={busy} />
 		</section>
 
 		<NutritionSummary {totals} portions={portionCount} {per100g} />
