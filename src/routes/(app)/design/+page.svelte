@@ -21,6 +21,7 @@
 		Sheet,
 		Skeleton
 	} from '#lib/components/ui/index.ts';
+	import { addSheet } from '#lib/stores/add-sheet.svelte.ts';
 	import { toasts, withUndo } from '#lib/stores/toasts.svelte.ts';
 	import {
 		getThemePreference,
@@ -28,6 +29,14 @@
 		type ThemePreference
 	} from '#lib/design/theme.ts';
 	import { themes, type ColorToken } from '#lib/design/tokens.ts';
+	import DateSwitcher from '#lib/components/log/DateSwitcher.svelte';
+	import DayHero from '#lib/components/log/DayHero.svelte';
+	import AmountStep from '#lib/components/log/AmountStep.svelte';
+	import EntryRow from '#lib/components/log/EntryRow.svelte';
+	import FoodForm from '#lib/components/log/FoodForm.svelte';
+	import FoodRow from '#lib/components/log/FoodRow.svelte';
+	import QuickAddForm from '#lib/components/log/QuickAddForm.svelte';
+	import type { LogEntry } from '#lib/server/db/schema.ts';
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
 	import TabBar from '#lib/components/shell/TabBar.svelte';
 	import Section from './Section.svelte';
@@ -113,6 +122,71 @@
 				meals = next;
 			}
 		});
+	}
+
+	const sampleEntry: LogEntry = {
+		id: 'design-oats',
+		date: '2026-11-05',
+		loggedAt: '2026-11-05T07:30:00.000Z',
+		kind: 'food',
+		foodId: 'design-oats-food',
+		batchId: null,
+		amount: 80,
+		unit: 'g',
+		grams: 80,
+		label: 'Rolled oats',
+		kcal: 302,
+		protein: 10.8,
+		carbs: 51.5,
+		fat: 5.6,
+		fiber: 8,
+		deletedAt: null
+	};
+	const sampleQuick: LogEntry = {
+		...sampleEntry,
+		id: 'design-quick',
+		kind: 'quick',
+		foodId: null,
+		amount: null,
+		unit: null,
+		grams: null,
+		label: 'Restaurant pasta',
+		kcal: 850,
+		protein: 30,
+		carbs: 110,
+		fat: 28
+	};
+	const heroTarget = { kcal: 3000, proteinG: 126, fatG: 83, carbsG: 424, carbsFloored: false };
+	let switcherDate = $state('2026-11-05');
+	let rowLog = $state('Tap, swipe left or use the menu button.');
+	let foodLog = $state('Pick a food, or change an amount and log it.');
+
+	const sampleFood = {
+		name: 'Rolled oats',
+		brand: 'Kölln',
+		nutritionBasis: 'g',
+		kcal: 372,
+		protein: 13.5,
+		carbs: 58.7,
+		fat: 7,
+		fiber: 10,
+		servingG: 40
+	} as const;
+	const sampleLiquid = {
+		...sampleFood,
+		name: 'Oat drink',
+		brand: null,
+		nutritionBasis: 'ml',
+		kcal: 46,
+		protein: 1,
+		carbs: 6.7,
+		fat: 1.5,
+		fiber: 0.8,
+		servingG: null
+	} as const;
+	async function failingSubmit() {
+		await new Promise((resolve) => setTimeout(resolve, 600));
+		throw new Error('Demo failure');
 	}
 
 	function simulateSave() {
@@ -538,23 +612,219 @@
 	</Section>
 
 	<Section
+		name="DateSwitcher"
+		description="Previous and next day with the day named. Next is disabled on tomorrow, the last day you can log, with a visible reason."
+	>
+		<div class="flex flex-col gap-6">
+			<div class="flex flex-col gap-2">
+				<span class="text-sm text-text-muted">Interactive, today is 5 Nov 2026</span>
+				<DateSwitcher date={switcherDate} today="2026-11-05" onselect={(d) => (switcherDate = d)} />
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm text-text-muted">On tomorrow (next disabled)</span>
+				<DateSwitcher date="2026-11-06" today="2026-11-05" onselect={() => {}} />
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm text-text-muted">Earlier day</span>
+				<DateSwitcher date="2026-10-30" today="2026-11-05" onselect={() => {}} />
+			</div>
+		</div>
+	</Section>
+
+	<Section
+		name="DayHero"
+		description="The day summary. Without a target: kcal and grams eaten. With a target: kcal remaining, a progress bar and three macro bars. Over target says &quot;over by&quot; in the success color: gaining weight is the goal."
+	>
+		<div class="flex flex-col gap-6">
+			<div class="flex flex-col gap-2">
+				<span class="text-sm text-text-muted">No target</span>
+				<DayHero totals={{ kcal: 1240, protein: 82, carbs: 150, fat: 40 }} target={null} />
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm text-text-muted">Under target</span>
+				<DayHero totals={{ kcal: 1240, protein: 82, carbs: 150, fat: 40 }} target={heroTarget} />
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm text-text-muted">Over target</span>
+				<DayHero totals={{ kcal: 3120, protein: 140, carbs: 430, fat: 90 }} target={heroTarget} />
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm text-text-muted">Carb target floored at zero</span>
+				<DayHero
+					totals={{ kcal: 900, protein: 60, carbs: 0, fat: 40 }}
+					target={{ kcal: 1500, proteinG: 126, fatG: 83, carbsG: 0, carbsFloored: true }}
+				/>
+			</div>
+		</div>
+	</Section>
+
+	<Section
+		name="EntryRow"
+		description="One logged item. Tap to edit, swipe left on a touch screen to delete, or use the menu button. Food entries show the amount, quick entries say Quick add."
+	>
+		<div class="flex flex-col gap-2">
+			<span class="text-sm text-text-muted">{rowLog}</span>
+			<ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
+				<EntryRow
+					entry={sampleEntry}
+					onedit={() => (rowLog = 'Edit Rolled oats')}
+					ondelete={() => (rowLog = 'Delete Rolled oats (swipe)')}
+					onmenu={() => (rowLog = 'Menu for Rolled oats')}
+				/>
+				<EntryRow
+					entry={sampleQuick}
+					onedit={() => (rowLog = 'Edit Restaurant pasta')}
+					ondelete={() => (rowLog = 'Delete Restaurant pasta (swipe)')}
+					onmenu={() => (rowLog = 'Menu for Restaurant pasta')}
+				/>
+			</ul>
+		</div>
+	</Section>
+
+	<Section
+		name="FoodRow"
+		description="A food in the add sheet. Search results show brand, per 100 g or ml and kcal per 100. Recents and frequents show the last amount and its kcal. At least 56 px tall."
+	>
+		<ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
+			<li><FoodRow food={sampleFood} onselect={() => (foodLog = 'Picked Rolled oats')} /></li>
+			<li>
+				<FoodRow food={sampleLiquid} onselect={() => (foodLog = 'Picked Oat drink')} />
+			</li>
+			<li>
+				<FoodRow
+					food={sampleFood}
+					last={{ amount: 2, unit: 'serving' }}
+					onselect={() => (foodLog = 'Picked Rolled oats (recent)')}
+				/>
+			</li>
+		</ul>
+		<span class="text-sm text-text-muted">{foodLog}</span>
+	</Section>
+
+	<Section
+		name="AmountStep"
+		description="The amount step of the add sheet and of editing an entry. The unit switch keeps the quantity (80 g becomes 2 servings of 40 g), the preview is live, and the amount accepts a comma or a point."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted"
+					>Food with a serving: starts at one serving</span
+				>
+				<AmountStep
+					food={sampleFood}
+					mode="add"
+					onsubmit={(value) => void (foodLog = `Log ${value.amount} ${value.unit}`)}
+				/>
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Liquid without a serving, edit mode</span>
+				<AmountStep
+					food={sampleLiquid}
+					mode="edit"
+					initial={{ amount: 250, unit: 'ml' }}
+					onsubmit={(value) => void (foodLog = `Save ${value.amount} ${value.unit}`)}
+					onback={() => (foodLog = 'Back')}
+				/>
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Saving fails: inline error, retry</span>
+				<AmountStep food={sampleFood} mode="add" onsubmit={failingSubmit} />
+			</div>
+		</div>
+	</Section>
+
+	<Section
+		name="FoodForm"
+		description="Creates or edits a food. Each field is checked when it loses focus, so 901 kcal or fiber 'abc' shows its message at once; comma decimals work. Editing says that days already logged keep their values. These previews save nothing."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">New food</span>
+				<FoodForm preview onsaved={() => {}} oncancel={() => {}} />
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted"
+					>Editing, with a barcode from the miss flow</span
+				>
+				<FoodForm
+					preview
+					foodId="design-oats-food"
+					initial={{
+						name: 'Rolled oats',
+						brand: 'Kölln',
+						barcode: '4000540000000',
+						nutritionBasis: 'g',
+						kcal: 372,
+						protein: 13.5,
+						carbs: 58.7,
+						fat: 7,
+						fiber: 10,
+						servingG: 40
+					}}
+					onsaved={() => {}}
+				/>
+			</div>
+		</div>
+	</Section>
+
+	<Section
+		name="QuickAddForm"
+		description="Manual kcal and macros without a food, such as a restaurant estimate. Kcal is required; empty macros count as 0. With an entry it edits that entry. These previews save nothing."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">New quick add</span>
+				<QuickAddForm preview date="2026-11-05" ondone={() => {}} oncancel={() => {}} />
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Editing an entry</span>
+				<QuickAddForm preview entry={sampleQuick} date="2026-11-05" ondone={() => {}} />
+			</div>
+		</div>
+	</Section>
+
+	<Section
+		name="AddSheet"
+		description="Search field, then Quick add and New food, recents and frequents; typing searches the library after 200 ms, Enter or the Open Food Facts row searches OFF. Opens from the add button, the sidebar and Cmd or Ctrl K."
+	>
+		<div>
+			<Button icon={Plus} onclick={() => addSheet.show()}>Open the add sheet</Button>
+		</div>
+	</Section>
+
+	<Section
 		name="TabBar"
-		description="Primary navigation below 1024 px, fixed to the bottom and padded by the home indicator inset. Four tabs, each at least 44 px tall. The active tab uses the brand color, a top marker and aria-current."
+		description="Primary navigation below 1024 px, fixed to the bottom and padded by the home indicator inset. Four tabs, each at least 44 px tall, with a round add button in the middle. The active tab uses the brand color, a top marker and aria-current."
 	>
 		<div class="flex flex-col gap-3">
 			<div class="overflow-hidden rounded-lg border border-border">
-				<TabBar pathname="/" label="TabBar preview, Today active" preview />
+				<TabBar
+					pathname="/"
+					label="TabBar preview, Today active"
+					preview
+					onadd={() => addSheet.show()}
+				/>
 			</div>
 			<div class="overflow-hidden rounded-lg border border-border">
-				<TabBar pathname="/weight" label="TabBar preview, Weight active" preview />
+				<TabBar
+					pathname="/weight"
+					label="TabBar preview, Weight active"
+					preview
+					onadd={() => addSheet.show()}
+				/>
 			</div>
 		</div>
 	</Section>
 
 	<Section
 		name="Sidebar"
-		description="Replaces the tab bar from 1024 px. Fixed to the left edge, 240 px wide. Items are 44 px tall; the active one has a raised background and the brand color."
+		description="Replaces the tab bar from 1024 px. Fixed to the left edge, 240 px wide. An Add food button sits above the items. Items are 44 px tall; the active one has a raised background and the brand color."
 	>
-		<Sidebar pathname="/recipes" label="Sidebar preview, Recipes active" preview />
+		<Sidebar
+			pathname="/recipes"
+			label="Sidebar preview, Recipes active"
+			preview
+			onadd={() => addSheet.show()}
+		/>
 	</Section>
 </div>

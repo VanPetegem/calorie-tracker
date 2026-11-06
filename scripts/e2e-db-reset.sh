@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Prepares the local Worker for an e2e run: a fresh, migrated D1 database under .wrangler/e2e, and the
-# BETTER_AUTH_SECRET that `wrangler dev` reads from the gitignored .dev.vars. The secret value is never printed.
+# BETTER_AUTH_SECRET and OFF_CONTACT_EMAIL that `wrangler dev` reads from the gitignored .dev.vars. The secret
+# value is never printed.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -16,6 +17,9 @@ if ! grep -Eq "$has_secret" .dev.vars 2>/dev/null; then
 		exit 1
 	fi
 fi
+
+# Fixed value: e2e never reaches Open Food Facts (playwright.config.ts points the Worker at e2e/off-stub.mjs).
+grep -q '^OFF_CONTACT_EMAIL=' .dev.vars 2>/dev/null || echo 'OFF_CONTACT_EMAIL=e2e@example.invalid' >> .dev.vars
 
 rm -rf .wrangler/e2e
 pnpm wrangler d1 migrations apply DB --local --persist-to .wrangler/e2e

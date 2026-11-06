@@ -43,22 +43,90 @@ trigger (`user_single_account`). Sessions last a year and slide daily.
 - Sign out (`src/lib/auth-client.ts`) deletes every `kcal-*` cache so pages rendered for the session cannot be
   reopened afterwards.
 
+## Foods and logging
+
+Data flow of the log screens:
+
+```
+page load (src/routes/(app)/+page.server.ts, day/[date]) -> loadDay -> entries, totals, target, recents, frequents
+add sheet / forms / edit sheet -> remote command (foods.remote.ts, log.remote.ts, settings/target.remote.ts)
+                               -> Valibot schema (src/lib/schemas) -> repo (src/lib/server/*/repo.ts) -> D1
+                               -> await invalidateAll() -> the page load runs again
+```
+
+- Reads for the page come from `load`, so the service worker's cached navigation shows the last loaded day and its
+  recents offline. Writes are remote `command`s (experimental remote functions, enabled in `vite.config.ts`);
+  a command cannot refresh `load`, so the caller invalidates. Search while typing is a `query` (`searchFoods`);
+  Open Food Facts calls are commands, because a query result is cached by argument.
+- `src/lib/server/context.ts` builds the per request context: database, OFF client, settings row, `today` in the
+  settings timezone. Log dates are checked against it (no later than tomorrow).
+- Log entries store nutrition snapshots (kcal, protein, carbs, fat, fiber) and the gram equivalent of the amount;
+  editing an amount rescales the snapshot by new grams over old grams, never from the food. Deleting an entry sets
+  `deleted_at`; Undo clears it by id.
+- Foods: `custom`, `blv` (generics) and `off` (cached products), unique on barcode and on `(source, source_ref)`.
+  Library search is `LIKE` over `search_text` (lowercased, diacritics stripped, German and French names included).
+  Values are per 100 g or per 100 ml (`nutrition_basis`). Foods are archived, never deleted, once logged.
+- Today's hero shows eaten kcal and macros; with a manual target (settings columns `manual_target_kcal`,
+  `manual_weight_kg`, set in Settings) it shows remaining kcal and macro bars from `macroTargets`.
+
+### Open Food Facts
+
+All OFF calls go through the server (`src/lib/server/off/client.ts`) with the User-Agent
+`kcal-avp/<version> (<OFF_CONTACT_EMAIL>)`, a 5 second timeout and no exceptions: the client returns
+`{ ok: false, reason: 'rate_limited' | 'unavailable' }`. Product reads use `OFF_BASE_URL` (v2 API); text search uses
+`OFF_SEARCH_URL` (search-a-licious). Results that pass validation are upserted into `foods` (`source = off`,
+`fetched_at`). The library wins when a barcode already exists: `resolveOffPick` returns that food without calling
+OFF. `upsertOffFood` can refresh an unedited OFF food older than 180 days, but in phase 2a nothing reaches that
+branch, because the library lookup comes first; the refresh arrives with the barcode lookup in 2b. Typing searches
+the library only; OFF is searched when the person submits.
+
+### Rate limits
+
+| Binding               | Namespace | Limit    | Counts                                                     |
+| --------------------- | --------- | -------- | ---------------------------------------------------------- |
+| `AUTH_LIMITER`        | 1001      | 10 a min | credential POSTs per `cf-connecting-ip` (see request flow) |
+| `OFF_PRODUCT_LIMITER` | 1002      | 12 a min | outgoing OFF product reads, one shared key (OFF allows 15) |
+| `OFF_SEARCH_LIMITER`  | 1003      | 8 a min  | outgoing OFF searches, one shared key (OFF allows 10)      |
+
+All three count per Cloudflare location and are eventually consistent, so the caps are approximate. The OFF ones
+are shared by the whole Worker, because OFF limits our egress, not our user. e2e keeps to two OFF searches per
+browser project for that reason.
+
+### BLV generics migration
+
+`scripts/import-blv.ts` (`pnpm blv:import [--dir data/blv] [--out-dir drizzle] [--chunk-bytes 60000]`) reads the
+English, German and French BLV Swiss Food Composition Database xlsx files (downloaded by hand from naehrwertdaten.ch
+into the gitignored `data/blv/`) and writes one
+`INSERT ... ON CONFLICT(source, source_ref) DO UPDATE` per food, skipping rows the user edited. The statements are
+split over several migrations of about 60 KB each, `drizzle/0003_blv_foods_01.sql` to `0017_blv_foods_15.sql`
+(version 7.1), because `wrangler d1 migrations apply --remote` sends a file as one request and D1 limits that to
+about 100 KB. Each needs its own journal entry and snapshot, so the script fills existing empty custom migrations
+(`pnpm drizzle-kit generate --custom --name blv_foods_NN`) and, when their number does not match, stops and prints
+the commands. The migrations are committed and applied by the normal migration step. A new BLV version means
+re-running the script, which produces new migrations. `scripts/migrations.spec.ts` fails if any migration file
+grows past 80 KB. Only foods with kcal, protein, carbs and fat in range are imported; attribution is in Settings.
+
 ## Directory map
 
-| Path                        | Contents                                                                     |
-| --------------------------- | ---------------------------------------------------------------------------- |
-| `src/hooks.server.ts`       | Request guard (rate limit, session, access)                                  |
-| `src/routes/(app)`          | Signed in pages inside the app shell (tab bar, sidebar)                      |
-| `src/routes/(auth)`         | `/login` and `/setup` without the shell                                      |
-| `src/lib/server`            | Better Auth setup, guard rules, rate limit rules, Drizzle schema (`db/`)     |
-| `src/lib/domain`            | Pure domain math (added with the first feature that needs it)                |
-| `src/lib/components`        | `shell/` (navigation) and `ui/` (design system components)                   |
-| `src/service-worker`        | Offline app shell                                                            |
-| `drizzle/`                  | Generated SQL migrations, applied with wrangler                              |
-| `e2e/`                      | Playwright tests (Chromium desktop, WebKit iPhone)                           |
-| `scripts/e2e-db-reset.sh`   | Fresh migrated local D1 and a `BETTER_AUTH_SECRET` for e2e                   |
-| `wrangler.jsonc`            | Worker config: D1, rate limit binding, custom domain, production `ORIGIN`    |
-| `worker-configuration.d.ts` | Generated by `pnpm gen`; `pnpm check` and `pnpm build` fail when it is stale |
+| Path                           | Contents                                                                                                        |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `src/hooks.server.ts`          | Request guard (rate limit, session, access)                                                                     |
+| `src/routes/(app)`             | Signed in pages inside the app shell (tab bar, sidebar)                                                         |
+| `src/routes/(auth)`            | `/login` and `/setup` without the shell                                                                         |
+| `src/lib/server`               | Better Auth setup, guard rules, rate limits, Drizzle schema, `off/` client, `foods/`, `log/`, `settings/` repos |
+| `src/lib/schemas`              | Valibot schemas shared by forms and remote commands                                                             |
+| `src/lib/domain`               | Pure domain math: nutrition, targets, dates, search text, limits                                                |
+| `src/lib/components`           | `shell/` (navigation), `ui/` (design system) and `log/` (add sheet, forms, day view)                            |
+| `src/lib/stores`               | Shared client state (add sheet, toasts)                                                                         |
+| `src/routes/(app)/*.remote.ts` | Remote commands and queries: `foods`, `log`, `settings/target`                                                  |
+| `scripts/import-blv.ts`        | Generates the BLV foods migration                                                                               |
+| `src/service-worker`           | Offline app shell                                                                                               |
+| `drizzle/`                     | Generated SQL migrations, applied with wrangler                                                                 |
+| `e2e/`                         | Playwright tests (Chromium desktop, WebKit iPhone)                                                              |
+| `scripts/e2e-db-reset.sh`      | Fresh migrated local D1 and a `BETTER_AUTH_SECRET` for e2e                                                      |
+| `e2e/off-stub.mjs`             | Local Open Food Facts stand in (port 4174) serving recorded fixtures                                            |
+| `wrangler.jsonc`               | Worker config: D1, rate limit bindings, custom domain, production vars                                          |
+| `worker-configuration.d.ts`    | Generated by `pnpm gen`; `pnpm check` and `pnpm build` fail when it is stale                                    |
 
 ## Run locally
 
@@ -73,7 +141,8 @@ pnpm dev                 # http://localhost:5173
 `wrangler.jsonc` sets the production `ORIGIN`. `pnpm preview` and the e2e run serve the built Worker with
 `wrangler dev` (with `--infer-origin-from-routes=false`, otherwise the custom domain route makes the Worker see
 `kcal.avp.software` as its host), which reads `BETTER_AUTH_SECRET` from `.dev.vars` and takes `--var ORIGIN:http://localhost:4173`
-from `playwright.config.ts`. `scripts/e2e-db-reset.sh` creates `.dev.vars` from `.env` locally, or with a random
+from `playwright.config.ts`, which also starts `e2e/off-stub.mjs` on port 4174 and passes `--var OFF_BASE_URL` and
+`--var OFF_SEARCH_URL` pointing at it. `scripts/e2e-db-reset.sh` creates `.dev.vars` from `.env` locally, or with a random
 secret when `CI` is set. `vite build` validates the variables declared in `src/env.ts` without bundling them, so
 a build without `.env` (CI) needs placeholder `ORIGIN` and `BETTER_AUTH_SECRET` in the environment; the workflow
 sets them.
@@ -122,6 +191,7 @@ pnpm build && pnpm wrangler deploy
 | Secret                  | Where it lives                                                                                                                      |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `BETTER_AUTH_SECRET`    | Production: Worker secret, set once with `pnpm wrangler secret put BETTER_AUTH_SECRET`. Local: `.env` and `.dev.vars` (gitignored). |
+| `OFF_CONTACT_EMAIL`     | Production: Worker secret, `pnpm wrangler secret put OFF_CONTACT_EMAIL`. Local: `.env`. e2e writes a fixed value to `.dev.vars`.    |
 | `CLOUDFLARE_API_TOKEN`  | Local: `.env`, read by wrangler. CI: GitHub Actions secret.                                                                         |
 | `CLOUDFLARE_ACCOUNT_ID` | CI: GitHub Actions secret. Local: optional in `.env`.                                                                               |
 

@@ -19,6 +19,7 @@ Auth (passkeys), Vitest, Playwright. Package manager: pnpm.
 - New UI components get an entry on the `/design` route showing all states.
 - Log entries and batches store nutrition snapshots; never recompute history from current foods.
 - All Open Food Facts calls go through the server with the configured User-Agent; cache results in D1.
+- Writes are remote `command`s with a shared Valibot schema from `src/lib/schemas`, followed by `await invalidateAll()`; a failed refresh after a successful write is not a failed write. Forms validate on blur with the same schema.
 - Schema changes: edit `src/lib/server/db/schema.ts`, run `pnpm db:generate`, commit the migration.
 - Never commit `.env` or secrets. Document new variables in `.env.example`.
 - Touch targets at least 44 px; respect `prefers-reduced-motion`; test on the WebKit iPhone profile.

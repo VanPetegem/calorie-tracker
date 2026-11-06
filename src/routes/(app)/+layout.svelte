@@ -1,21 +1,43 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import AddSheet from '#lib/components/log/AddSheet.svelte';
+	import ResumeRefresh from '#lib/components/shell/ResumeRefresh.svelte';
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
 	import TabBar from '#lib/components/shell/TabBar.svelte';
+	import { addSheet } from '#lib/stores/add-sheet.svelte.ts';
+	import type { DayData } from '#lib/server/log/day.ts';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
+
+	// The day pages carry the day, recents and frequents; other pages leave them out and the sheet fetches its own.
+	const day = $derived(
+		'recents' in page.data && 'date' in page.data ? (page.data as unknown as DayData) : null
+	);
+
+	// ⌘K on a Mac, Ctrl+K elsewhere.
+	function onkeydown(event: KeyboardEvent) {
+		if (event.key.toLowerCase() !== 'k' || !(event.metaKey || event.ctrlKey) || event.altKey)
+			return;
+		event.preventDefault();
+		addSheet.show();
+	}
 </script>
 
 <!-- Below 1024 px a tab bar; from 1024 px a sidebar. The hidden one is display: none, so only one landmark exists. -->
-<Sidebar pathname={page.url.pathname} class="hidden lg:flex" />
-<TabBar pathname={page.url.pathname} class="lg:hidden" />
+<svelte:window {onkeydown} />
+<ResumeRefresh />
+
+<Sidebar pathname={page.url.pathname} onadd={() => addSheet.show()} class="hidden lg:flex" />
+<TabBar pathname={page.url.pathname} onadd={() => addSheet.show()} class="lg:hidden" />
 
 <div class="shell">
 	<main class="content">
 		{@render children()}
 	</main>
 </div>
+
+<AddSheet {day} />
 
 <style>
 	/* Clears the status bar (the app draws under it) and the fixed tab bar: 64 px of bar plus the home indicator inset. */

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import Plus from '@lucide/svelte/icons/plus';
+	import { Button } from '#lib/components/ui/index.ts';
 	import { isActive, navItems } from './nav.ts';
 
 	type Props = {
@@ -8,10 +10,18 @@
 		label?: string;
 		/** Renders in the normal flow instead of fixed to the left edge (for the /design page). */
 		preview?: boolean;
+		/** The "Add food" button above the destinations. */
+		onadd: () => void;
 		class?: string;
 	};
 
-	let { pathname, label = 'Primary', preview = false, class: className = '' }: Props = $props();
+	let {
+		pathname,
+		label = 'Primary',
+		preview = false,
+		onadd,
+		class: className = ''
+	}: Props = $props();
 </script>
 
 <nav
@@ -23,6 +33,10 @@
 	]}
 >
 	<p class="px-3 text-2xl font-semibold tracking-tight text-text">kcal</p>
+	<Button icon={Plus} onclick={onadd}>
+		Add food
+		<kbd class="font-sans text-sm font-normal opacity-80" aria-hidden="true">⌘K</kbd>
+	</Button>
 	<ul class="flex flex-col gap-1">
 		{#each navItems as item (item.href)}
 			{@const active = isActive(item.href, pathname)}

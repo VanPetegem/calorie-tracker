@@ -1,0 +1,6 @@
+// Bindings for server tests (see d1.ts). Kept apart from the root config so tests never read .dev.vars secrets.
+{
+	"name": "kcal-test",
+	"compatibility_date": "2026-11-04",
+	"d1_databases": [{ "binding": "DB", "database_name": "kcal-test", "database_id": "kcal-test" }]
+}

@@ -102,4 +102,17 @@ describe('withUndo', () => {
 		expect(toasts.items).toHaveLength(1);
 		expect(toasts.items[0]?.tone).toBe('danger');
 	});
+
+	it('offers a retry after a failed revert', async () => {
+		const revert = vi
+			.fn()
+			.mockRejectedValueOnce(new Error('offline'))
+			.mockResolvedValueOnce(undefined);
+		withUndo({ message: 'Entry deleted', apply: vi.fn(), revert });
+		await toasts.items[0]!.action!.run();
+		expect(toasts.items[0]?.action?.label).toBe('Retry');
+		await toasts.items[0]!.action!.run();
+		expect(revert).toHaveBeenCalledTimes(2);
+		expect(toasts.items).toHaveLength(0);
+	});
 });

@@ -12,7 +12,8 @@
 		"eslint.config.js",
 		"playwright.config.ts",
 		"drizzle.config.ts",
-		"pwa-assets.config.ts"
+		"pwa-assets.config.ts",
+		"scripts/**/*.ts"
 	],
 	"exclude": ["src/service-worker"]
 }

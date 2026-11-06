@@ -13,7 +13,10 @@ export default defineConfig({
 				runes: ({ filename }) =>
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
-			adapter: adapter()
+			adapter: adapter(),
+			// Remote functions (`*.remote.ts`) are still experimental in SvelteKit 3. Commands need only this flag;
+			// `compilerOptions.experimental.async` is only for `await` in component markup.
+			experimental: { remoteFunctions: true }
 		})
 	],
 	// Svelte component libraries must not be pre-bundled, or they get a second copy of the Svelte runtime
@@ -43,7 +46,7 @@ export default defineConfig({
 				test: {
 					name: 'server',
 					environment: 'node',
-					include: ['src/**/*.{test,spec}.{js,ts}'],
+					include: ['src/**/*.{test,spec}.{js,ts}', 'scripts/**/*.{test,spec}.ts'],
 					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
 				}
 			}

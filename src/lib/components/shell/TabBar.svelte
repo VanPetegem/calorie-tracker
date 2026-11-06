@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Plus from '@lucide/svelte/icons/plus';
 	import { isActive, navItems } from './nav.ts';
 
 	type Props = {
@@ -8,10 +9,21 @@
 		label?: string;
 		/** Renders in the normal flow instead of fixed to the screen bottom (for the /design page). */
 		preview?: boolean;
+		/** The round add button in the middle of the bar. */
+		onadd: () => void;
 		class?: string;
 	};
 
-	let { pathname, label = 'Primary', preview = false, class: className = '' }: Props = $props();
+	let {
+		pathname,
+		label = 'Primary',
+		preview = false,
+		onadd,
+		class: className = ''
+	}: Props = $props();
+
+	// The add button sits between the second and third destination.
+	const MIDDLE = Math.ceil(navItems.length / 2);
 </script>
 
 <nav
@@ -19,8 +31,20 @@
 	class={['tabbar border-t border-border bg-surface', preview && 'preview', className]}
 >
 	<ul class="flex">
-		{#each navItems as item (item.href)}
+		{#each navItems as item, index (item.href)}
 			{@const active = isActive(item.href, pathname)}
+			{#if index === MIDDLE}
+				<li class="flex min-w-0 flex-1 items-center justify-center">
+					<button
+						type="button"
+						aria-label="Add food"
+						onclick={onadd}
+						class="inline-flex size-12 cursor-pointer items-center justify-center rounded-full bg-brand-solid text-on-brand shadow-md outline-hidden transition duration-100 ease-out hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-95 active:brightness-95"
+					>
+						<Plus size={24} aria-hidden="true" />
+					</button>
+				</li>
+			{/if}
 			<li class="min-w-0 flex-1">
 				<!-- eslint-disable svelte/no-navigation-without-resolve -- navItems holds absolute app paths -->
 				<a
