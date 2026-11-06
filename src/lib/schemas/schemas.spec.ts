@@ -8,6 +8,7 @@ import {
 	QuickInput,
 	RestoreEntryInput
 } from './log.ts';
+import { fitsUnit, LOG_UNITS } from './fields.ts';
 import { ArchiveRecipeInput, RecipeInput } from './recipe.ts';
 import { ManualTargetInput } from './settings.ts';
 
@@ -116,6 +117,10 @@ describe('LogFoodInput', () => {
 		expect(v.safeParse(LogFoodInput, { ...entry, kcal: 100 }).success).toBe(false);
 	});
 
+	it('rejects portions: only batches are logged in portions', () => {
+		expect(v.safeParse(LogFoodInput, { ...entry, unit: 'portion', amount: 1 }).success).toBe(false);
+	});
+
 	it('rejects a date that is not a calendar date', () => {
 		expect(v.safeParse(LogFoodInput, { ...entry, date: '2026-02-30' }).success).toBe(false);
 	});
@@ -129,6 +134,20 @@ describe('EditAmountInput', () => {
 		expect(v.safeParse(EditAmountInput, { id: foodId, amount: 5001, unit: 'ml' }).success).toBe(
 			false
 		);
+	});
+
+	it('rejects portions for a food entry', () => {
+		expect(v.safeParse(EditAmountInput, { id: foodId, amount: 1, unit: 'portion' }).success).toBe(
+			false
+		);
+	});
+});
+
+describe('log units', () => {
+	it('include portion, limited to MAX_PORTIONS', () => {
+		expect(LOG_UNITS).toContain('portion');
+		expect(fitsUnit({ amount: 100, unit: 'portion' })).toBe(true);
+		expect(fitsUnit({ amount: 100.5, unit: 'portion' })).toBe(false);
 	});
 });
 

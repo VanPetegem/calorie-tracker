@@ -1,7 +1,8 @@
 import * as v from 'valibot';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { addDays, loggedAtFor } from '../../domain/dates.ts';
-import { LogFoodInput } from '../../schemas/log.ts';
+import type { LogUnit } from '../../schemas/fields.ts';
+import { LogFoodInput, type EditAmountInput } from '../../schemas/log.ts';
 import { foods, logEntries } from '../db/schema.ts';
 import { createFood, getFood } from '../foods/repo.ts';
 import { newId } from '../id.ts';
@@ -113,6 +114,16 @@ describe('log repository', () => {
 			expect(await allEntries()).toEqual([]);
 		});
 
+		it('fails with 400 for portions of a food and writes nothing', async () => {
+			// The schema rejects this already; the repository must not rely on it.
+			const unit = 'portion' as LogUnit as LogFoodInput['unit'];
+			await expect(logOats({ unit, amount: 1 })).rejects.toMatchObject({
+				status: 400,
+				body: { message: 'A food is not logged in portions' }
+			});
+			expect(await allEntries()).toEqual([]);
+		});
+
 		it('rejects a date after tomorrow and accepts tomorrow', async () => {
 			await expect(logOats({ date: addDays(TODAY, 2) })).rejects.toMatchObject({ status: 400 });
 			expect(await allEntries()).toEqual([]);
@@ -203,6 +214,18 @@ describe('log repository', () => {
 			await expect(
 				updateEntryAmount(test.db, { id: entry.id, amount: 100, unit: 'ml' })
 			).rejects.toMatchObject({ status: 400 });
+		});
+
+		it('fails with 400 for portions of a food entry and leaves it unchanged', async () => {
+			const entry = await logOats();
+			const unit = 'portion' as LogUnit as EditAmountInput['unit'];
+			await expect(
+				updateEntryAmount(test.db, { id: entry.id, amount: 1, unit })
+			).rejects.toMatchObject({
+				status: 400,
+				body: { message: 'A food is not logged in portions' }
+			});
+			expect(await allEntries()).toEqual([entry]);
 		});
 
 		it('rescales the stored snapshot when switching from g to servings', async () => {

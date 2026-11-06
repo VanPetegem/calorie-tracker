@@ -4,6 +4,18 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-06
 
+- **`log_entries.batch_id` became a real reference by a table rebuild, with the pragma edited by hand.** drizzle-kit
+  rebuilt `log_entries` in `drizzle/0020_batches.sql` between `PRAGMA foreign_keys=OFF` and `=ON`. D1 applies a
+  migration as one transaction, where SQLite ignores `foreign_keys`, so the keys stay on; the migration uses
+  `PRAGMA defer_foreign_keys = on` instead, which checks them at commit. The rebuild is safe because no table or
+  trigger references `log_entries`, the copy names all 16 columns and every index is recreated.
+  `src/lib/server/db/migrations.spec.ts` applies the migrations up to 0019, writes food, quick and soft deleted
+  entries and a recipe, applies the rest and checks every row, column, index and trigger, plus
+  `PRAGMA foreign_key_check`. The fallback (a plain column checked in the repository) was not needed. Batches with
+  a live entry cannot be deleted (no cascade on `batch_id`); batch ingredients go with their batch.
+- **Food entries have their own unit list.** `LOG_UNITS` gained `portion` (limit `MAX_PORTIONS` in `fitsUnit`), but
+  `LogFoodInput`, `EditAmountInput` and the food amount step use `FOOD_LOG_UNITS` (`g`, `ml`, `serving`), and
+  `gramsFor` in `server/log/repo.ts` refuses a portion with a 400 even when a caller skips the schema.
 - **Recipe saves report a refused line as a result, not an HTTP error; a missing recipe is a 404.** The recipe
   repository throws typed errors with user facing messages (`UnknownFoodError`, `UnitNotAvailableError`, both with the
   ingredient's `index`, and `RecipeNotFoundError`); it stays free of HTTP. The remote layer

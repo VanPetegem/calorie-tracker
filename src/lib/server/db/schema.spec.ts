@@ -1,7 +1,17 @@
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createTestDb } from '../test/d1.ts';
-import { foods, recipeIngredients, recipes, settings, user } from './schema.ts';
+import {
+	batches,
+	batchIngredients,
+	containers,
+	foods,
+	logEntries,
+	recipeIngredients,
+	recipes,
+	settings,
+	user
+} from './schema.ts';
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>;
 
@@ -116,5 +126,96 @@ describe('schema constraints', () => {
 				failedOn('FOREIGN KEY constraint failed')
 			);
 		});
+	});
+
+	describe('batches', () => {
+		const batchId = crypto.randomUUID();
+		const oats = food();
+		const totals = { kcal: 740, protein: 26, carbs: 118, fat: 14, fiber: 20 };
+		const batch = (
+			overrides: Partial<typeof batches.$inferInsert> = {}
+		): typeof batches.$inferInsert => ({
+			id: batchId,
+			name: 'Porridge',
+			cookedOn: '2026-11-06',
+			portions: 4,
+			...totals,
+			...overrides
+		});
+		const entry = (batchId: string): typeof logEntries.$inferInsert => ({
+			id: crypto.randomUUID(),
+			date: '2026-11-06',
+			loggedAt: '2026-11-06T12:00:00.000Z',
+			kind: 'batch',
+			batchId,
+			amount: 1,
+			unit: 'portion',
+			label: 'Porridge',
+			kcal: 185,
+			protein: 6.5,
+			carbs: 29.5,
+			fat: 3.5
+		});
+		beforeEach(async () => {
+			await test.db.insert(foods).values(oats);
+			await test.db.insert(batches).values(batch());
+			await test.db.insert(batchIngredients).values({
+				id: crypto.randomUUID(),
+				batchId,
+				foodId: oats.id,
+				name: 'Oats',
+				amount: 200,
+				unit: 'g',
+				grams: 200,
+				kcal: 370,
+				protein: 13,
+				carbs: 59,
+				fat: 7,
+				fiber: 10,
+				position: 0
+			});
+		});
+
+		it('delete their ingredients with them', async () => {
+			await test.db.delete(batches).where(eq(batches.id, batchId));
+			expect(await test.db.$count(batchIngredients)).toBe(0);
+		});
+
+		it('are the only batches a log entry can reference', async () => {
+			await test.db.insert(logEntries).values(entry(batchId));
+			await expect(
+				test.db.insert(logEntries).values(entry(crypto.randomUUID()))
+			).rejects.toMatchObject(failedOn('FOREIGN KEY constraint failed'));
+		});
+
+		it('cannot be deleted while a log entry references them', async () => {
+			await test.db.insert(logEntries).values(entry(batchId));
+			await expect(test.db.delete(batches).where(eq(batches.id, batchId))).rejects.toMatchObject(
+				failedOn('FOREIGN KEY constraint failed')
+			);
+		});
+
+		it('reject zero portions and a cooked weight of zero', async () => {
+			await expect(
+				test.db.insert(batches).values(batch({ id: crypto.randomUUID(), portions: 0 }))
+			).rejects.toMatchObject(failedOn('CHECK constraint failed: batches_portions_positive'));
+			await expect(
+				test.db.insert(batches).values(batch({ id: crypto.randomUUID(), cookedWeightG: 0 }))
+			).rejects.toMatchObject(failedOn('CHECK constraint failed: batches_cooked_weight_positive'));
+		});
+
+		it('reference an existing recipe or none', async () => {
+			await expect(
+				test.db
+					.insert(batches)
+					.values(batch({ id: crypto.randomUUID(), recipeId: crypto.randomUUID() }))
+			).rejects.toMatchObject(failedOn('FOREIGN KEY constraint failed'));
+		});
+	});
+
+	it('rejects a container with zero tare', async () => {
+		await expect(
+			test.db.insert(containers).values({ id: crypto.randomUUID(), name: 'Pot', tareG: 0 })
+		).rejects.toMatchObject(failedOn('CHECK constraint failed: containers_tare_positive'));
 	});
 });

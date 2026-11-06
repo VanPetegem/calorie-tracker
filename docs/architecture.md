@@ -209,6 +209,13 @@ whole gate.
 4. On merge to `main`, CI builds, runs `pnpm db:migrate:remote`, then deploys. Migrations must stay compatible with
    the previous Worker version, because the migration runs before the new code ships.
 
+D1 applies each migration file as one transaction with foreign keys on, and SQLite ignores `PRAGMA foreign_keys`
+inside a transaction. When drizzle-kit rebuilds a table it writes `PRAGMA foreign_keys=OFF` and `=ON`; replace them by
+hand with `PRAGMA defer_foreign_keys = on` before the rebuild (see `drizzle/0020_batches.sql`), check that the copy
+names every column and every index is recreated, and extend `src/lib/server/db/migrations.spec.ts`, which applies the
+migrations to a database that already holds data. The test helper (`src/lib/server/test/d1.ts`) applies a file the
+way `wrangler d1 migrations apply` does: its statements in one D1 `batch`.
+
 `drizzle/0001_single_account.sql` is hand written: a trigger on `user` that aborts a second insert (the database
 level backstop for single account sign up). SQLite drops a table's triggers when the table is rebuilt, which
 drizzle-kit does for some column changes. After any migration that touches `user`, re-create the trigger in that

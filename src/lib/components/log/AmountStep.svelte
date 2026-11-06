@@ -2,7 +2,7 @@
 	import { untrack } from 'svelte';
 	import { MAX_AMOUNT_GRAMS_OR_ML, MAX_AMOUNT_SERVINGS } from '#lib/domain/constants.ts';
 	import { snapshotFor, toGrams, type Per100 } from '#lib/domain/nutrition.ts';
-	import type { LogUnit } from '#lib/schemas/fields.ts';
+	import type { FoodLogUnit } from '#lib/schemas/fields.ts';
 	import type { Food } from '#lib/server/db/schema.ts';
 	import { parseDecimal } from '#lib/utils/decimal.ts';
 	import Pencil from '@lucide/svelte/icons/pencil';
@@ -51,7 +51,7 @@
 
 	// The food and initial amount are fixed for one step: the parent mounts a new step for another food.
 	const start = untrack(() => defaultAmount(food, initial));
-	let unit = $state<LogUnit>(start.unit);
+	let unit = $state<FoodLogUnit>(start.unit);
 	let text = $state(format(start.amount));
 	let touched = $state(false);
 	let busy = $state(false);
@@ -78,7 +78,7 @@
 		return String(Math.round(value * 100) / 100);
 	}
 
-	function setUnit(next: LogUnit) {
+	function setUnit(next: FoodLogUnit) {
 		if (next === unit) return;
 		// Keep the same quantity of food: 80 g becomes 2 servings of 40 g.
 		if (amount !== null && amount > 0) {

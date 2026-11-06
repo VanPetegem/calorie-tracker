@@ -14,9 +14,9 @@ import type {
 	LogFoodInput,
 	QuickInput
 } from '../../schemas/log.ts';
-import type { LogUnit } from '../../schemas/fields.ts';
+import { FOOD_LOG_UNITS, type FoodLogUnit, type LogUnit } from '../../schemas/fields.ts';
 import type { Db } from '../db/index.ts';
-import { logEntries, type LogEntry } from '../db/schema.ts';
+import { logEntries, type Food, type LogEntry } from '../db/schema.ts';
 import { getFood, unarchiveFood } from '../foods/repo.ts';
 import { newId } from '../id.ts';
 
@@ -28,8 +28,23 @@ export function assertLogDate(date: string, today: string): void {
 	if (!isAllowedLogDate(date, today)) error(400, 'You can log up to tomorrow');
 }
 
-/** Converts an amount to grams, as a 400 when the food has no serving weight for a serving amount. */
-function gramsFor(amount: number, unit: LogUnit, servingG: number | null): number {
+function isFoodLogUnit(unit: LogUnit): unit is FoodLogUnit {
+	return (FOOD_LOG_UNITS as readonly LogUnit[]).includes(unit);
+}
+
+/**
+ * Converts an amount of a food to grams, as a 400 when the unit does not fit: portions (only batches have them), g or
+ * ml against the food's basis, or a serving of a food without a serving weight. Takes any log unit, so it holds even
+ * when a caller skipped the schema. Without the food row only the portion check applies.
+ */
+function gramsFor(
+	amount: number,
+	unit: LogUnit,
+	food: Pick<Food, 'nutritionBasis' | 'servingG'> | null
+): number {
+	if (!isFoodLogUnit(unit)) error(400, 'A food is not logged in portions');
+	if (food) assertUnitFits(unit, food.nutritionBasis);
+	const servingG = food?.servingG ?? null;
 	if (unit === 'serving' && servingG === null) error(400, 'This food has no serving size');
 	return toGrams(amount, unit, servingG);
 }
@@ -69,7 +84,7 @@ export function dayTotals(entries: LogEntry[]): Nutrients {
 }
 
 /** A g or ml amount must match the food's basis. Servings fit any food. */
-function assertUnitFits(unit: LogUnit, basis: 'g' | 'ml'): void {
+function assertUnitFits(unit: FoodLogUnit, basis: 'g' | 'ml'): void {
 	if (unit !== 'serving' && unit !== basis) error(400, `This food is measured in ${basis}`);
 }
 
@@ -82,8 +97,7 @@ export async function addFoodEntry(
 	assertLogDate(input.date, ctx.today);
 	const food = await getFood(db, input.foodId);
 	if (!food) error(404, 'Food not found');
-	assertUnitFits(input.unit, food.nutritionBasis);
-	const grams = gramsFor(input.amount, input.unit, food.servingG);
+	const grams = gramsFor(input.amount, input.unit, food);
 	const [entry] = await db
 		.insert(logEntries)
 		.values({
@@ -143,8 +157,7 @@ export async function updateEntryAmount(db: Db, input: EditAmountInput): Promise
 	const entry = await getEntry(db, input.id, 'food');
 	if (entry.grams === null || entry.foodId === null) error(400, 'This entry has no amount');
 	const food = await getFood(db, entry.foodId);
-	if (food) assertUnitFits(input.unit, food.nutritionBasis);
-	const grams = gramsFor(input.amount, input.unit, food?.servingG ?? null);
+	const grams = gramsFor(input.amount, input.unit, food);
 	const [updated] = await db
 		.update(logEntries)
 		.set({

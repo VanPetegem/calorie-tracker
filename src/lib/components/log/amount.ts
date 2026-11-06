@@ -1,12 +1,12 @@
-import type { LogUnit } from '#lib/schemas/fields.ts';
+import type { FoodLogUnit } from '#lib/schemas/fields.ts';
 
 /** The part of a food the amount step needs to pick units and defaults. */
 export type AmountFood = { nutritionBasis: 'g' | 'ml'; servingG: number | null };
 
-export type AmountValue = { amount: number; unit: LogUnit };
+export type AmountValue = { amount: number; unit: FoodLogUnit };
 
 /** Units offered for a food: its base unit (g or ml), plus serving when the food has a serving weight. */
-export function unitOptions(food: AmountFood): LogUnit[] {
+export function unitOptions(food: AmountFood): FoodLogUnit[] {
 	return food.servingG === null ? [food.nutritionBasis] : [food.nutritionBasis, 'serving'];
 }
 
@@ -37,8 +37,8 @@ export function defaultAmount(
 /** The same quantity in another unit, rounded to two decimals. g and ml are interchangeable here. */
 export function convertAmount(
 	amount: number,
-	from: LogUnit,
-	to: LogUnit,
+	from: FoodLogUnit,
+	to: FoodLogUnit,
 	servingG: number | null
 ): number {
 	if (servingG === null || (from === 'serving') === (to === 'serving')) return amount;
