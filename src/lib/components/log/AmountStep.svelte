@@ -69,6 +69,8 @@
 	type Props = FoodProps | BatchProps;
 
 	const props: Props = $props();
+	const uid = $props.id();
+	const hintId = `${uid}-unit-hint`;
 
 	type StepUnit = FoodLogUnit | BatchLogUnit;
 	const NO_NUTRIENTS: Nutrients = { kcal: 0, protein: 0, carbs: 0, fat: 0, fiber: null };
@@ -209,10 +211,11 @@
 			label="Unit"
 			options={unitChoices}
 			bind:value={() => unit, setUnit}
+			describedby={unitHint ? hintId : undefined}
 			class="w-full"
 		/>
 		{#if unitHint}
-			<p class="text-sm text-text-muted">{unitHint}</p>
+			<p id={hintId} class="text-sm text-text-muted">{unitHint}</p>
 		{/if}
 		<Input
 			label="Amount"

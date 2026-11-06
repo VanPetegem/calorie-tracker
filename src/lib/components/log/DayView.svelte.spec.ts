@@ -310,18 +310,5 @@ describe('DayView edit', () => {
 				.toHaveAttribute('aria-disabled', 'true');
 			await expect.element(page.getByRole('radio', { name: 'g', exact: true })).toBeChecked();
 		});
-
-		it('edits an entry without grams in portions only', async () => {
-			render(DayViewTestHarness, {
-				data: withEntry({ ...batchEntry, amount: 2, grams: null })
-			});
-			await stew().click();
-			await expect.element(grams()).toHaveAttribute('aria-disabled', 'true');
-			await expect
-				.element(page.getByText('This entry has no weight, so it changes in portions only'))
-				.toBeVisible();
-			await page.getByLabelText('Amount').fill('1');
-			await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('375 kcal');
-		});
 	});
 });

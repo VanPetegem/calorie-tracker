@@ -12,8 +12,9 @@ class AddSheetState {
 	/** A batch to open the sheet at (its amount step). `AddSheet` takes it when it opens and clears it. */
 	batch = $state.raw<BatchSummary | null>(null);
 
+	/** Opens the sheet at its search step. A sheet that is already open stays where it is, so ⌘K never drops a typed amount. */
 	show(): void {
-		this.batch = null;
+		if (!this.open) this.batch = null;
 		this.open = true;
 	}
 

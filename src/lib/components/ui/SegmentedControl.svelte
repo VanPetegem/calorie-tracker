@@ -5,10 +5,12 @@
 		value: T;
 		/** Accessible name of the group. */
 		label: string;
+		/** Id of the element that explains the group, e.g. why an option is disabled. */
+		describedby?: string;
 		class?: string;
 	};
 
-	let { options, value = $bindable(), label, class: className = '' }: Props = $props();
+	let { options, value = $bindable(), label, describedby, class: className = '' }: Props = $props();
 
 	function onkeydown(event: KeyboardEvent & { currentTarget: HTMLElement }, index: number) {
 		// The next enabled option in a direction, wrapping around; the same one when no other is enabled.
@@ -49,6 +51,7 @@
 <div
 	role="radiogroup"
 	aria-label={label}
+	aria-describedby={describedby}
 	class={['inline-flex rounded-md border border-border-strong bg-surface p-0.5', className]}
 >
 	{#each options as option, index (option.value)}

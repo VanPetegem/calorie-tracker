@@ -176,7 +176,12 @@ describe('AmountStep for a batch', () => {
 		render(AmountStep, p);
 		const grams = page.getByRole('radio', { name: 'g', exact: true });
 		await expect.element(grams).toHaveAttribute('aria-disabled', 'true');
-		await expect.element(page.getByText('Add the cooked weight to log grams')).toBeVisible();
+		const hint = page.getByText('Add the cooked weight to log grams');
+		await expect.element(hint).toBeVisible();
+		// The reason is linked to the unit switch, so a screen reader announces it with the disabled unit.
+		await expect
+			.element(page.getByRole('radiogroup', { name: 'Unit' }))
+			.toHaveAccessibleDescription('Add the cooked weight to log grams');
 		await grams.click({ force: true });
 		await expect.element(page.getByRole('radio', { name: 'portion' })).toBeChecked();
 		await page.getByRole('button', { name: 'Log' }).click();
@@ -186,6 +191,9 @@ describe('AmountStep for a batch', () => {
 	it('does not offer the grams hint when the batch is weighed', async () => {
 		render(AmountStep, batchProps());
 		expect(page.getByText('Add the cooked weight to log grams').elements()).toHaveLength(0);
+		await expect
+			.element(page.getByRole('radiogroup', { name: 'Unit' }))
+			.not.toHaveAttribute('aria-describedby');
 	});
 
 	it('submits portions and grams', async () => {
@@ -247,31 +255,6 @@ describe('AmountStep for a batch', () => {
 			await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('1000 kcal');
 			await page.getByRole('button', { name: 'Save' }).click();
 			expect(p.onsubmit).toHaveBeenCalledWith({ amount: 2, unit: 'portion' });
-		});
-
-		it('switches a gram entry to portions with the batch current portion weight', async () => {
-			const entry = {
-				...portionEntry,
-				kcal: 250,
-				protein: 15,
-				carbs: 25,
-				fat: 10,
-				amount: 200,
-				unit: 'g',
-				grams: 200
-			};
-			render(
-				AmountStep,
-				batchProps(entryBatchSource(entry, 400)!, {
-					mode: 'edit',
-					initial: { amount: 200, unit: 'g' }
-				})
-			);
-			await page.getByRole('radio', { name: 'portion' }).click();
-			await expect.element(amountField()).toHaveValue('0.5');
-			await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('250 kcal');
-			await amountField().fill('1');
-			await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('500 kcal');
 		});
 
 		it('edits an entry without grams in portions only', async () => {

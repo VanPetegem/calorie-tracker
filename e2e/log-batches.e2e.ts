@@ -1,22 +1,24 @@
-import type { Page } from '@playwright/test';
+import type { Page, TestInfo } from '@playwright/test';
 import { expect, test } from './fixtures.ts';
 import { gotoHydrated } from './helpers.ts';
 
 /*
- * Logging batches from the add sheet. The batches come from e2e/seed.sql: one weighed stew per browser project
- * (4 portions, 2000 kcal, 1600 g: 500 kcal and 400 g a portion) and a one off without a cooked weight (2 portions,
- * 800 kcal). Each test logs on a past day of its own, so entries never meet.
+ * Logging batches from the add sheet. The batches come from e2e/seed.sql: one per test, browser project and attempt,
+ * named "E2E <test> <project> <retry>". Each test also logs on a day of its own, so entries never meet and every test
+ * passes alone and on a retry. Weighed batches have 4 portions, 2000 kcal and 1600 g (500 kcal and 400 g a portion);
+ * the others have 2 portions, 800 kcal and no cooked weight. The seed covers retry 0 and 1.
  */
 
 const isChromium = (projectName: string) => projectName.startsWith('chromium');
 
-/** `slot` picks the day: two days per slot, one for each browser project. */
-function logDate(projectName: string, slot: number): string {
-	return `2020-05-${String(10 + slot * 2 + (isChromium(projectName) ? 0 : 1))}`;
+/** `slot` picks the test, then one day per retry and per browser project: 2020-06-10 to 2020-06-25, which no other e2e file uses. */
+function logDate(testInfo: TestInfo, slot: number): string {
+	const project = isChromium(testInfo.project.name) ? 0 : 1;
+	return `2020-06-${String(10 + (slot * 2 + testInfo.retry) * 2 + project)}`;
 }
 
-const stewName = (projectName: string) =>
-	isChromium(projectName) ? 'E2E stew chromium-desktop' : 'E2E stew webkit-iphone';
+const batchName = (testInfo: TestInfo, kind: string) =>
+	`E2E ${kind} ${testInfo.project.name} ${testInfo.retry}`;
 
 async function openAddSheet(page: Page) {
 	const phone = (page.viewportSize()?.width ?? 0) < 1024;
@@ -30,8 +32,8 @@ async function openAddSheet(page: Page) {
 test('logs 1.5 portions of a batch, the day total matches, and the entry edits to 2 portions', async ({
 	page
 }, testInfo) => {
-	const name = stewName(testInfo.project.name);
-	await gotoHydrated(page, `/day/${logDate(testInfo.project.name, 0)}`);
+	const name = batchName(testInfo, 'portions');
+	await gotoHydrated(page, `/day/${logDate(testInfo, 0)}`);
 
 	const sheet = await openAddSheet(page);
 	// Batches sit above the quick actions and the search results while the field is empty.
@@ -85,8 +87,8 @@ test('logs 1.5 portions of a batch, the day total matches, and the entry edits t
 test('logs 200 g of a weighed batch and keeps the quantity when switching units', async ({
 	page
 }, testInfo) => {
-	const name = stewName(testInfo.project.name);
-	await gotoHydrated(page, `/day/${logDate(testInfo.project.name, 1)}`);
+	const name = batchName(testInfo, 'grams');
+	await gotoHydrated(page, `/day/${logDate(testInfo, 1)}`);
 
 	const sheet = await openAddSheet(page);
 	await sheet.getByRole('button', { name: new RegExp(name) }).click();
@@ -122,10 +124,11 @@ test('logs 200 g of a weighed batch and keeps the quantity when switching units'
 test('a batch without a cooked weight logs by portion only, and so does its entry', async ({
 	page
 }, testInfo) => {
-	await gotoHydrated(page, `/day/${logDate(testInfo.project.name, 2)}`);
+	const name = batchName(testInfo, 'one off');
+	await gotoHydrated(page, `/day/${logDate(testInfo, 2)}`);
 
 	const sheet = await openAddSheet(page);
-	await sheet.getByRole('button', { name: /E2E one off/ }).click();
+	await sheet.getByRole('button', { name: new RegExp(name) }).click();
 	await expect(sheet.getByRole('radio', { name: 'g', exact: true })).toHaveAttribute(
 		'aria-disabled',
 		'true'
@@ -135,7 +138,7 @@ test('a batch without a cooked weight logs by portion only, and so does its entr
 	await sheet.getByRole('button', { name: 'Log' }).click();
 	await expect(sheet).toBeHidden();
 
-	const entry = page.getByRole('button', { name: /^E2E one off/ });
+	const entry = page.getByRole('button', { name: new RegExp(`^${name}`) });
 	await expect(entry).toContainText('1 portion');
 	await entry.click();
 	const edit = page.locator('dialog[data-sheet][open]');
@@ -149,13 +152,16 @@ test('a batch without a cooked weight logs by portion only, and so does its entr
 	await edit.getByLabel('Amount').fill('2');
 	await edit.getByRole('button', { name: 'Save' }).click();
 	await expect(edit).toBeHidden();
-	await expect(page.getByRole('button', { name: /^E2E one off/ })).toContainText('800 kcal');
+	await expect(page.getByRole('button', { name: new RegExp(`^${name}`) })).toContainText(
+		'800 kcal'
+	);
 });
 
 test('typing in the search hides the batches', async ({ page }, testInfo) => {
-	await gotoHydrated(page, `/day/${logDate(testInfo.project.name, 3)}`);
+	const name = batchName(testInfo, 'search');
+	await gotoHydrated(page, `/day/${logDate(testInfo, 3)}`);
 	const sheet = await openAddSheet(page);
-	const batch = sheet.getByRole('button', { name: /E2E one off/ });
+	const batch = sheet.getByRole('button', { name: new RegExp(name) });
 	await expect(batch).toBeVisible();
 	await sheet.getByRole('searchbox', { name: 'Search foods' }).fill('poulet');
 	await expect(batch).toBeHidden();

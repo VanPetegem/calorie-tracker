@@ -94,6 +94,18 @@ describe('SegmentedControl', () => {
 			await expect.element(page.getByRole('radio', { name: 'portion' })).toBeChecked();
 		});
 
+		it('points the group at the element that explains it', async () => {
+			render(SegmentedControl, {
+				options: withDisabled,
+				label: 'Unit',
+				value: 'portion',
+				describedby: 'why'
+			});
+			await expect
+				.element(page.getByRole('radiogroup', { name: 'Unit' }))
+				.toHaveAttribute('aria-describedby', 'why');
+		});
+
 		it('skips it with the arrow keys', async () => {
 			const { setter } = setupDisabled();
 			(page.getByRole('radio', { name: 'portion' }).element() as HTMLElement).focus();
