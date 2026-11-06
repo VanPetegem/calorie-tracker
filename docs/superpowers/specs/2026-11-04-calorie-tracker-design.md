@@ -75,7 +75,7 @@ prefilled where available.
 
 ## 4. Meal prep model
 
-- **Recipe**: a template. Name, default portion count, notes, ingredients as (food, raw grams).
+- **Recipe**: a template. Name, default portion count, notes, ingredients as (food, amount and unit: g, ml or serving, as entered; the gram equivalent is stored).
 - **Batch**: one cooking session. "Cook batch" on a recipe creates a batch prefilled from the recipe;
   the user can change amounts, add or remove ingredients, set the portion count, and optionally enter
   the total cooked weight (with a saved container tare). Ingredient nutrition is snapshotted into the
@@ -149,7 +149,7 @@ left sidebar on desktop (>= 1024 px). Content max width 640 px on desktop, two c
   opens an amount step with unit switch (g / portion / serving) and live kcal and macro preview.
 - **Scanner**: full screen camera, started from a user tap, torch toggle if supported, manual EAN entry
   fallback, haptic feedback (where supported) and immediate result sheet.
-- **Recipes**: list with kcal per portion; editor (ingredients with grams, default portions); "Cook
+- **Recipes**: list with kcal per portion; editor (ingredients with amount and unit, default portions); "Cook
   batch" flow; batch detail with remaining portions and finish action.
 - **Weight**: one tap entry for today (prefilled with last value, stepper +/-0.1), trend chart
   (raw dots, trend line, goal slope), weekly rate, history list with edit.

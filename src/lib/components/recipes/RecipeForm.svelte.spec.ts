@@ -93,6 +93,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+	vi.restoreAllMocks();
 	if (document.querySelector('dialog[open]')) await userEvent.keyboard('{Escape}');
 	for (const item of [...toasts.items]) toasts.dismiss(item.id);
 	await vi.waitFor(() => expect(document.querySelector('dialog[open]')).toBeNull());
@@ -337,5 +338,216 @@ describe('RecipeForm archive', () => {
 	it('has no Archive button on a new recipe', async () => {
 		render(RecipeFormTestHarness, {});
 		expect(page.getByRole('button', { name: 'Archive recipe' }).elements()).toHaveLength(0);
+	});
+});
+
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((r) => (resolve = r));
+	return { promise, resolve };
+}
+
+const closed = () => vi.waitFor(() => expect(document.querySelector('dialog[open]')).toBeNull());
+
+/** Changes the amount of a row through its amount sheet. */
+async function setAmount(row: string, value: string) {
+	await page.getByRole('button', { name: new RegExp(`^${row}`) }).click();
+	await sheetSettled();
+	await page.getByLabelText('Amount').fill(value);
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await closed();
+}
+
+/** Removes a row through its menu. */
+async function removeRow(row: string) {
+	await page.getByRole('button', { name: `More actions for ${row}` }).click();
+	await sheetSettled();
+	await page.getByRole('dialog', { name: row }).getByRole('button', { name: 'Remove' }).click();
+	await closed();
+}
+
+const refuseEgg = {
+	ok: false,
+	reason: 'unit_not_available',
+	message: 'Egg has no serving size',
+	index: 1
+};
+
+const save = () => page.getByRole('button', { name: 'Save recipe' });
+
+describe('RecipeForm saving twice', () => {
+	it('does not create a second recipe while the first save is still refreshing', async () => {
+		const refresh = deferred<void>();
+		mocks.invalidateAll.mockReturnValue(refresh.promise);
+		render(RecipeFormTestHarness, { recipe: { ...saved, id: undefined } });
+		await field('Portions').fill('5');
+		await save().click();
+		await vi.waitFor(() => expect(mocks.invalidateAll).toHaveBeenCalled());
+		// A DOM click: the "Recipe saved" toast covers the button, so a pointer click would land on the toast.
+		(save().element() as HTMLElement).click();
+		expect(mocks.saveRecipe).toHaveBeenCalledTimes(1);
+		refresh.resolve();
+		await vi.waitFor(() => expect(mocks.goto).toHaveBeenCalledTimes(1));
+	});
+
+	it('sends the id of the recipe it created with every later save', async () => {
+		render(RecipeFormTestHarness, { recipe: { ...saved, id: undefined } });
+		await field('Portions').fill('5');
+		await save().click();
+		await vi.waitFor(() => expect(mocks.goto).toHaveBeenCalled());
+		await field('Portions').fill('6');
+		await save().click();
+		await vi.waitFor(() => expect(mocks.saveRecipe).toHaveBeenCalledTimes(2));
+		expect(mocks.saveRecipe.mock.calls[0]![0]).not.toHaveProperty('id');
+		expect(mocks.saveRecipe.mock.calls[1]![0]).toMatchObject({ id: saved.id, defaultPortions: 6 });
+	});
+
+	it('still opens the saved recipe when the refresh after the first save fails', async () => {
+		mocks.invalidateAll.mockRejectedValue(new Error('offline'));
+		render(RecipeFormTestHarness, { recipe: { ...saved, id: undefined } });
+		await field('Portions').fill('5');
+		await save().click();
+		await vi.waitFor(() =>
+			expect(mocks.goto).toHaveBeenCalledWith(`/recipes/${saved.id}`, { replaceState: true })
+		);
+	});
+});
+
+describe('RecipeForm archive toast', () => {
+	it('names the recipe as it was last saved', async () => {
+		render(RecipeFormTestHarness, { recipe: saved });
+		await field('Name').fill('Better rice');
+		await save().click();
+		await expect.element(page.getByText('Recipe saved')).toBeVisible();
+		await page.getByRole('button', { name: 'Archive recipe' }).click();
+		await expect.element(page.getByText('Archived Better rice')).toBeVisible();
+	});
+});
+
+describe('RecipeForm what counts as a change', () => {
+	it('an ingredient amount is a change', async () => {
+		render(RecipeFormTestHarness, { recipe: saved });
+		await setAmount('Chicken', '250');
+		expect(navigate()).toHaveBeenCalled();
+	});
+
+	it('the notes are a change', async () => {
+		render(RecipeFormTestHarness, { recipe: saved });
+		await field('Notes (optional)').fill('Rest for five minutes');
+		expect(navigate()).toHaveBeenCalled();
+	});
+
+	it('an edit made while a save is pending is still unsaved afterwards', async () => {
+		const pending = deferred<unknown>();
+		mocks.saveRecipe.mockReturnValue(pending.promise);
+		render(RecipeFormTestHarness, { recipe: saved });
+		await field('Portions').fill('5');
+		await save().click();
+		await vi.waitFor(() => expect(mocks.saveRecipe).toHaveBeenCalled());
+		await field('Portions').fill('6');
+		pending.resolve({ ok: true, id: saved.id });
+		await expect.element(page.getByText('Recipe saved')).toBeVisible();
+		expect(navigate()).toHaveBeenCalled();
+	});
+});
+
+describe('RecipeForm refused line', () => {
+	it('marks the line that was sent even if the list changed while saving', async () => {
+		const pending = deferred<unknown>();
+		mocks.saveRecipe.mockReturnValue(pending.promise);
+		render(RecipeFormTestHarness, { recipe: saved });
+		await field('Portions').fill('5');
+		await save().click();
+		await vi.waitFor(() => expect(mocks.saveRecipe).toHaveBeenCalled());
+		await removeRow('Chicken');
+		pending.resolve(refuseEgg);
+		await expect
+			.element(page.getByRole('button', { name: /^Egg/ }))
+			.toHaveAccessibleDescription('Egg has no serving size');
+	});
+
+	it('clears the mark when the amount of that line changes', async () => {
+		mocks.saveRecipe.mockResolvedValue(refuseEgg);
+		render(RecipeFormTestHarness, { recipe: saved });
+		await field('Portions').fill('5');
+		await save().click();
+		await expect.element(page.getByText('Egg has no serving size')).toBeVisible();
+		await setAmount('Egg', '3');
+		await vi.waitFor(() =>
+			expect(document.body.textContent).not.toContain('Egg has no serving size')
+		);
+	});
+
+	it('clears the mark when only the unit of that line changes', async () => {
+		// One serving weighs 1 g, so switching the unit keeps the number: only the unit differs.
+		const gram = { ...egg, id: '0198a000-0000-7000-8000-000000000003', name: 'Salt', servingG: 1 };
+		mocks.saveRecipe.mockResolvedValue({
+			...refuseEgg,
+			index: 0,
+			message: 'Salt has no serving size'
+		});
+		render(RecipeFormTestHarness, {
+			recipe: {
+				...saved,
+				ingredients: [{ key: 's', food: gram, amount: 5, unit: 'serving' }]
+			}
+		});
+		await field('Portions').fill('5');
+		await save().click();
+		await expect.element(page.getByText('Salt has no serving size')).toBeVisible();
+		await page.getByRole('button', { name: /^Salt/ }).click();
+		await sheetSettled();
+		await page.getByRole('radio', { name: 'g', exact: true }).click();
+		await expect.element(page.getByLabelText('Amount')).toHaveValue('5');
+		await page.getByRole('button', { name: 'Save', exact: true }).click();
+		await closed();
+		await vi.waitFor(() =>
+			expect(document.body.textContent).not.toContain('Salt has no serving size')
+		);
+	});
+
+	it('says how many ingredients need attention, next to Save', async () => {
+		mocks.saveRecipe.mockResolvedValue(refuseEgg);
+		render(RecipeFormTestHarness, { recipe: saved });
+		await field('Portions').fill('5');
+		await save().click();
+		const summary = page.getByText('1 ingredient needs attention');
+		await expect.element(summary).toBeVisible();
+		await expect.element(summary).toHaveAttribute('role', 'status');
+	});
+
+	it('scrolls the marked row into view, smoothly', async () => {
+		const scroll = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+		mocks.saveRecipe.mockResolvedValue(refuseEgg);
+		render(RecipeFormTestHarness, { recipe: saved });
+		await field('Portions').fill('5');
+		await save().click();
+		await vi.waitFor(() => expect(scroll).toHaveBeenCalledTimes(1));
+		expect((scroll.mock.contexts[0] as HTMLElement).textContent).toContain('Egg');
+		expect(scroll).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
+	});
+
+	it('scrolls without animation when the person prefers reduced motion', async () => {
+		const scroll = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+		vi.spyOn(window, 'matchMedia').mockImplementation(
+			(query) => ({ matches: query.includes('prefers-reduced-motion') }) as MediaQueryList
+		);
+		mocks.saveRecipe.mockResolvedValue(refuseEgg);
+		render(RecipeFormTestHarness, { recipe: saved });
+		await field('Portions').fill('5');
+		await save().click();
+		await vi.waitFor(() => expect(scroll).toHaveBeenCalled());
+		expect(scroll).toHaveBeenCalledWith({ block: 'center', behavior: 'auto' });
+	});
+
+	it('says Retry after a refused line, and Save again once that line changed', async () => {
+		mocks.saveRecipe.mockResolvedValue(refuseEgg);
+		render(RecipeFormTestHarness, { recipe: saved });
+		await field('Portions').fill('5');
+		await save().click();
+		await expect.element(page.getByRole('button', { name: 'Retry' })).toBeVisible();
+		await setAmount('Egg', '3');
+		await expect.element(save()).toBeVisible();
+		expect(page.getByRole('button', { name: 'Retry' }).elements()).toHaveLength(0);
 	});
 });

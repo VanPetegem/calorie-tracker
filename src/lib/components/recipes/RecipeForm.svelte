@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { isHttpError } from '@sveltejs/kit';
 	import Archive from '@lucide/svelte/icons/archive';
 	import ArchiveRestore from '@lucide/svelte/icons/archive-restore';
@@ -41,8 +41,12 @@
 
 	// The form is prefilled once: another recipe mounts a new form.
 	const start = untrack(() => recipe);
-	const recipeId = start?.id;
-	const savedName = start?.name;
+	// The id the recipe has once it exists (a new recipe gets it on its first save) and the name as last saved. Later
+	// saves send the id, so a repeated Save can never create a second recipe, and the archive toast names the recipe
+	// as it is stored.
+	let savedId = $state(start?.id);
+	let savedName = $state(start?.name);
+	let root = $state<HTMLElement>();
 
 	const text = (value: number | string | null | undefined) => (value == null ? '' : String(value));
 
@@ -63,7 +67,7 @@
 	let restoring = $state(false);
 
 	const input = $derived({
-		...(recipeId === undefined ? {} : { id: recipeId }),
+		...(savedId === undefined ? {} : { id: savedId }),
 		name,
 		defaultPortions: portions,
 		notes,
@@ -121,6 +125,7 @@
 			: {};
 	});
 
+	const attention = $derived(Object.keys(lineErrors).length);
 	const totals = $derived(draftTotals(ingredients));
 	const portionCount = $derived(parseDecimal(portions));
 
@@ -131,6 +136,14 @@
 		} catch {
 			// ignored on purpose
 		}
+	}
+
+	/** Brings a marked row into view; no animation when the person prefers reduced motion. */
+	async function showRow(key: string) {
+		await tick();
+		const row = root?.querySelector(`[data-ingredient-key="${CSS.escape(key)}"]`);
+		const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+		row?.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
 	}
 
 	async function save() {
@@ -147,11 +160,11 @@
 			outcome = await saveRecipe(output);
 		} catch (cause) {
 			failure = isHttpError(cause, 404) ? cause.body.message : 'Could not save. Try again.';
-			return;
-		} finally {
 			busy = false;
+			return;
 		}
 		if (!outcome.ok) {
+			busy = false;
 			const line = sentLines[outcome.index];
 			if (line) {
 				lineError = {
@@ -160,22 +173,33 @@
 					unit: line.unit,
 					message: outcome.message
 				};
+				await showRow(line.key);
 			}
 			return;
 		}
-		baseline = sent;
-		toasts.show({ message: 'Recipe saved', tone: 'success' });
-		await refresh();
-		if (recipeId === undefined) {
-			await goto(resolve('/(app)/recipes/[id]', { id: outcome.id }), { replaceState: true });
+		// Busy stays on until the form has settled (refresh, and the move to the new recipe's address), so a second
+		// tap on Save cannot start another save in between.
+		try {
+			const created = savedId === undefined;
+			savedId = outcome.id;
+			savedName = output.name;
+			baseline = sent;
+			toasts.show({ message: 'Recipe saved', tone: 'success' });
+			await refresh();
+			if (created) {
+				await goto(resolve('/(app)/recipes/[id]', { id: outcome.id }), { replaceState: true });
+			}
+		} finally {
+			busy = false;
 		}
 	}
 
 	async function archive() {
-		if (recipeId === undefined || archiving) return;
+		const id = savedId;
+		if (id === undefined || archiving) return;
 		archiving = true;
 		try {
-			await archiveRecipe({ id: recipeId });
+			await archiveRecipe({ id });
 		} catch {
 			toasts.show({ message: 'Could not archive. Try again.', tone: 'danger' });
 			archiving = false;
@@ -187,17 +211,18 @@
 			message: `Archived ${savedName}`,
 			apply: () => void goto(resolve('/(app)/recipes')),
 			revert: async () => {
-				await restoreRecipe({ id: recipeId });
+				await restoreRecipe({ id });
 				await refresh();
 			}
 		});
 	}
 
 	async function restore() {
-		if (recipeId === undefined || restoring) return;
+		const id = savedId;
+		if (id === undefined || restoring) return;
 		restoring = true;
 		try {
-			await restoreRecipe({ id: recipeId });
+			await restoreRecipe({ id });
 		} catch {
 			toasts.show({ message: 'Could not restore. Try again.', tone: 'danger' });
 			return;
@@ -212,7 +237,7 @@
 <svelte:window onbeforeunload={guard.onbeforeunload} />
 
 <!-- Not a <form>: the ingredient list holds sheets with forms of their own, and forms cannot nest. -->
-<div class="flex flex-col gap-6">
+<div bind:this={root} class="flex flex-col gap-6">
 	{#if archived}
 		<Card>
 			<div class="flex flex-col gap-3">
@@ -265,7 +290,12 @@
 		<p role="alert" class="text-sm text-danger">{failure}</p>
 	{/if}
 
-	<div class="flex">
+	<div class="flex flex-col">
+		<!-- One status node for every state, so the summary is announced when it appears. Empty, it takes no space. -->
+		<p role="status" class="text-sm text-danger not-empty:mb-2">
+			{#if attention > 0}{attention}
+				{attention === 1 ? 'ingredient needs' : 'ingredients need'} attention{/if}
+		</p>
 		<Button
 			loading={busy}
 			disabled={blocker !== undefined}
@@ -273,11 +303,11 @@
 			onclick={save}
 			class="w-full"
 		>
-			{failure ? 'Retry' : 'Save recipe'}
+			{failure || attention > 0 ? 'Retry' : 'Save recipe'}
 		</Button>
 	</div>
 
-	{#if recipeId !== undefined && !archived}
+	{#if savedId !== undefined && !archived}
 		<div class="flex">
 			<Button variant="ghost" icon={Archive} loading={archiving} onclick={archive} class="w-full">
 				Archive recipe

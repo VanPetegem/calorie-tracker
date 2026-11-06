@@ -136,6 +136,34 @@ test('navigating away with an unsaved change asks first', async ({ page }, testI
 	await expect(page).toHaveURL(/\/weight$/);
 });
 
+test('browser back with an unsaved change asks first', async ({ page }, testInfo) => {
+	const name = unique('Back guard', testInfo.project.name, testInfo.retry);
+	await createSimpleRecipe(page, name);
+
+	// List, then the recipe: back has somewhere to go.
+	await nav(page).getByRole('link', { name: 'Recipes' }).click();
+	await page.getByRole('link', { name: new RegExp(name) }).click();
+	await expect(page).toHaveURL(/\/recipes\/[0-9a-f-]{36}$/);
+	await page.waitForLoadState('networkidle');
+
+	await page.getByLabel('Portions', { exact: true }).fill('7');
+	await page.goBack();
+	const ask = page.getByRole('dialog', { name: 'Discard changes?' });
+	await expect(ask).toBeVisible();
+	await expect(page).toHaveURL(/\/recipes\/[0-9a-f-]{36}$/);
+	await expect(page.getByLabel('Portions', { exact: true })).toHaveValue('7');
+
+	await ask.getByRole('button', { name: 'Keep editing' }).click();
+	await expect(ask).toBeHidden();
+
+	await page.goBack();
+	await page
+		.getByRole('dialog', { name: 'Discard changes?' })
+		.getByRole('button', { name: 'Discard', exact: true })
+		.click();
+	await expect(page).toHaveURL(/\/recipes$/);
+});
+
 test('archiving hides a recipe, and Undo brings it back', async ({ page }, testInfo) => {
 	const name = unique('Archive me', testInfo.project.name, testInfo.retry);
 	await createSimpleRecipe(page, name);

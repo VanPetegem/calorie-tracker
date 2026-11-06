@@ -28,7 +28,10 @@
 	});
 </script>
 
-<li class={['bg-surface', error && 'border-l-4 border-danger']}>
+<li
+	class={['bg-surface', error && 'border-l-4 border-danger']}
+	data-ingredient-key={ingredient.key}
+>
 	<div class="flex min-h-14 items-center gap-1 pl-4">
 		<button
 			type="button"

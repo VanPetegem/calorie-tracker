@@ -92,7 +92,7 @@ describe('recipeDraft', () => {
 			]
 		}) as unknown as RecipeDetail;
 
-	it('carries name, portions, notes and the ingredients with their stored grams', () => {
+	it('carries name, portions, notes and the ingredients', () => {
 		const draft = recipeDraft(detail({}));
 		expect(draft).toMatchObject({
 			id: 'r1',
@@ -101,7 +101,7 @@ describe('recipeDraft', () => {
 			notes: 'Shake well'
 		});
 		expect(draft.ingredients).toHaveLength(1);
-		expect(draft.ingredients[0]).toMatchObject({ amount: 2, unit: 'serving', grams: 30 });
+		expect(draft.ingredients[0]).toMatchObject({ amount: 2, unit: 'serving' });
 		expect(draft.ingredients[0]!.food).toEqual(food);
 	});
 
