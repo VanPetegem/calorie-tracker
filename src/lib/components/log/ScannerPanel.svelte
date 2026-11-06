@@ -164,7 +164,7 @@
 			bind:value={code}
 			inputmode="numeric"
 			autocomplete="off"
-			hint="Accepts EAN-13, UPC-A or EAN-8. An 8 digit code is read as EAN-8."
+			hint="Accepts EAN-13, UPC-A or EAN-8. An 8 digit code is read as EAN-8, else as UPC-E."
 		/>
 		<Button type="submit" variant="secondary" loading={status === 'looking'}>Look up</Button>
 	</form>

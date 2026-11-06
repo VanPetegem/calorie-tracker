@@ -144,7 +144,7 @@ test('a misread barcode is skipped and scanning keeps going', async ({ page }, t
 	).toEqual([50]);
 });
 
-test('an unknown barcode opens the food form with the barcode, and the next scan finds the food', async ({
+test('an unknown barcode opens the food form with the barcode, and the next lookup finds the food', async ({
 	page
 }, testInfo) => {
 	const barcode = freshBarcode();
@@ -168,10 +168,13 @@ test('an unknown barcode opens the food form with the barcode, and the next scan
 	await expect(sheet).toBeHidden();
 	await expect(page.getByRole('button', { name: new RegExp(`^${name}`) })).toBeVisible();
 
-	// The same code now finds the custom food in the library. A fresh page load first: Linux WebKit (CI) delivers
-	// no frames from a second canvas capture stream in the same page, so the fake camera would stay blank.
+	// The same code now finds the custom food in the library. Typed, not scanned: Linux WebKit (CI) often delivers
+	// no frames from a second canvas capture stream in the same page, even after a reload. The camera path to a
+	// library hit is covered by the Nutella scan.
 	await gotoHydrated(page, `/day/${scanDate(testInfo.project.name)}`);
 	const again = await openScanner(page);
+	await again.getByLabel('Barcode number').fill(barcode);
+	await again.getByRole('button', { name: 'Look up' }).click();
 	await expect(again.getByRole('heading', { name })).toBeVisible();
 	// The amount step starts from the amount logged last for this food.
 	await expect(again.getByLabel('Amount')).toHaveValue('100');
