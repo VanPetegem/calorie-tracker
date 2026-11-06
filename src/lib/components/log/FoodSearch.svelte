@@ -2,10 +2,12 @@
 	import Globe from '@lucide/svelte/icons/globe';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import type { Unit } from '#lib/domain/nutrition.ts';
+	import type { BatchSummary } from '#lib/server/batches/repo.ts';
 	import type { Food } from '#lib/server/db/schema.ts';
 	import type { FoodHit, MappedProduct, RecentFood } from '#lib/server/foods/repo.ts';
 	import { Button, Input, ListItem } from '#lib/components/ui/index.ts';
 	import { pickOff, searchFoods, searchOff } from '../../../routes/(app)/foods.remote.ts';
+	import BatchRow from '../recipes/BatchRow.svelte';
 	import FoodRow from './FoodRow.svelte';
 
 	/**
@@ -15,22 +17,37 @@
 	 * person presses Enter or taps its row, so typing never spends the OFF quota. A picked OFF product is stored
 	 * through `pickOff` first; `onpick` always receives a library food. Below the field, while it is empty, sit the
 	 * quick actions: Quick add (kcal without a food), New food and Scan (the barcode scanner). Quick add shows only
-	 * when `onquick` is given: a recipe ingredient is always a food.
+	 * when `onquick` is given: a recipe ingredient is always a food. Active batches sit above them while the field is
+	 * empty (only when `onbatch` is given: a recipe ingredient is never a batch).
 	 */
 	type Props = {
 		recents: RecentFood[];
 		frequents: RecentFood[];
+		/** Active batches, newest cooked first. Listed above the quick actions while the field is empty. */
+		batches?: BatchSummary[];
 		/** `last` is the last logged amount, known for recents, frequents and library hits that were logged before. */
 		onpick: (food: Food, last?: { amount: number; unit: Unit }) => void;
 		/** Shows the Quick add button when given. */
 		onquick?: () => void;
+		/** Picks a batch to log. Without it no batches are listed. */
+		onbatch?: (batch: BatchSummary) => void;
 		onnew: () => void;
 		onscan: () => void;
 		/** True while the sheet shows this step: the search field takes focus each time it turns true. */
 		active: boolean;
 	};
 
-	let { recents, frequents, onpick, onquick, onnew, onscan, active }: Props = $props();
+	let {
+		recents,
+		frequents,
+		batches = [],
+		onpick,
+		onquick,
+		onbatch,
+		onnew,
+		onscan,
+		active
+	}: Props = $props();
 
 	const DEBOUNCE_MS = 200;
 	const uid = $props.id();
@@ -138,6 +155,18 @@
 	</form>
 
 	{#if q === ''}
+		{#if onbatch && batches.length > 0}
+			<section class="flex flex-col gap-2" aria-labelledby="{uid}-batches">
+				<h3 id="{uid}-batches" class="text-sm font-medium text-text-muted">Batches</h3>
+				<ul
+					class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface"
+				>
+					{#each batches as batch (batch.id)}
+						<li><BatchRow {batch} onpick={onbatch} /></li>
+					{/each}
+				</ul>
+			</section>
+		{/if}
 		<!-- Equal cells, no icons: with them the row is 368 px, wider than the 343 px of a 375 px phone. -->
 		<div class={['grid gap-2', onquick ? 'grid-cols-3' : 'grid-cols-2']}>
 			{#if onquick}
@@ -161,7 +190,7 @@
 				</section>
 			{/if}
 		{/each}
-		{#if recents.length === 0 && frequents.length === 0}
+		{#if recents.length === 0 && frequents.length === 0 && !(onbatch && batches.length > 0)}
 			<p class="text-base text-text-muted">
 				Search your foods, or Open Food Facts for packaged products.
 			</p>

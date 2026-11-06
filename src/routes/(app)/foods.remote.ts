@@ -58,10 +58,10 @@ export const loadFood = command(id, async (foodId) => {
 	return getFood(db, foodId);
 });
 
-/** Today and the recents and frequents, for the add sheet on pages whose own load does not carry them. */
+/** Today, the recents, frequents and active batches, for the add sheet on pages whose own load does not carry them. */
 export const loadSuggestions = command(async () => {
-	const { db, today } = await appContext();
-	return { today, ...(await suggestions(db, today)) };
+	const { db, today, now } = await appContext();
+	return { today, ...(await suggestions(db, today, now)) };
 });
 
 /** Saving a food: the saved row, or the library food that already has the barcode (the library wins). */

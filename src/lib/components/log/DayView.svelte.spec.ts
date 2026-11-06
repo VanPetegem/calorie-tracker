@@ -56,7 +56,9 @@ const data: DayData = {
 	totals: { kcal: 400, protein: 10, carbs: 60, fat: 8, fiber: null },
 	target: null,
 	recents: [],
-	frequents: []
+	frequents: [],
+	batches: [],
+	batchPortionG: {}
 };
 
 const row = () => page.getByRole('button', { name: /^Porridge/ });
@@ -222,6 +224,104 @@ describe('DayView edit', () => {
 
 			await page.getByRole('button', { name: /^Porridge/ }).click();
 			await expect.element(calories()).toHaveValue('400');
+		});
+	});
+
+	describe('a batch entry', () => {
+		const BATCH = '0198a000-0000-7000-8000-0000000000b1';
+		// 1.5 portions of a stew that was 500 kcal a portion when logged.
+		const batchEntry: LogEntry = {
+			...entry,
+			id: '0198a000-0000-7000-8000-000000000004',
+			kind: 'batch',
+			batchId: BATCH,
+			amount: 1.5,
+			unit: 'portion',
+			grams: 600,
+			label: 'Beef stew',
+			kcal: 750,
+			protein: 45,
+			carbs: 75,
+			fat: 30
+		};
+		const withEntry = (batchEntryRow: LogEntry, portionG: number | null = 400): DayData => ({
+			...data,
+			entries: [batchEntryRow],
+			batchPortionG: { [BATCH]: portionG }
+		});
+		const stew = () => page.getByRole('button', { name: /^Beef stew/ });
+		const grams = () => page.getByRole('radio', { name: 'g', exact: true });
+
+		it('opens the batch amount step from the entry own snapshot and saves a new amount', async () => {
+			mocks.editAmount.mockResolvedValue(undefined);
+			render(DayViewTestHarness, { data: withEntry(batchEntry) });
+			await stew().click();
+			expect(mocks.loadFood).not.toHaveBeenCalled();
+			await expect.element(page.getByRole('dialog', { name: 'Beef stew' })).toBeVisible();
+			await expect.element(page.getByLabelText('Amount')).toHaveValue('1.5');
+			await expect.element(page.getByRole('radio', { name: 'portion' })).toBeChecked();
+			await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('750 kcal');
+			await page.getByLabelText('Amount').fill('2');
+			await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('1000 kcal');
+			await page.getByRole('button', { name: 'Save' }).click();
+			expect(mocks.editAmount).toHaveBeenCalledWith({
+				id: batchEntry.id,
+				amount: 2,
+				unit: 'portion'
+			});
+			await vi.waitFor(() => expect(mocks.invalidateAll).toHaveBeenCalled());
+		});
+
+		it('previews a switch from portions to grams from the entry grams', async () => {
+			render(DayViewTestHarness, { data: withEntry(batchEntry) });
+			await stew().click();
+			await grams().click();
+			await expect.element(page.getByLabelText('Amount')).toHaveValue('600');
+			await page.getByLabelText('Amount').fill('300');
+			await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('375 kcal');
+		});
+
+		it("previews a switch from grams to portions with the batch's current portion weight", async () => {
+			const byGrams: LogEntry = {
+				...batchEntry,
+				amount: 200,
+				unit: 'g',
+				grams: 200,
+				kcal: 250,
+				protein: 15,
+				carbs: 25,
+				fat: 10
+			};
+			// The batch was re-weighed since: a portion is now 500 g, so 200 g is 0.4 portions.
+			render(DayViewTestHarness, { data: withEntry(byGrams, 500) });
+			await stew().click();
+			await page.getByRole('radio', { name: 'portion' }).click();
+			await expect.element(page.getByLabelText('Amount')).toHaveValue('0.4');
+			await page.getByLabelText('Amount').fill('1');
+			await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('625 kcal');
+		});
+
+		it('offers only grams for a gram entry whose batch has no portion weight now', async () => {
+			const byGrams: LogEntry = { ...batchEntry, amount: 200, unit: 'g', grams: 200, kcal: 250 };
+			render(DayViewTestHarness, { data: withEntry(byGrams, null) });
+			await stew().click();
+			await expect
+				.element(page.getByRole('radio', { name: 'portion' }))
+				.toHaveAttribute('aria-disabled', 'true');
+			await expect.element(page.getByRole('radio', { name: 'g', exact: true })).toBeChecked();
+		});
+
+		it('edits an entry without grams in portions only', async () => {
+			render(DayViewTestHarness, {
+				data: withEntry({ ...batchEntry, amount: 2, grams: null })
+			});
+			await stew().click();
+			await expect.element(grams()).toHaveAttribute('aria-disabled', 'true');
+			await expect
+				.element(page.getByText('This entry has no weight, so it changes in portions only'))
+				.toBeVisible();
+			await page.getByLabelText('Amount').fill('1');
+			await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('375 kcal');
 		});
 	});
 });

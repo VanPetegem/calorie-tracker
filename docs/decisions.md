@@ -4,6 +4,30 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-06
 
+- **Logging a batch reuses `AmountStep` through a `batch` prop, and an entry edit prices from the entry's own
+  snapshot.** `AmountStep` takes either `food` or `batch` (a `BatchAmountSource` from `components/log/amount.ts`), not
+  the plan's `{ kind: 'batch' }` source object, so no food caller changed. `batchSource(batch)` builds the source for
+  logging (default 1 portion, preview by `batchEntrySnapshot`); `entryBatchSource(entry, portionG)` builds it for an
+  edit by treating the entry as a batch whose totals are its snapshot and whose weight is its grams. A portion entry
+  then rescales by amount over amount, and a switch to grams by grams over grams, exactly as `updateEntryAmount`
+  does; a gram entry reaches portions through `portionG`. `previewBatchAmount` turns the domain's `RangeError` into
+  null, and the step also checks the typed amount first, so an empty or zero field previews 0 kcal and never throws.
+  A unit that is off (grams without a cooked weight, grams on an entry without grams, portions on a gram entry whose
+  batch has lost its weight) stays visible and `aria-disabled` with the reason under the switch, which needed
+  `disabled` on `SegmentedControl` options (the arrow keys skip them; `/design` shows it).
+- **`DayData` carries `batches` and `batchPortionG`.** `suggestions(db, today, now)` returns the active batches too
+  (this is where auto finish now runs on Today, a day page and `loadSuggestions`). `batchPortionG` maps the batch id
+  of each batch entry on the day to the batch's current portion weight, finished batches included, null without a
+  cooked weight (`portionWeights` in `server/batches/repo.ts`); `DayView` hands it to `EditEntrySheet`, so the
+  grams to portions preview uses the weight the server converts with. Keyed by batch, not entry, because every entry
+  of a batch shares it.
+- **`addSheet.openBatch(batch)` sets `addSheet.batch`; the sheet's step is a writable `$derived` of it.** `show()`
+  clears it and the sheet's `reset` clears it on close, so a later plain open starts at the search. On pages without a
+  day the batch step waits for the fetched date (same loading and error state as Quick add) before it can log.
+- **e2e batches are seeded by SQL before the server starts.** Task 9 adds the batch pages, and `saveBatch` is not in
+  the build until the client imports it, so `e2e/seed.sql` (run by `scripts/e2e-db-reset.sh` before the server holds
+  the file, as for the trigger check) inserts one weighed stew per browser project and a one off without a cooked
+  weight. `e2e/log-batches.e2e.ts` logs on past days of its own. Task 9's e2e can create its own through the UI.
 - **A batch line's serving weight is `grams / amount` of the stored line; no extra column.** `saveBatch`
   (`src/lib/server/batches/repo.ts`) prices a kept serving line from the weight it was saved with, so a food's later
   serving size change or loss never reaches it. A kept line in the same unit is accepted as it is (its food may have

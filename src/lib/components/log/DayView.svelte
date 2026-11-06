@@ -33,12 +33,12 @@
 		void goto(date === data.today ? resolve('/(app)') : resolve('/(app)/day/[date]', { date }));
 	}
 
-	// Tap on a row: food entries open the amount step, quick entries the quick add form.
+	// Tap on a row: food and batch entries open the amount step, quick entries the quick add form.
 	let editEntry = $state<LogEntry | null>(null);
 	let editOpen = $state(false);
 
 	function edit(entry: LogEntry) {
-		if (entry.kind === 'batch' || (entry.kind === 'food' && entry.foodId === null)) return;
+		if (entry.kind === 'food' && entry.foodId === null) return;
 		editEntry = entry;
 		editOpen = true;
 	}
@@ -164,7 +164,11 @@
 	{/if}
 </div>
 
-<EditEntrySheet entry={editEntry} bind:open={editOpen} />
+<EditEntrySheet
+	entry={editEntry}
+	batchPortionG={editEntry?.batchId ? (data.batchPortionG[editEntry.batchId] ?? null) : null}
+	bind:open={editOpen}
+/>
 
 <Sheet
 	bind:open={menuOpen}

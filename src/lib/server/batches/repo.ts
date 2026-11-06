@@ -208,6 +208,28 @@ export async function finishedBatches(db: Db, limit = 20): Promise<BatchSummary[
 	return summaries(db, list);
 }
 
+/**
+ * The current portion weight (cooked weight / portions) of each given batch, finished ones included; null for a
+ * batch without a cooked weight. Unknown ids are left out. The edit sheet of a logged batch entry previews a switch
+ * from grams to portions with it, as the server converts with it.
+ */
+export async function portionWeights(
+	db: Db,
+	ids: string[]
+): Promise<Record<string, number | null>> {
+	if (ids.length === 0) return {};
+	const rows = await db
+		.select({ id: batches.id, portions: batches.portions, cookedWeightG: batches.cookedWeightG })
+		.from(batches)
+		.where(inArray(batches.id, ids));
+	return Object.fromEntries(
+		rows.map((row) => [
+			row.id,
+			row.cookedWeightG === null ? null : row.cookedWeightG / row.portions
+		])
+	);
+}
+
 /** The serving weight of a line: saved with a serving line (`grams / amount`), else the food's current one. */
 function lineServingG(
 	line: Pick<BatchIngredient, 'unit' | 'grams' | 'amount'>,

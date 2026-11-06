@@ -32,6 +32,7 @@ import {
 	finishedBatches,
 	getBatch,
 	listContainers,
+	portionWeights,
 	reopenBatch,
 	saveBatch,
 	saveContainer,
@@ -544,6 +545,22 @@ describe('batch repository', () => {
 			expect(await snapshot()).toEqual({ batches: [], ingredients: [] });
 			expect(await test.db.$count(logEntries)).toBe(0);
 			expect(await getBatch(test.db, saved.id)).toBeNull();
+		});
+	});
+
+	describe('portionWeights', () => {
+		it('gives each batch its current portion weight, finished batches included, null without a cooked weight', async () => {
+			const weighed = await saveBatch(test.db, stewBatch());
+			const finished = await saveBatch(test.db, stewBatch({ portions: 8, cookedWeightG: 2000 }));
+			await finishBatch(test.db, finished.id);
+			const unweighed = await saveBatch(test.db, stewBatch({ cookedWeightG: null }));
+			expect(
+				await portionWeights(test.db, [weighed.id, finished.id, unweighed.id, missingId])
+			).toEqual({ [weighed.id]: 400, [finished.id]: 250, [unweighed.id]: null });
+		});
+
+		it('is empty for no ids', async () => {
+			expect(await portionWeights(test.db, [])).toEqual({});
 		});
 	});
 
