@@ -2,12 +2,15 @@ import * as v from 'valibot';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { addDays, loggedAtFor } from '../../domain/dates.ts';
 import type { LogUnit } from '../../schemas/fields.ts';
-import { LogFoodInput, type EditAmountInput } from '../../schemas/log.ts';
-import { foods, logEntries } from '../db/schema.ts';
+import { LogFoodInput, type EditAmountInput, type LogBatchInput } from '../../schemas/log.ts';
+import type { BatchInput } from '../../schemas/batch.ts';
+import { finishBatch, getBatch, saveBatch } from '../batches/repo.ts';
+import { batches, foods, logEntries, type Batch } from '../db/schema.ts';
 import { createFood, getFood } from '../foods/repo.ts';
 import { newId } from '../id.ts';
 import { createTestDb } from '../test/d1.ts';
 import {
+	addBatchEntry,
 	addFoodEntry,
 	addQuickEntry,
 	dayEntries,
@@ -38,6 +41,7 @@ describe('log repository', () => {
 	});
 	beforeEach(async () => {
 		await test.db.delete(logEntries);
+		await test.db.delete(batches);
 		const oats = await createFood(test.db, {
 			name: `Oats ${newId()}`,
 			kcal: 370,
@@ -342,6 +346,169 @@ describe('log repository', () => {
 				fat: 7,
 				fiber: 10
 			});
+		});
+	});
+
+	describe('batch entries', () => {
+		let stewBatch: (overrides?: Partial<BatchInput>) => Promise<Batch>;
+
+		beforeEach(() => {
+			stewBatch = async (overrides = {}) => {
+				// 1000 g of a base at 200 kcal per 100 g: 2000 kcal in 4 portions, 1600 g cooked.
+				const base = await createFood(test.db, {
+					name: `Stew base ${newId()}`,
+					kcal: 200,
+					protein: 10,
+					carbs: 20,
+					fat: 8,
+					fiber: 2
+				});
+				return saveBatch(test.db, {
+					recipeId: null,
+					name: 'Stew',
+					cookedOn: TODAY,
+					portions: 4,
+					cookedWeightG: 1600,
+					ingredients: [{ foodId: base.id, amount: 1000, unit: 'g' }],
+					...overrides
+				});
+			};
+		});
+
+		const logBatch = (batch: Batch, overrides: Partial<LogBatchInput> = {}) =>
+			addBatchEntry(
+				test.db,
+				{ date: TODAY, batchId: batch.id, amount: 1.5, unit: 'portion', ...overrides },
+				ctx
+			);
+
+		it('snapshots 1.5 portions and 200 g from the batch, labelled with its name', async () => {
+			const batch = await stewBatch();
+			const portions = await logBatch(batch);
+			expect(portions).toMatchObject({
+				date: TODAY,
+				loggedAt: NOW.toISOString(),
+				kind: 'batch',
+				batchId: batch.id,
+				foodId: null,
+				label: 'Stew',
+				amount: 1.5,
+				unit: 'portion',
+				grams: 600,
+				kcal: 750,
+				protein: 37.5,
+				carbs: 75,
+				fat: 30,
+				fiber: 7.5
+			});
+			const grams = await logBatch(batch, { amount: 200, unit: 'g' });
+			expect(grams).toMatchObject({ unit: 'g', grams: 200, kcal: 250, protein: 12.5 });
+		});
+
+		it('logs portions without grams for a batch without a cooked weight, and refuses grams', async () => {
+			const batch = await stewBatch({ cookedWeightG: null });
+			expect(await logBatch(batch)).toMatchObject({ grams: null, kcal: 750 });
+			const before = await allEntries();
+			await expect(logBatch(batch, { amount: 200, unit: 'g' })).rejects.toMatchObject({
+				status: 400,
+				body: { message: 'Add the cooked weight to log grams' }
+			});
+			expect(await allEntries()).toEqual(before);
+		});
+
+		it('logs a finished batch', async () => {
+			const batch = await stewBatch();
+			await finishBatch(test.db, batch.id);
+			expect(await logBatch(batch)).toMatchObject({ kind: 'batch', kcal: 750 });
+		});
+
+		it('fails with 404 for an unknown batch, 400 for a unit other than portion and g, and writes nothing', async () => {
+			const batch = await stewBatch();
+			await expect(
+				addBatchEntry(test.db, { date: TODAY, batchId: newId(), amount: 1, unit: 'portion' }, ctx)
+			).rejects.toMatchObject({ status: 404 });
+			// The schema rejects this already; the repository must not rely on it.
+			const unit = 'serving' as LogUnit as LogBatchInput['unit'];
+			await expect(logBatch(batch, { unit, amount: 1 })).rejects.toMatchObject({
+				status: 400,
+				body: { message: 'A batch is logged in portions or grams' }
+			});
+			await expect(logBatch(batch, { date: addDays(TODAY, 2) })).rejects.toMatchObject({
+				status: 400
+			});
+			expect(await allEntries()).toEqual([]);
+		});
+
+		it('keeps a logged entry when the batch is edited, and scales its own snapshot on an edit', async () => {
+			const batch = await stewBatch();
+			const entry = await logBatch(batch);
+			const [line] = (await getBatch(test.db, batch.id))!.ingredients;
+			await saveBatch(test.db, {
+				id: batch.id,
+				recipeId: null,
+				name: 'Renamed',
+				cookedOn: TODAY,
+				portions: 2,
+				cookedWeightG: 800,
+				ingredients: [{ id: line.id, foodId: line.foodId!, amount: 2000, unit: 'g' }]
+			});
+			expect(await allEntries()).toEqual([entry]);
+			const updated = await updateEntryAmount(test.db, {
+				id: entry.id,
+				amount: 3,
+				unit: 'portion'
+			});
+			expect(updated).toMatchObject({ label: 'Stew', amount: 3, grams: 1200, kcal: 1500 });
+		});
+
+		it('edits a portion entry without grams to 2 portions and refuses switching it to grams', async () => {
+			const batch = await stewBatch({ cookedWeightG: null });
+			const entry = await logBatch(batch, { amount: 1 });
+			const updated = await updateEntryAmount(test.db, {
+				id: entry.id,
+				amount: 2,
+				unit: 'portion'
+			});
+			expect(updated).toMatchObject({
+				amount: 2,
+				unit: 'portion',
+				grams: null,
+				kcal: 1000,
+				fiber: 10
+			});
+			await expect(
+				updateEntryAmount(test.db, { id: entry.id, amount: 200, unit: 'g' })
+			).rejects.toMatchObject({
+				status: 400,
+				body: { message: 'This entry has no weight, so it can only change in portions' }
+			});
+			expect(await allEntries()).toEqual([updated]);
+		});
+
+		it('switches between portions and grams through the stored grams', async () => {
+			const batch = await stewBatch();
+			const entry = await logBatch(batch);
+			const grams = await updateEntryAmount(test.db, { id: entry.id, amount: 200, unit: 'g' });
+			expect(grams).toMatchObject({ amount: 200, unit: 'g', grams: 200, kcal: 250 });
+			const portion = await updateEntryAmount(test.db, {
+				id: entry.id,
+				amount: 1,
+				unit: 'portion'
+			});
+			expect(portion).toMatchObject({ amount: 1, unit: 'portion', grams: 400, kcal: 500 });
+		});
+
+		it('refuses ml and servings for a batch entry', async () => {
+			const entry = await logBatch(await stewBatch());
+			for (const unit of ['ml', 'serving'] as const) {
+				await expect(
+					updateEntryAmount(test.db, { id: entry.id, amount: 1, unit })
+				).rejects.toMatchObject({
+					status: 400,
+					body: { message: 'A batch is logged in portions or grams' }
+				});
+			}
+			expect(await allEntries()).toEqual([entry]);
 		});
 	});
 });

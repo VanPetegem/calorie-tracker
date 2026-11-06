@@ -1,9 +1,11 @@
 import * as v from 'valibot';
 import { describe, expect, it } from 'vitest';
 import { FoodInput, UpdateFoodInput } from './food.ts';
+import { BatchIdInput, BatchInput, ContainerIdInput, ContainerInput } from './batch.ts';
 import {
 	EditAmountInput,
 	EditQuickInput,
+	LogBatchInput,
 	LogFoodInput,
 	QuickInput,
 	RestoreEntryInput
@@ -136,10 +138,38 @@ describe('EditAmountInput', () => {
 		);
 	});
 
-	it('rejects portions for a food entry', () => {
-		expect(v.safeParse(EditAmountInput, { id: foodId, amount: 1, unit: 'portion' }).success).toBe(
-			false
+	it('accepts portions for a batch entry, up to MAX_PORTIONS; the repository refuses them for a food entry', () => {
+		expect(v.safeParse(EditAmountInput, { id: foodId, amount: 100, unit: 'portion' }).success).toBe(
+			true
 		);
+		expect(
+			v.safeParse(EditAmountInput, { id: foodId, amount: 100.5, unit: 'portion' }).success
+		).toBe(false);
+	});
+});
+
+describe('LogBatchInput', () => {
+	const entry = { date: '2026-11-06', batchId: foodId, amount: '1,5', unit: 'portion' };
+
+	it('accepts portions and grams', () => {
+		expect(v.parse(LogBatchInput, entry)).toEqual({ ...entry, amount: 1.5 });
+		expect(v.safeParse(LogBatchInput, { ...entry, amount: 200, unit: 'g' }).success).toBe(true);
+	});
+
+	it('rejects ml and servings: a batch is logged in portions or grams', () => {
+		for (const unit of ['ml', 'serving']) {
+			expect(v.safeParse(LogBatchInput, { ...entry, unit }).success, unit).toBe(false);
+		}
+	});
+
+	it('rejects 0 and 101 portions', () => {
+		expect(v.safeParse(LogBatchInput, { ...entry, amount: 100 }).success).toBe(true);
+		expect(v.safeParse(LogBatchInput, { ...entry, amount: 0 }).success).toBe(false);
+		expect(v.safeParse(LogBatchInput, { ...entry, amount: 101 }).success).toBe(false);
+	});
+
+	it('rejects nutrition sent by the client', () => {
+		expect(v.safeParse(LogBatchInput, { ...entry, kcal: 1 }).success).toBe(false);
 	});
 });
 
@@ -278,5 +308,101 @@ describe('ArchiveRecipeInput', () => {
 	it('takes only an id', () => {
 		expect(v.parse(ArchiveRecipeInput, { id: foodId })).toEqual({ id: foodId });
 		expect(v.safeParse(ArchiveRecipeInput, { id: foodId, name: 'x' }).success).toBe(false);
+	});
+});
+
+describe('BatchInput', () => {
+	const ingredient = { foodId, amount: '200', unit: 'g' };
+	const batch = {
+		recipeId: '',
+		name: ' Chili ',
+		cookedOn: '2026-11-06',
+		portions: '4',
+		cookedWeightG: '1600,5',
+		ingredients: [ingredient]
+	};
+	const withIngredients = (count: number) => ({
+		...batch,
+		ingredients: Array.from({ length: count }, () => ingredient)
+	});
+
+	it('accepts a one off batch without an id', () => {
+		expect(v.parse(BatchInput, batch)).toEqual({
+			recipeId: null,
+			name: 'Chili',
+			cookedOn: '2026-11-06',
+			portions: 4,
+			cookedWeightG: 1600.5,
+			ingredients: [{ foodId, amount: 200, unit: 'g' }]
+		});
+	});
+
+	it('takes an ingredient id for a line the batch already has', () => {
+		const parsed = v.parse(BatchInput, {
+			...batch,
+			ingredients: [{ ...ingredient, id: foodId }]
+		});
+		expect(parsed.ingredients[0].id).toBe(foodId);
+		expect(
+			v.safeParse(BatchInput, { ...batch, ingredients: [{ ...ingredient, id: 'x' }] }).success
+		).toBe(false);
+	});
+
+	it('rejects 0 and 101 portions', () => {
+		expect(v.safeParse(BatchInput, { ...batch, portions: 100 }).success).toBe(true);
+		expect(v.safeParse(BatchInput, { ...batch, portions: 0 }).success).toBe(false);
+		expect(v.safeParse(BatchInput, { ...batch, portions: 101 }).success).toBe(false);
+	});
+
+	it('takes a blank cooked weight as none and limits it to 20000 g', () => {
+		expect(v.parse(BatchInput, { ...batch, cookedWeightG: ' ' }).cookedWeightG).toBeNull();
+		expect(v.safeParse(BatchInput, { ...batch, cookedWeightG: 20000 }).success).toBe(true);
+		expect(v.safeParse(BatchInput, { ...batch, cookedWeightG: 0 }).success).toBe(false);
+		expect(v.safeParse(BatchInput, { ...batch, cookedWeightG: 20001 }).success).toBe(false);
+	});
+
+	it('rejects 0 and 51 ingredients', () => {
+		expect(v.safeParse(BatchInput, withIngredients(50)).success).toBe(true);
+		expect(v.safeParse(BatchInput, withIngredients(0)).success).toBe(false);
+		expect(v.safeParse(BatchInput, withIngredients(51)).success).toBe(false);
+	});
+
+	it('rejects nutrition sent with the batch or an ingredient', () => {
+		expect(v.safeParse(BatchInput, { ...batch, kcal: 500 }).success).toBe(false);
+		expect(
+			v.safeParse(BatchInput, { ...batch, ingredients: [{ ...ingredient, kcal: 500 }] }).success
+		).toBe(false);
+	});
+
+	it('rejects a portion as an ingredient unit and a date that is not a calendar date', () => {
+		expect(
+			v.safeParse(BatchInput, { ...batch, ingredients: [{ ...ingredient, unit: 'portion' }] })
+				.success
+		).toBe(false);
+		expect(v.safeParse(BatchInput, { ...batch, cookedOn: '2026-02-30' }).success).toBe(false);
+	});
+});
+
+describe('ContainerInput', () => {
+	it('accepts a name and a tare up to 10000 g', () => {
+		expect(v.parse(ContainerInput, { name: ' Pot ', tareG: '650' })).toEqual({
+			name: 'Pot',
+			tareG: 650
+		});
+		expect(v.safeParse(ContainerInput, { name: 'Pot', tareG: 10001 }).success).toBe(false);
+		expect(v.safeParse(ContainerInput, { name: 'Pot', tareG: 0 }).success).toBe(false);
+	});
+
+	it('limits the name to 100 characters', () => {
+		expect(v.safeParse(ContainerInput, { name: 'x'.repeat(101), tareG: 1 }).success).toBe(false);
+	});
+});
+
+describe('BatchIdInput and ContainerIdInput', () => {
+	it('take only an id', () => {
+		for (const schema of [BatchIdInput, ContainerIdInput]) {
+			expect(v.parse(schema, { id: foodId })).toEqual({ id: foodId });
+			expect(v.safeParse(schema, { id: foodId, name: 'x' }).success).toBe(false);
+		}
 	});
 });

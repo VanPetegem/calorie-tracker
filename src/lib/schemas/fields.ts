@@ -83,6 +83,12 @@ export type LogUnit = (typeof LOG_UNITS)[number];
 
 export const logUnit = v.picklist(LOG_UNITS, 'Choose a unit');
 
+/** Units a batch entry can be in: portions, or grams of a weighed batch. */
+export const BATCH_LOG_UNITS = ['portion', 'g'] as const satisfies readonly LogUnit[];
+export type BatchLogUnit = (typeof BATCH_LOG_UNITS)[number];
+
+export const batchLogUnit = v.picklist(BATCH_LOG_UNITS, 'Choose a unit');
+
 /**
  * Units a recipe or batch ingredient can be entered in: an ingredient is raw food, never a portion. Its own list, so
  * adding `portion` to `LOG_UNITS` for batches cannot make it a valid ingredient unit.

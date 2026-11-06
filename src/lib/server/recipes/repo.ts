@@ -198,6 +198,8 @@ export async function saveRecipe(db: Db, input: RecipeInput): Promise<Recipe> {
 			db.insert(recipeIngredients).values(rows)
 		)
 	]);
+	// The id was checked above; a row that is gone by now (deleted in between) must not pass as saved.
+	if (!recipe) throw new RecipeNotFoundError(recipeId);
 	return recipe;
 }
 

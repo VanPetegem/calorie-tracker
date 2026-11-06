@@ -152,6 +152,22 @@ describe('recipe repository', () => {
 		expect(await snapshot()).toEqual({ recipes: [], ingredients: [] });
 	});
 
+	it('fails with RecipeNotFoundError when the update returns no row', async () => {
+		const saved = await saveRecipe(test.db, chickenAndRice());
+		await test.db.run(
+			sql.raw(
+				'CREATE TRIGGER skip_recipe_update BEFORE UPDATE ON recipes BEGIN SELECT RAISE(IGNORE); END'
+			)
+		);
+		try {
+			const save = saveRecipe(test.db, chickenAndRice({ id: saved.id }));
+			await expect(save).rejects.toBeInstanceOf(RecipeNotFoundError);
+			await expect(save).rejects.toMatchObject({ recipeId: saved.id });
+		} finally {
+			await test.db.run(sql.raw('DROP TRIGGER skip_recipe_update'));
+		}
+	});
+
 	it('leaves the stored recipe unchanged when the third ingredient is an unknown food', async () => {
 		const saved = await saveRecipe(test.db, chickenAndRice());
 		const before = await snapshot();

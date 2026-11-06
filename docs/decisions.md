@@ -4,6 +4,23 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-06
 
+- **A batch line's serving weight is `grams / amount` of the stored line; no extra column.** `saveBatch`
+  (`src/lib/server/batches/repo.ts`) prices a kept serving line from the weight it was saved with, so a food's later
+  serving size change or loss never reaches it. A kept line in the same unit is accepted as it is (its food may have
+  changed); a unit switch is checked against the food as it is now, and a g or ml line switched to servings takes the
+  food's current serving size. `getBatch` returns each line's `servingG` from the same rule (and its `food`), so the
+  batch editor prices servings as the server will. A line id must belong to the batch being saved, with the same
+  food, once; anything else is `UnknownIngredientError` with the line's index, mapped to a result like the recipe line
+  errors (`src/lib/server/batches/result.ts`). A logged batch's delete is a `batch_logged` result, unknown batch,
+  recipe or container ids are a 404.
+- **Batch entries are edited through `editAmount`.** `EditAmountInput` takes every log unit; the repository accepts
+  only the food units for a food entry and only `portion` and `g` for a batch entry (400 otherwise, also when the
+  schema is skipped). The same unit rescales the entry's snapshot by the amount ratio; a unit switch needs the stored
+  grams (else 400 "This entry has no weight, so it can only change in portions") and rescales by grams. Grams to
+  portions reads the batch only for its current portion weight, as a food entry reads only the food's serving weight;
+  nutrition is never re-read. The log repository keeps its HTTP errors rather than a typed `UnitNotAvailableError`.
+- **Auto finish runs inside `activeBatches`.** Activity is the latest of `created_at`, `updated_at` and the latest live
+  entry's `logged_at`; `isStale` decides. Finish and reopen set `updated_at`, so a reopened batch gets 7 more days.
 - **`log_entries.batch_id` became a real reference by a table rebuild, with the pragma edited by hand.** drizzle-kit
   rebuilt `log_entries` in `drizzle/0020_batches.sql` between `PRAGMA foreign_keys=OFF` and `=ON`. D1 applies a
   migration as one transaction, where SQLite ignores `foreign_keys`, so the keys stay on; the migration uses

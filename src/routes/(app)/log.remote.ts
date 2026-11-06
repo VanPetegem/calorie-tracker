@@ -3,6 +3,7 @@ import { id } from '#lib/schemas/fields.ts';
 import {
 	EditAmountInput,
 	EditQuickInput,
+	LogBatchInput,
 	LogFoodInput,
 	QuickInput,
 	RestoreEntryInput
@@ -20,6 +21,12 @@ import * as log from '#lib/server/log/repo.ts';
 export const logFood = command(LogFoodInput, async (input) => {
 	const ctx = await appContext();
 	return log.addFoodEntry(ctx.db, input, ctx);
+});
+
+/** Logs portions or grams of a batch, finished or not; the server snapshots the nutrition from the batch. */
+export const logBatch = command(LogBatchInput, async (input) => {
+	const ctx = await appContext();
+	return log.addBatchEntry(ctx.db, input, ctx);
 });
 
 export const logQuick = command(QuickInput, async (input) => {
