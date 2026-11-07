@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# The full gate (types, lint, unit tests, e2e) runs here before every push, so a red CI run is rare and a branch
+# push without a PR is still checked (CI runs on PRs and main, .github/workflows/ci.yml). Installed by `pnpm install` (the prepare script sets core.hooksPath).
+# Skip once with `git push --no-verify`, for example to push a work in progress branch.
+set -euo pipefail
+
+# A push that only deletes remote branches has nothing to check.
+zero=0000000000000000000000000000000000000000
+pushes_commits=false
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+	[ "$local_sha" != "$zero" ] && pushes_commits=true
+done
+$pushes_commits || exit 0
+
+# `vite build` validates these but does not bundle them (see the env block in ci.yml). e2e passes its own ORIGIN.
+export ORIGIN="${ORIGIN:-http://localhost:4173}"
+export BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-build-validation-only}"
+export OFF_CONTACT_EMAIL="${OFF_CONTACT_EMAIL:-build-validation-only@example.invalid}"
+
+echo 'pre-push: running pnpm verify (skip with git push --no-verify)'
+exec pnpm verify

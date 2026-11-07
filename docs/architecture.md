@@ -228,8 +228,8 @@ pnpm dev                 # http://localhost:5173
 `wrangler dev` (with `--infer-origin-from-routes=false`, otherwise the custom domain route makes the Worker see
 `kcal.avp.software` as its host), which reads `BETTER_AUTH_SECRET` from `.dev.vars` and takes `--var ORIGIN:http://localhost:4173`
 from `playwright.config.ts`, which also starts `e2e/off-stub.mjs` on port 4174 and passes `--var OFF_BASE_URL` and
-`--var OFF_SEARCH_URL` pointing at it. `scripts/e2e-db-reset.sh` creates `.dev.vars` from `.env` locally, or with a random
-secret when `CI` is set. `vite build` validates the variables declared in `src/env.ts` without bundling them, so
+`--var OFF_SEARCH_URL` pointing at it. `scripts/e2e-db-reset.sh` creates `.dev.vars` from `.env`, or with a random
+secret when there is no `.env` (CI, a fresh worktree). `vite build` validates the variables declared in `src/env.ts` without bundling them, so
 a build without `.env` (CI) needs placeholder `ORIGIN` and `BETTER_AUTH_SECRET` in the environment; the workflow
 sets them.
 
@@ -259,15 +259,19 @@ migration; `scripts/e2e-db-reset.sh` fails the e2e run if it is missing.
 
 ## Deploy
 
-Pushes to `main` deploy automatically (`.github/workflows/ci.yml`): the `verify` job runs the full gate, then the
-`deploy` job runs `pnpm build`, `pnpm db:migrate:remote` and `pnpm wrangler deploy`. Pull requests and other
-branches only run `verify`.
+Pushes to `main` deploy automatically (`.github/workflows/ci.yml`). Four jobs run in parallel on every pull request
+and on `main`: `static` (types, lint), `unit` (Vitest), `e2e` (Playwright) and `security` (`pnpm audit --audit-level
+high`, gitleaks). On `main`, `deploy` needs all four, then runs `pnpm build`, `pnpm db:migrate:remote` and
+`pnpm wrangler deploy`. A branch push without a pull request runs no CI. A newer push to a pull request cancels its
+older run. CodeQL (`.github/workflows/codeql.yml`) runs on each push to `main` and weekly; its alerts are under
+Security > Code scanning.
 
-`verify` stops after 8 minutes (a healthy run takes about 4.5): run `pnpm verify` locally before pushing, CI only confirms it. `deploy` keeps 10
-minutes, so a timeout never lands between the remote migration and `wrangler deploy`. `verify` runs in the
+`pnpm install` sets `core.hooksPath` to `.githooks`, whose `pre-push` hook runs `pnpm verify` (skip once with
+`git push --no-verify`). The check jobs stop after 4 minutes, `e2e` after 8. `deploy` keeps 10 minutes, so a timeout
+never lands between the remote migration and `wrangler deploy`. `unit` and `e2e` run in the
 `mcr.microsoft.com/playwright` image, which ships the browsers and their system packages, so nothing is installed
 with apt. Its tag and digest must match the Playwright version in `pnpm-lock.yaml`: bump them together. A CI step
-fails with that message when they drift.
+in `unit` fails with that message when they drift.
 
 Manual deploy, from a machine with `CLOUDFLARE_API_TOKEN` in `.env`:
 

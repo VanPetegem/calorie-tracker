@@ -249,8 +249,9 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
   ceremony from aborting the other. Bump both together.
 - **The email and password fields are always visible on /login.** In a closed `<details>`, 1Password on iOS
   found no login form.
-- **CI deploys on push to `main`.** The `verify` job runs the full gate on every push and pull request; the
-  `deploy` job needs it, runs only on `main`, and builds, then runs `db:migrate:remote` and `wrangler deploy`
+- **CI deploys on push to `main`.** The full gate runs as parallel jobs (`static`, `unit`, `e2e`, `security`) on
+  every pull request and on `main`; branch pushes without a PR rely on the local pre-push hook. e2e stays in CI
+  (not only in the hook) because a `--no-verify` push or a GitHub UI merge would skip it. The `deploy` job needs them, runs only on `main`, and builds, then runs `db:migrate:remote` and `wrangler deploy`
   under a `deploy` concurrency group so two merges never deploy at once. One user, one environment, no staging:
   the gate is the safety net, and the migration runs before the new code ships, so migrations must stay
   backward compatible for one release.
