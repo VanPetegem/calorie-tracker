@@ -43,13 +43,13 @@ describe('weights repository', () => {
 
 		const rows = await test.db.select().from(weights);
 		expect(rows).toEqual([
-			{ date: '2026-11-07', kg: 72.6, createdAt: EARLIER, updatedAt: expect.any(String) }
+			{ date: '2026-11-07', kg: 72.6, createdAt: EARLIER, updatedAt: rows[0].updatedAt }
 		]);
 		expect(rows[0].updatedAt > EARLIER).toBe(true);
 	});
 
-	it('rejects a weight outside the limits before writing', async () => {
-		await expect(saveWeight(test.db, { date: '2026-11-07', kg: 400.1 })).rejects.toBeInstanceOf(
+	it('parses its input before writing', async () => {
+		await expect(saveWeight(test.db, { date: '2026-02-30', kg: 72 })).rejects.toBeInstanceOf(
 			v.ValiError
 		);
 		expect(await listWeights(test.db)).toEqual([]);

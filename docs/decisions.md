@@ -6,9 +6,10 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 - **`WeightInput` checks only that the date is a calendar date; the weight command checks `isAllowedLogDate`.** The
   rule needs today in the settings timezone, which a shared schema used by the form cannot know, and the repository
-  keeps the plan's `saveWeight(db, input)` signature without `today`. The command (Task 4) rejects a later date, as
-  the log commands do. `saveWeight` still parses its input, like `saveContainer`, so a direct call cannot skip the
-  limits.
+  keeps the plan's `saveWeight(db, input)` signature without `today`. Unlike the log repository (`assertLogDate` in
+  `server/log/repo.ts`), `saveWeight` and `deleteWeight` do not check the date window, so the Task 4 commands must call
+  `assertLogDate(date, ctx.today)` for save and delete. `saveWeight` still parses its input, like `saveContainer`, so a
+  direct call cannot skip the kg limits or the calendar date check.
 - **The `weights_kg_range` SQL check is written from `MIN_WEIGHT_KG` and `MAX_WEIGHT_KG`.** The schema builds the
   check with `sql.raw` of the constants, so the generated migration holds the literals 20 and 400 and a changed limit
   shows up as a schema diff instead of drifting from the Valibot schema. `updated_at` on an upsert comes from the

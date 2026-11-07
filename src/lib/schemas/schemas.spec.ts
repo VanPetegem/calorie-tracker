@@ -434,5 +434,6 @@ describe('DeleteWeightInput', () => {
 		expect(v.parse(DeleteWeightInput, { date: '2026-11-07' })).toEqual({ date: '2026-11-07' });
 		expect(v.safeParse(DeleteWeightInput, { date: '2026-11-07', kg: 72 }).success).toBe(false);
 		expect(v.safeParse(DeleteWeightInput, { date: '7.11.2026' }).success).toBe(false);
+		expect(v.safeParse(DeleteWeightInput, { date: '2026-02-30' }).success).toBe(false);
 	});
 });

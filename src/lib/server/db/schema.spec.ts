@@ -221,7 +221,7 @@ describe('schema constraints', () => {
 	});
 
 	it('rejects a weight outside 20 to 400 kg', async () => {
-		for (const kg of [10, 400.1]) {
+		for (const kg of [19.9, 400.1]) {
 			await expect(
 				test.db.insert(weights).values({ date: '2026-11-07', kg })
 			).rejects.toMatchObject(failedOn('CHECK constraint failed: weights_kg_range'));

@@ -139,7 +139,7 @@ e2e/weight.e2e.ts (4a), e2e/targets.e2e.ts and onboarding in e2e/auth.setup.ts (
 - Modify: `src/routes/(app)/weight/+page.svelte`, `docs/architecture.md`, `docs/decisions.md`, parent spec section 5 (`weights.updated_at`)
 
 **Interfaces:**
-- Produces: commands `saveWeight(WeightInput)`, `deleteWeight(DeleteWeightInput)` (date checked with `isAllowedLogDate`, 400 otherwise). Load `{ today, series: TrendPoint[], todayKg, lastKg, trendKg, rate }`.
+- Produces: commands `saveWeight(WeightInput)`, `deleteWeight(DeleteWeightInput)` (each calls `assertLogDate(date, ctx.today)` from `server/log/repo.ts`, 400 otherwise; tests for a date after tomorrow on save and delete). Load `{ today, series: TrendPoint[], todayKg, lastKg, trendKg, rate }`.
 - Behaviour: spec section 5. Delete shows a 5 s Undo toast that calls `saveWeight` with the old values. History is newest first.
 - [ ] **Step 1: Write failing tests**: e2e on its own past dates per project and retry: log today's weight with the stepper and see it in history; edit a past weigh-in; delete with Undo restores it; chart range switch keeps working; empty state copy before the first weigh-in is covered in the component spec instead (other tests share the database).
 - [ ] **Step 2: Run**; fail.
