@@ -50,6 +50,18 @@ describe('signInPasskeyError', () => {
 		);
 	});
 
+	it('says when the browser cannot use passkeys', () => {
+		expect(signInPasskeyError({ code: 'NOT_SUPPORTED', status: 400 })).toBe(
+			"This browser can't use passkeys. Sign in with your email and password."
+		);
+	});
+
+	it('names an unexpected browser error, so a failing browser can be diagnosed', () => {
+		expect(signInPasskeyError({ code: 'SecurityError', status: 400 })).toBe(
+			'No passkey was used (SecurityError). Try again, or sign in with your email and password.'
+		);
+	});
+
 	it('offers the password otherwise', () => {
 		expect(signInPasskeyError({ code: 'AUTH_CANCELLED', status: 400 })).toBe(
 			'No passkey was used. Try again, or sign in with your email and password.'
