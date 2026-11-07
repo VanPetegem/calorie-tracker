@@ -42,12 +42,10 @@
 
 	const STORAGE_KEY = 'kcal-weight-range';
 	const DEFAULT_RANGE: RangeKey = '90';
-	const HEIGHT = 256;
-	/** The top margin holds the tooltip, so it never covers the data. */
-	const MARGIN = { top: 56, right: 12, bottom: 28, left: 44 };
+	const HEIGHT = 224;
+	const MARGIN = { top: 12, right: 12, bottom: 28, left: 44 };
 	const PAD_KG = 0.5;
 	const FALLBACK_WIDTH = 320;
-	const TOOLTIP_HALF_WIDTH = 96;
 	const DENSE_POINTS = 120;
 
 	const uid = $props.id();
@@ -57,6 +55,8 @@
 	let range = $state<RangeKey>(DEFAULT_RANGE);
 	let clientWidth = $state(0);
 	let svg = $state<SVGSVGElement>();
+	let plot = $state<HTMLElement>();
+	let tooltipWidth = $state(0);
 	let activeIndex = $state<number | null>(null);
 
 	// Read after mount, so the server and the first client render agree.
@@ -135,9 +135,19 @@
 	const describe = (point: TrendPoint) =>
 		`${formatDay(point.date, { year: true })}, ${formatKg(point.kg)} kg, trend ${formatKg(point.trend)} kg`;
 
-	const active = $derived(activeIndex === null ? undefined : dots[activeIndex]);
+	// The picked point, kept inside the series: it can shrink under the focus (a delete while the chart is focused).
+	const lastIndex = $derived(dots.length - 1);
+	const index = $derived(activeIndex === null ? null : Math.min(activeIndex, lastIndex));
+	const active = $derived(index === null ? undefined : dots[index]);
+	// What the slider reports: the picked point, else the latest.
+	const current = $derived(active ?? dots.at(-1));
 	const tooltipLeft = $derived(
-		active ? Math.min(Math.max(active.x, TOOLTIP_HALF_WIDTH), width - TOOLTIP_HALF_WIDTH) : 0
+		active
+			? Math.min(
+					Math.max(active.x, tooltipWidth / 2),
+					Math.max(tooltipWidth / 2, width - tooltipWidth / 2)
+				)
+			: 0
 	);
 
 	function select(clientX: number) {
@@ -150,22 +160,24 @@
 	}
 
 	function onkeydown(event: KeyboardEvent) {
-		const last = dots.length - 1;
-		if (last < 0) return;
-		const at = activeIndex ?? last;
+		if (lastIndex < 0) return;
+		const at = index ?? lastIndex;
 		let next: number | null;
 		switch (event.key) {
+			// Up is next and down is previous, as on a slider.
 			case 'ArrowLeft':
+			case 'ArrowDown':
 				next = Math.max(0, at - 1);
 				break;
 			case 'ArrowRight':
-				next = Math.min(last, at + 1);
+			case 'ArrowUp':
+				next = at + 1; // past the end is clamped by `index`
 				break;
 			case 'Home':
 				next = 0;
 				break;
 			case 'End':
-				next = last;
+				next = lastIndex;
 				break;
 			case 'Escape':
 				next = null;
@@ -177,6 +189,13 @@
 		activeIndex = next;
 	}
 </script>
+
+<!-- A touch outside the chart puts its tooltip away (a tap on the chart picks a point, the keys and Escape move or close). -->
+<svelte:window
+	onpointerdown={(event) => {
+		if (activeIndex !== null && plot && !plot.contains(event.target as Node)) activeIndex = null;
+	}}
+/>
 
 <Card class="flex flex-col gap-3">
 	{#if series.length === 0}
@@ -200,14 +219,12 @@
 				aria-describedby={hintId}
 				aria-orientation="horizontal"
 				aria-valuemin={0}
-				aria-valuemax={dots.length - 1}
-				aria-valuenow={activeIndex ?? dots.length - 1}
-				aria-valuetext={(active ?? dots.at(-1))
-					? describe((active ?? dots.at(-1))!.point)
-					: undefined}
+				aria-valuemax={lastIndex}
+				aria-valuenow={index ?? lastIndex}
+				aria-valuetext={current ? describe(current.point) : undefined}
 				tabindex="0"
-				class="relative touch-pan-y rounded-md select-none"
-				style:height="{HEIGHT}px"
+				class="touch-pan-y rounded-md select-none"
+				bind:this={plot}
 				bind:clientWidth
 				onpointerdown={(event) => select(event.clientX)}
 				onpointermove={(event) => {
@@ -216,10 +233,35 @@
 				onpointerleave={(event) => {
 					if (event.pointerType === 'mouse') activeIndex = null;
 				}}
-				onfocus={() => (activeIndex ??= dots.length - 1)}
+				onfocus={() => (activeIndex ??= lastIndex)}
 				onblur={() => (activeIndex = null)}
 				{onkeydown}
 			>
+				<!--
+					Seen only: the slider's value text tells assistive technology the same. In the flow above the plot, so a
+					larger text size makes the row taller instead of covering data; at least 5rem, so showing it moves nothing.
+				-->
+				<div
+					data-testid="tooltip"
+					aria-hidden="true"
+					class="pointer-events-none min-h-20 overflow-hidden pb-2"
+				>
+					{#if active}
+						<div
+							class="relative flex w-max -translate-x-1/2 flex-col rounded-md border border-border bg-surface-raised px-3 py-1 whitespace-nowrap shadow-md"
+							style:left="{tooltipLeft}px"
+							bind:clientWidth={tooltipWidth}
+						>
+							<span class="text-sm text-text-muted">{formatDay(active.point.date)}</span>
+							<span class="text-base font-medium text-text tabular-nums">
+								{formatKg(active.point.kg)} kg
+							</span>
+							<span class="text-sm text-text-muted tabular-nums">
+								Trend {formatKg(active.point.trend)} kg
+							</span>
+						</div>
+					{/if}
+				</div>
 				<svg bind:this={svg} {width} height={HEIGHT} aria-hidden="true" class="block">
 					<defs>
 						<clipPath id={clipId}>
@@ -308,27 +350,6 @@
 						/>
 					{/if}
 				</svg>
-				<!-- Seen only: the slider's value text tells assistive technology the same. Empty, it takes no space. -->
-				<div
-					data-testid="tooltip"
-					aria-hidden="true"
-					class="pointer-events-none absolute top-0 w-48 -translate-x-1/2"
-					style:left="{tooltipLeft}px"
-				>
-					{#if active}
-						<div
-							class="flex flex-col rounded-md border border-border bg-surface-raised px-3 py-1 shadow-md"
-						>
-							<span class="text-sm text-text-muted">{formatDay(active.point.date)}</span>
-							<span class="text-base font-medium text-text tabular-nums">
-								{formatKg(active.point.kg)} kg
-								<span class="font-normal text-text-muted"
-									>· Trend {formatKg(active.point.trend)} kg</span
-								>
-							</span>
-						</div>
-					{/if}
-				</div>
 			</div>
 			<p id={hintId} class="text-sm text-text-muted">
 				Tap, drag or hover the chart, or use the arrow keys, to read a weigh-in. Dots are weigh-ins,

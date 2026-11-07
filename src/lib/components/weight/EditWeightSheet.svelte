@@ -7,6 +7,7 @@
 	import { WeightInput } from '#lib/schemas/weight.ts';
 	import { Button, Input, NumberInput, Sheet } from '#lib/components/ui/index.ts';
 	import { formatDay } from './chart.ts';
+	import { commitFocusedInput, fieldIssue } from './form.ts';
 
 	/**
 	 * Edits the weight of a stored weigh-in, or adds one for a day (`point` null). A stored weigh-in keeps its date,
@@ -30,6 +31,9 @@
 	let submitted = $state(false);
 	let busy = $state(false);
 	let failure = $state(false);
+	// Bumped on every opening: the number field keeps what was typed (an invalid entry stays as text), so the form is
+	// mounted anew each time the sheet opens.
+	let openings = $state(0);
 	let form = $state<HTMLFormElement>();
 
 	// Each opening starts from the point it was opened for.
@@ -40,26 +44,27 @@
 			date = today;
 			submitted = false;
 			failure = false;
+			openings++;
 		});
 	});
 
 	const day = $derived(point ? point.date : date);
 	const result = $derived(v.safeParse(WeightInput, { date: day, kg }));
-	const issue = (field: 'date' | 'kg') =>
-		result.issues?.find((found) => found.path?.[0]?.key === field)?.message;
 	const dateError = $derived(
-		issue('date') ?? (isAllowedLogDate(day, today) ? undefined : 'Choose a day up to tomorrow')
+		fieldIssue(result.issues, 'date') ??
+			(isAllowedLogDate(day, today) ? undefined : 'Choose a day up to tomorrow')
 	);
-	const kgError = $derived(kg !== null || submitted ? issue('kg') : undefined);
+	const kgError = $derived(kg !== null || submitted ? fieldIssue(result.issues, 'kg') : undefined);
 
-	function commitField() {
-		const active = document.activeElement;
-		if (active instanceof HTMLInputElement && form?.contains(active)) active.blur();
+	// A changed weight is a new attempt: the old failure and Retry go.
+	function change(next: number | null) {
+		kg = next;
+		failure = false;
 	}
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
-		commitField();
+		commitFocusedInput(form);
 		submitted = true;
 		if (!result.success || dateError) return;
 		busy = true;
@@ -80,23 +85,31 @@
 	title={point ? 'Edit weigh-in' : 'Add weigh-in'}
 	description={point ? formatDay(point.date, { year: true }) : undefined}
 >
-	<form class="flex flex-col gap-4" onsubmit={submit} bind:this={form} novalidate>
-		{#if !point}
-			<Input
-				label="Date"
-				type="date"
-				bind:value={date}
-				error={submitted ? dateError : undefined}
-				hint="Up to tomorrow."
+	{#key openings}
+		<form class="flex flex-col gap-4" onsubmit={submit} bind:this={form} novalidate>
+			{#if !point}
+				<Input
+					label="Date"
+					type="date"
+					bind:value={date}
+					error={submitted ? dateError : undefined}
+					hint="Up to tomorrow."
+				/>
+			{/if}
+			<NumberInput
+				label="Weight"
+				unit="kg"
+				bind:value={() => kg, change}
+				step={WEIGHT_STEP_KG}
+				error={kgError}
 			/>
-		{/if}
-		<NumberInput label="Weight" unit="kg" bind:value={kg} step={WEIGHT_STEP_KG} error={kgError} />
-		{#if failure}
-			<p role="alert" class="text-sm text-danger">Could not save. Try again.</p>
-		{/if}
-		<div class="flex gap-2">
-			<Button variant="secondary" disabled={busy} onclick={() => (open = false)}>Cancel</Button>
-			<Button type="submit" loading={busy}>{failure ? 'Retry' : 'Save'}</Button>
-		</div>
-	</form>
+			{#if failure}
+				<p role="alert" class="text-sm text-danger">Could not save. Try again.</p>
+			{/if}
+			<div class="flex gap-2">
+				<Button variant="secondary" disabled={busy} onclick={() => (open = false)}>Cancel</Button>
+				<Button type="submit" loading={busy}>{failure ? 'Retry' : 'Save'}</Button>
+			</div>
+		</form>
+	{/key}
 </Sheet>

@@ -84,6 +84,16 @@ describe('niceTicks', () => {
 	it('gives none for an empty domain', () => {
 		expect(niceTicks({ min: 70, max: 70 }, 4)).toEqual([]);
 	});
+
+	it('never gives more than the count, and always some, for any span', () => {
+		for (const span of [0.3, 0.7, 1, 1.5, 3.3, 6.7, 12, 45, 130]) {
+			for (const min of [19.9, 69.3, 70, 118.45]) {
+				const ticks = niceTicks({ min, max: min + span }, 5);
+				expect(ticks.length, `${min} + ${span}`).toBeGreaterThan(0);
+				expect(ticks.length, `${min} + ${span}`).toBeLessThanOrEqual(5);
+			}
+		}
+	});
 });
 
 describe('linePath', () => {

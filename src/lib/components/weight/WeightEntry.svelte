@@ -7,6 +7,7 @@
 	import { WeightInput } from '#lib/schemas/weight.ts';
 	import { Badge, Button, Card, IconButton, NumberInput } from '#lib/components/ui/index.ts';
 	import { formatDay } from './chart.ts';
+	import { commitFocusedInput, fieldIssue } from './form.ts';
 
 	/**
 	 * Today's weigh-in: a number field with a step button for each direction, and Save. The field starts at today's
@@ -37,27 +38,37 @@
 	const STEPS_PER_KG = Math.round(1 / WEIGHT_STEP_KG);
 
 	const result = $derived(v.safeParse(WeightInput, { date: today, kg }));
-	const kgError = $derived(result.issues?.find((issue) => issue.path?.[0]?.key === 'kg')?.message);
+	const kgError = $derived(fieldIssue(result.issues, 'kg'));
 	// `kg` only changes when the field commits (blur, Enter, arrow keys), so a number outside the limits shows its
 	// error at once, as it does after the field loses focus. An empty field is an error only after Save.
 	const shownError = $derived(kg !== null || submitted ? kgError : undefined);
 
-	/** Commits what is typed. The number field commits on blur, and iOS keeps focus in it when a button is tapped. */
-	function commitField() {
-		const active = document.activeElement;
-		if (active instanceof HTMLInputElement && form?.contains(active)) active.blur();
+	const hint = $derived(
+		kg === null
+			? `Enter a weight, then adjust it by ${WEIGHT_STEP_KG} kg.`
+			: kg <= MIN_WEIGHT_KG
+				? `${MIN_WEIGHT_KG} kg is the lowest weight you can save.`
+				: kg >= MAX_WEIGHT_KG
+					? `${MAX_WEIGHT_KG} kg is the highest weight you can save.`
+					: undefined
+	);
+
+	// A changed weight is a new attempt: the old failure and Retry go.
+	function change(next: number | null) {
+		kg = next;
+		failure = false;
 	}
 
 	function step(direction: 1 | -1) {
-		commitField();
+		commitFocusedInput(form);
 		if (kg === null) return;
 		const next = (Math.round(kg * STEPS_PER_KG) + direction) / STEPS_PER_KG;
-		kg = Math.min(MAX_WEIGHT_KG, Math.max(MIN_WEIGHT_KG, next));
+		change(Math.min(MAX_WEIGHT_KG, Math.max(MIN_WEIGHT_KG, next)));
 	}
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
-		commitField();
+		commitFocusedInput(form);
 		submitted = true;
 		if (!result.success) return;
 		busy = true;
@@ -85,10 +96,10 @@
 		<NumberInput
 			label="Weight"
 			unit="kg"
-			bind:value={kg}
+			bind:value={() => kg, change}
 			step={WEIGHT_STEP_KG}
 			error={shownError}
-			hint={kg === null ? `Enter a weight, then adjust it by ${WEIGHT_STEP_KG} kg.` : undefined}
+			{hint}
 		/>
 		<div class="flex items-center gap-2">
 			<IconButton

@@ -74,6 +74,19 @@ describe('WeightEntry', () => {
 			.toBeDisabled();
 	});
 
+	it('says why a step is off at each limit', async () => {
+		const low = render(WeightEntry, { today, todayKg: null, lastKg: 20, onsave: async () => {} });
+		await expect.element(page.getByText('20 kg is the lowest weight')).toBeVisible();
+		low.unmount();
+		render(WeightEntry, { today, todayKg: null, lastKg: 400, onsave: async () => {} });
+		await expect.element(page.getByText('400 kg is the highest weight')).toBeVisible();
+	});
+
+	it('gives no limit hint between the limits', async () => {
+		setup({ lastKg: 70.2 });
+		expect(page.getByText(/is the (lowest|highest) weight/).elements()).toHaveLength(0);
+	});
+
 	it('shows the limit after the field loses focus, and does not save it', async () => {
 		const { onsave, input, save } = setup();
 		await input.fill('10');
@@ -126,5 +139,21 @@ describe('WeightEntry', () => {
 		await page.getByRole('button', { name: 'Retry' }).click();
 		expect(onsave).toHaveBeenCalledTimes(2);
 		expect(page.getByRole('alert').elements()).toHaveLength(0);
+	});
+
+	it('drops the failure and Retry as soon as the weight changes', async () => {
+		const onsave = vi.fn().mockRejectedValue(new Error('offline'));
+		render(WeightEntry, { today, todayKg: null, lastKg: 70.2, onsave });
+		await page.getByRole('button', { name: 'Save' }).click();
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Could not save');
+		await page.getByRole('button', { name: 'Increase weight by 0.1 kg' }).click();
+		await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Save' })).toBeVisible();
+		await page.getByRole('button', { name: 'Save' }).click();
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Could not save');
+		const input = page.getByLabelText('Weight', { exact: true });
+		await input.fill('71');
+		(input.element() as HTMLInputElement).blur();
+		await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
 	});
 });

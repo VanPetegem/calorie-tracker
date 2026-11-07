@@ -95,10 +95,13 @@ describe('WeightChart', () => {
 		const errors: unknown[] = [];
 		const onerror = (event: ErrorEvent) => errors.push(event.error);
 		window.addEventListener('error', onerror);
-		render(WeightChart, { series: series(13, 7), today });
-		await page.getByRole('radio', { name: '30 days' }).click();
-		await expect.element(page.getByRole('radio', { name: '30 days' })).toBeChecked();
-		window.removeEventListener('error', onerror);
+		try {
+			render(WeightChart, { series: series(13, 7), today });
+			await page.getByRole('radio', { name: '30 days' }).click();
+			await expect.element(page.getByRole('radio', { name: '30 days' })).toBeChecked();
+		} finally {
+			window.removeEventListener('error', onerror);
+		}
 		expect(errors).toEqual([]);
 	});
 
@@ -112,7 +115,7 @@ describe('WeightChart', () => {
 			today
 		});
 		const status = tooltip();
-		expect(status.element().textContent?.trim()).toBe('');
+		await expect.poll(() => status.element().textContent?.trim()).toBe('');
 		(plot().element() as HTMLElement).focus();
 		await expect.element(status).toHaveTextContent('Sat 7 Nov');
 		await expect.element(status).toHaveTextContent('71.2 kg');
@@ -125,7 +128,7 @@ describe('WeightChart', () => {
 		await expect.element(status).toHaveTextContent('70.5 kg');
 		await expect.element(plot()).toHaveAttribute('aria-valuenow', '1');
 		await userEvent.keyboard('{Escape}');
-		expect(status.element().textContent?.trim()).toBe('');
+		await expect.poll(() => status.element().textContent?.trim()).toBe('');
 	});
 
 	it('opens the tooltip on a touch tap, not only on hover', async () => {
@@ -151,6 +154,72 @@ describe('WeightChart', () => {
 		await plot().hover();
 		await expect.element(tooltip()).toHaveTextContent(/kg/);
 		await page.getByRole('radiogroup', { name: 'Range' }).hover();
-		expect(tooltip().element().textContent?.trim()).toBe('');
+		await expect.poll(() => tooltip().element().textContent?.trim()).toBe('');
+	});
+
+	// Five daily weigh-ins, Tue 3 Nov to Sat 7 Nov.
+	const five = () => series(5);
+
+	it('moves with Home and End, and stops at both ends', async () => {
+		render(WeightChart, { series: five(), today });
+		const tip = tooltip();
+		const slider = plot();
+		(slider.element() as HTMLElement).focus();
+		await expect.element(slider).toHaveAttribute('aria-valuenow', '4');
+		await userEvent.keyboard('{ArrowRight}');
+		await expect.element(slider).toHaveAttribute('aria-valuenow', '4');
+		await userEvent.keyboard('{Home}');
+		await expect.element(slider).toHaveAttribute('aria-valuenow', '0');
+		await expect.element(tip).toHaveTextContent('Tue 3 Nov');
+		await userEvent.keyboard('{ArrowLeft}');
+		await expect.element(slider).toHaveAttribute('aria-valuenow', '0');
+		await userEvent.keyboard('{End}');
+		await expect.element(slider).toHaveAttribute('aria-valuenow', '4');
+		await expect.element(tip).toHaveTextContent('Sat 7 Nov');
+	});
+
+	it('reads ArrowUp as next and ArrowDown as previous, like a slider', async () => {
+		render(WeightChart, { series: five(), today });
+		const slider = plot();
+		(slider.element() as HTMLElement).focus();
+		await userEvent.keyboard('{ArrowDown}');
+		await expect.element(slider).toHaveAttribute('aria-valuenow', '3');
+		await userEvent.keyboard('{ArrowUp}');
+		await expect.element(slider).toHaveAttribute('aria-valuenow', '4');
+	});
+
+	it('keeps a valid point when the series shrinks under the focus', async () => {
+		const view = render(WeightChart, { series: series(10), today });
+		const slider = plot();
+		(slider.element() as HTMLElement).focus();
+		await expect.element(slider).toHaveAttribute('aria-valuenow', '9');
+		await view.rerender({ series: series(5), today });
+		await expect.element(slider).toHaveAttribute('aria-valuemax', '4');
+		await expect.element(slider).toHaveAttribute('aria-valuenow', '4');
+		await expect.element(tooltip()).toHaveTextContent('Sat 7 Nov');
+		await userEvent.keyboard('{ArrowRight}');
+		await expect.element(slider).toHaveAttribute('aria-valuenow', '4');
+		await userEvent.keyboard('{ArrowLeft}');
+		await expect.element(slider).toHaveAttribute('aria-valuenow', '3');
+	});
+
+	it('closes the tooltip when a touch lands outside the chart', async () => {
+		render(WeightChart, { series: series(10), today });
+		const touch = (target: Element, clientX: number) =>
+			target.dispatchEvent(
+				new PointerEvent('pointerdown', {
+					pointerType: 'touch',
+					clientX,
+					clientY: 10,
+					bubbles: true
+				})
+			);
+		const box = plot().element().getBoundingClientRect();
+		touch(plot().element(), box.left + 46);
+		await expect.element(tooltip()).toHaveTextContent(/kg/);
+		touch(plot().element(), box.left + 46);
+		await expect.element(tooltip()).toHaveTextContent(/kg/);
+		touch(page.getByRole('radiogroup', { name: 'Range' }).element(), box.left);
+		await expect.poll(() => tooltip().element().textContent?.trim()).toBe('');
 	});
 });

@@ -81,4 +81,34 @@ describe('EditWeightSheet', () => {
 		await page.getByRole('button', { name: 'Retry' }).click();
 		expect(onsave).toHaveBeenLastCalledWith({ date: '2026-11-03', kg: 71 });
 	});
+
+	it('opens clean again after an invalid entry was left behind', async () => {
+		const onsave = vi.fn(async () => {});
+		const view = render(EditWeightSheet, { open: true, point: null, today, onsave });
+		await opened();
+		const input = page.getByLabelText('Weight', { exact: true });
+		await input.fill('abc');
+		(input.element() as HTMLInputElement).blur();
+		await expect.element(page.getByRole('alert')).toBeVisible();
+		await page.getByRole('button', { name: 'Cancel' }).click();
+		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+		await view.rerender({ open: false });
+		await view.rerender({ open: true });
+		await opened();
+		await expect.element(page.getByLabelText('Weight', { exact: true })).toHaveValue('');
+		expect(page.getByRole('alert').elements()).toHaveLength(0);
+	});
+
+	it('drops the failure and Retry as soon as the weight changes', async () => {
+		const onsave = vi.fn().mockRejectedValue(new Error('offline'));
+		render(EditWeightSheet, { open: true, point, today, onsave });
+		await opened();
+		await page.getByRole('button', { name: 'Save' }).click();
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Could not save');
+		const input = page.getByLabelText('Weight', { exact: true });
+		await input.fill('71');
+		(input.element() as HTMLInputElement).blur();
+		await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Save' })).toBeVisible();
+	});
 });

@@ -168,7 +168,8 @@
 	const weightSteady = trendSeries(weighIns(20));
 	const weightRateNow = weeklyRate(weightDense, weightToday);
 	const weightRows: TrendPoint[] = weightSteady.slice(-3).reverse();
-	let weightLog = $state('Tap a row to edit it, or the bin to delete it.');
+	let weightLog = $state('Change the weight and press Save.');
+	let weightRowLog = $state('Tap a row to edit it, or the bin to delete it.');
 	let weightSheetOpen = $state(false);
 	let weightSheetPoint = $state<WeighIn | null>(null);
 	let weightSheetLog = $state('Open the sheet to edit a weigh-in or add one.');
@@ -1351,13 +1352,13 @@
 				<li>
 					<WeightRow
 						{point}
-						onedit={(p) => (weightLog = `Edit ${p.date}`)}
-						ondelete={(p) => (weightLog = `Delete ${p.date}`)}
+						onedit={(p) => (weightRowLog = `Edit ${p.date}`)}
+						ondelete={(p) => (weightRowLog = `Delete ${p.date}`)}
 					/>
 				</li>
 			{/each}
 		</ul>
-		<span class="text-sm text-text-muted">{weightLog}</span>
+		<span class="text-sm text-text-muted">{weightRowLog}</span>
 	</Section>
 
 	<Section
