@@ -1,6 +1,94 @@
 <script lang="ts">
+	import Plus from '@lucide/svelte/icons/plus';
 	import Scale from '@lucide/svelte/icons/scale';
-	import { Card, EmptyState } from '#lib/components/ui/index.ts';
+	import { SvelteSet } from 'svelte/reactivity';
+	import { invalidateAll } from '$app/navigation';
+	import { Button, Card, EmptyState } from '#lib/components/ui/index.ts';
+	import EditWeightSheet from '#lib/components/weight/EditWeightSheet.svelte';
+	import WeightChart from '#lib/components/weight/WeightChart.svelte';
+	import WeightEntry from '#lib/components/weight/WeightEntry.svelte';
+	import WeightRow from '#lib/components/weight/WeightRow.svelte';
+	import WeightSummary from '#lib/components/weight/WeightSummary.svelte';
+	import { formatDay, formatKg } from '#lib/components/weight/chart.ts';
+	import type { TrendPoint } from '#lib/domain/trend.ts';
+	import type { WeightInput } from '#lib/schemas/weight.ts';
+	import { toasts, withUndo } from '#lib/stores/toasts.svelte.ts';
+	import { deleteWeight, saveWeight } from './weight.remote.ts';
+	import type { PageProps } from './$types';
+
+	let { data }: PageProps = $props();
+
+	const history = $derived([...data.series].reverse());
+
+	// The sheet is shared: a row edits its weigh-in, "Add weigh-in" opens it with no point.
+	let sheetOpen = $state(false);
+	let sheetPoint = $state<TrendPoint | null>(null);
+
+	async function refresh() {
+		// The write went through: a failed refresh only means the page catches up on its next load.
+		try {
+			await invalidateAll();
+		} catch {
+			// ignored on purpose
+		}
+	}
+
+	/** Saves and toasts. A rejected write reaches the caller (entry card or sheet), which keeps the value and offers Retry. */
+	async function save({ date, kg }: WeightInput) {
+		const existed = data.series.some((point) => point.date === date);
+		await saveWeight({ date, kg });
+		toasts.show({
+			message: `${existed ? 'Updated' : 'Logged'} ${formatKg(kg)} kg`,
+			tone: 'success'
+		});
+		await refresh();
+	}
+
+	function edit(point: TrendPoint) {
+		sheetPoint = point;
+		sheetOpen = true;
+	}
+
+	function add() {
+		sheetPoint = null;
+		sheetOpen = true;
+	}
+
+	// A delete in flight is not started twice (a double tap).
+	const deleting = new SvelteSet<string>();
+
+	async function remove(point: TrendPoint) {
+		if (deleting.has(point.date)) return;
+		deleting.add(point.date);
+		const day = formatDay(point.date, { year: true });
+		try {
+			await deleteWeight({ date: point.date });
+		} catch {
+			const id = toasts.show({
+				message: 'Could not delete the weigh-in',
+				tone: 'danger',
+				action: {
+					label: 'Retry',
+					run: () => {
+						toasts.dismiss(id);
+						return remove(point);
+					}
+				}
+			});
+			return;
+		} finally {
+			deleting.delete(point.date);
+		}
+		withUndo({
+			message: `Deleted weigh-in of ${day}`,
+			apply: () => {},
+			revert: async () => {
+				await saveWeight({ date: point.date, kg: point.kg });
+				await refresh();
+			}
+		});
+		await refresh();
+	}
 </script>
 
 <svelte:head>
@@ -9,11 +97,42 @@
 
 <div class="flex flex-col gap-6">
 	<h1 class="text-3xl font-semibold tracking-tight text-text">Weight</h1>
-	<Card>
-		<EmptyState
-			icon={Scale}
-			title="No weigh-ins yet"
-			body="Log your morning weight to see your trend and weekly gain."
-		/>
-	</Card>
+
+	<WeightEntry
+		today={data.today}
+		todayKg={data.todayKg}
+		lastKg={data.lastKg}
+		onsave={(kg) => save({ date: data.today, kg })}
+	/>
+
+	{#if data.series.length === 0}
+		<Card>
+			<EmptyState
+				icon={Scale}
+				title="No weigh-ins yet"
+				body="Log your morning weight to see your trend and weekly gain."
+			/>
+		</Card>
+	{:else}
+		<WeightSummary trendKg={data.trendKg} rate={data.rate} />
+		<WeightChart series={data.series} today={data.today} />
+	{/if}
+
+	<section class="flex flex-col gap-3" aria-labelledby="history-heading">
+		<div class="flex items-center justify-between gap-3">
+			<h2 id="history-heading" class="text-lg font-semibold text-text">History</h2>
+			<Button variant="secondary" icon={Plus} class="shrink-0" onclick={add}>Add weigh-in</Button>
+		</div>
+		{#if history.length > 0}
+			<ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
+				{#each history as point (point.date)}
+					<li>
+						<WeightRow {point} onedit={edit} ondelete={remove} />
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</section>
 </div>
+
+<EditWeightSheet bind:open={sheetOpen} point={sheetPoint} today={data.today} onsave={save} />

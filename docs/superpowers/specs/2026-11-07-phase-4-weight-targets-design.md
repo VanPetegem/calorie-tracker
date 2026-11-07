@@ -90,8 +90,10 @@ All ids, times and dates as in the parent spec.
   fits the visible data with padding. Tap or hover on a dot shows date, weight and trend. An accessible table
   fallback lists the visible points. 4b adds the goal slope: a dashed line from the trend at the current week's
   start at the goal rate.
-- **History**: newest first, date, weight and trend; tap to edit (sheet with date and weight, any allowed past date);
-  delete from the row menu with a 5 s Undo that saves the same values again.
+- **History**: newest first, date, weight and trend; tap a row to edit its weight (a stored weigh-in keeps its date,
+  because saving is an upsert by date and a changed date would leave a copy); delete from a visible bin button on the
+  row, with no row menu and no swipe, and a 5 s Undo that saves the same values again. Missed past days are added with
+  an "Add weigh-in" button, which opens the same sheet with a date field (any date up to tomorrow).
 - Empty state as today until the first weigh-in. Page data from `load`, cached by the service worker for reading
   offline; writes need a connection as everywhere else.
 

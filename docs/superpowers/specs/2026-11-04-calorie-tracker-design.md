@@ -105,7 +105,7 @@ All ids are text (UUIDv7). Times are UTC ISO strings; `date` columns are the use
 | `batches` | id, recipe_id (nullable), name, cooked_on (date), portions, cooked_weight_g (nullable, net of the container), kcal, protein, carbs, fat, fiber (totals), finished_at, created_at, updated_at |
 | `batch_ingredients` | id, batch_id, food_id (nullable), name, amount, unit (`g` / `ml` / `serving`, as entered), grams (gram equivalent), kcal, protein, carbs, fat, fiber (per 100 g snapshot), position |
 | `log_entries` | id, date, logged_at, kind (`food` / `batch` / `quick`), food_id, batch_id, amount, unit (`g` / `ml` / `portion` / `serving`), grams (nullable gram equivalent), label, kcal, protein, carbs, fat, fiber (snapshot of this entry), deleted_at (soft delete for Undo) |
-| `weights` | date (pk), kg, created_at |
+| `weights` | date (pk), kg, created_at, updated_at |
 | `settings` | single row: sex, birth_date, height_cm, activity_level, goal_rate_pct, protein_g_per_kg, fat_pct, energy_density_kcal_per_kg, timezone, theme. Phase 2 has only timezone, manual_target_kcal and manual_weight_kg; phase 4 adds the rest |
 | `weekly_targets` | week_start (pk, Monday), tdee_formula, tdee_adaptive (nullable), tdee_used, target_kcal, protein_g, carbs_g, fat_g, trend_kg, rate_kg_per_week, data_days |
 

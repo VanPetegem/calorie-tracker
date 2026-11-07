@@ -4,6 +4,16 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-07
 
+- **The weight commands are thin wrappers over `saveWeightOn` and `deleteWeightOn`, and the page data comes from
+  `loadWeight`.** All three live in `server/weights/commands.ts` and take `{ db, today }`, so the date window
+  (`assertLogDate`, 400 after tomorrow, for save and delete) and the load are tested against Miniflare D1 without the
+  remote function runtime. `weight.remote.ts` only calls them. `lastKg`, the entry's prefill, is the latest weigh-in up
+  to today, so a weigh-in for tomorrow does not become the prefill; it also stays out of today's trend and rate.
+- **The page toasts "Logged 70.6 kg" for a day without a weigh-in and "Updated 70.6 kg" for one with, and always shows
+  the Add weigh-in button.** The page decides from the loaded series (the date has a point or not), for the entry card
+  and the sheet alike. The history section and its button show with no weigh-ins too, because a missed past day can
+  be the first one; the chart and summary wait for the first weigh-in. Deleting calls `deleteWeight`, then offers the
+  5 s Undo (`withUndo`) that calls `saveWeight` with the old date and kg; a failed delete is a danger toast with Retry.
 - **`EditWeightSheet` mounts its form anew on every opening, and a changed weight drops an old failure.** The number
   field keeps what was typed, and an invalid entry stays as text with value null, so resetting `kg` does not clear it:
   the form sits in `{#key openings}`, bumped in the sheet's `onclose`, not on open: a sheet shown again during its exit is
