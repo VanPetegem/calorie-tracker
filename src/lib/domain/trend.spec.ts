@@ -19,6 +19,9 @@ describe('trendSeries', () => {
 			{ date: '2026-11-03', kg: 72 }
 		]);
 		expect(series[0].trend).toBeCloseTo(71, 10);
+		// The seed weigh-ins after the first still move the trend from the mean.
+		expect(series[1].trend).toBeCloseTo(71, 10);
+		expect(series[2].trend).toBeCloseTo(71.1, 10);
 	});
 
 	it('takes the mean of the weigh-ins there are when there are fewer than three', () => {
