@@ -9,6 +9,7 @@ import {
 	text,
 	uniqueIndex
 } from 'drizzle-orm/sqlite-core';
+import { MAX_WEIGHT_KG, MIN_WEIGHT_KG } from '../../domain/constants.ts';
 
 export * from './auth.schema';
 
@@ -202,6 +203,27 @@ export const batchIngredients = sqliteTable(
 	(table) => [index('batch_ingredients_batch_id_position_idx').on(table.batchId, table.position)]
 );
 
+/** One weigh-in per local calendar date; saving a date again replaces its kg. */
+export const weights = sqliteTable(
+	'weights',
+	{
+		/** Local calendar date (`YYYY-MM-DD`) in the settings timezone. */
+		date: text('date').primaryKey(),
+		kg: real('kg').notNull(),
+		createdAt: text('created_at').notNull().default(nowIso),
+		updatedAt: text('updated_at')
+			.notNull()
+			.default(nowIso)
+			.$onUpdate(() => new Date().toISOString())
+	},
+	(table) => [
+		check(
+			'weights_kg_range',
+			sql`${table.kg} BETWEEN ${sql.raw(String(MIN_WEIGHT_KG))} AND ${sql.raw(String(MAX_WEIGHT_KG))}`
+		)
+	]
+);
+
 /** A single row (id 1). Phase 4 adds the remaining settings columns. */
 export const settings = sqliteTable(
 	'settings',
@@ -227,3 +249,4 @@ export type RecipeIngredient = typeof recipeIngredients.$inferSelect;
 export type Container = typeof containers.$inferSelect;
 export type Batch = typeof batches.$inferSelect;
 export type BatchIngredient = typeof batchIngredients.$inferSelect;
+export type Weight = typeof weights.$inferSelect;

@@ -191,28 +191,53 @@ BatchForm                -> saveBatch / finishBatch / reopenBatch / deleteBatch 
 - `BatchForm` guards unsaved changes like `RecipeForm`. It is inert while a save runs, and the batch page remounts it
   when a save changed the lines' ids, so the form always starts from the stored lines.
 
+## Weight
+
+The Weight tab (`/weight`) holds weigh-ins, one per local calendar date, with the trend on each.
+
+```
+/weight page load -> loadWeight -> listWeights -> trendSeries (domain/trend.ts) -> series, todayKg, lastKg, trendKg, rate
+WeightEntry / EditWeightSheet / WeightRow -> callbacks into the page
+page -> saveWeight / deleteWeight (weight.remote.ts, shared schema src/lib/schemas/weight.ts)
+     -> saveWeightOn / deleteWeightOn (server/weights/commands.ts) -> assertLogDate -> weights repo -> D1
+     -> await invalidateAll() -> the page load runs again
+```
+
+- Saving is an upsert by date, so saving a date again replaces its weight (`updated_at` moves, `created_at` stays).
+  Undo of a delete is the same `saveWeight` with the old values.
+- The repository does not know today, so the commands check the date window themselves with `assertLogDate` (no later
+  than tomorrow, else 400), like the log commands. `WeightInput` checks the calendar date and the 20 to 400 kg limits.
+- The components send nothing: they take callbacks, and the page owns the write, the toast ("Logged" for a new day,
+  "Updated" for a day that had a weigh-in, "Deleted ..." with a 5 second Undo) and the refresh. A failed refresh after
+  a successful write is ignored; a failed write reaches the component, which keeps the value and offers Retry.
+- The trend and weekly rate are pure functions (`trendSeries`, `trendOn`, `weeklyRate`), computed on every load from
+  the weigh-ins; nothing derived is stored. `lastKg` is the latest weigh-in up to today (the entry's prefill); a weigh-in
+  for tomorrow is kept but is not part of today's trend.
+- `WeightChart` is inline SVG without a library; its range (30 days, 90 days, 1 year, All) is stored per device in
+  `localStorage`. `/design` shows each component in its states.
+
 ## Directory map
 
-| Path                           | Contents                                                                                                                                |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/hooks.server.ts`          | Request guard (rate limit, session, access)                                                                                             |
-| `src/routes/(app)`             | Signed in pages inside the app shell (tab bar, sidebar)                                                                                 |
-| `src/routes/(auth)`            | `/login` and `/setup` without the shell                                                                                                 |
-| `src/lib/server`               | Better Auth setup, guard rules, rate limits, Drizzle schema, `off/` client, `foods/`, `log/`, `recipes/`, `batches/`, `settings/` repos |
-| `src/lib/schemas`              | Valibot schemas shared by forms and remote commands                                                                                     |
-| `src/lib/domain`               | Pure domain math: nutrition, recipes (`batch.ts`), targets, dates, search text, barcodes, limits                                        |
-| `src/lib/scanner`              | Barcode detector factory (native API or lazy zxing-wasm ponyfill)                                                                       |
-| `src/lib/components`           | `shell/` (navigation), `ui/` (design system), `log/` (add sheet, forms, day view), `recipes/` (editors, ingredients, batches)           |
-| `src/lib/stores`               | Shared client state (add sheet, toasts, unsaved changes guard)                                                                          |
-| `src/routes/(app)/*.remote.ts` | Remote commands and queries: `foods`, `log`, `recipes/recipes`, `recipes/batches`, `settings/target`                                    |
-| `scripts/import-blv.ts`        | Generates the BLV foods migration                                                                                                       |
-| `src/service-worker`           | Offline app shell                                                                                                                       |
-| `drizzle/`                     | Generated SQL migrations, applied with wrangler                                                                                         |
-| `e2e/`                         | Playwright tests (Chromium desktop, WebKit iPhone)                                                                                      |
-| `scripts/e2e-db-reset.sh`      | Fresh migrated local D1 (plus the batches of `e2e/seed.sql`) and a `BETTER_AUTH_SECRET` for e2e                                         |
-| `e2e/off-stub.mjs`             | Local Open Food Facts stand in (port 4174) serving recorded fixtures                                                                    |
-| `wrangler.jsonc`               | Worker config: D1, rate limit bindings, custom domain, production vars                                                                  |
-| `worker-configuration.d.ts`    | Generated by `pnpm gen`; `pnpm check` and `pnpm build` fail when it is stale                                                            |
+| Path                           | Contents                                                                                                                                                |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/hooks.server.ts`          | Request guard (rate limit, session, access)                                                                                                             |
+| `src/routes/(app)`             | Signed in pages inside the app shell (tab bar, sidebar)                                                                                                 |
+| `src/routes/(auth)`            | `/login` and `/setup` without the shell                                                                                                                 |
+| `src/lib/server`               | Better Auth setup, guard rules, rate limits, Drizzle schema, `off/` client, `foods/`, `log/`, `recipes/`, `batches/`, `weights/`, `settings/` repos     |
+| `src/lib/schemas`              | Valibot schemas shared by forms and remote commands                                                                                                     |
+| `src/lib/domain`               | Pure domain math: nutrition, recipes (`batch.ts`), weight trend (`trend.ts`), targets, dates, search text, barcodes, limits                             |
+| `src/lib/scanner`              | Barcode detector factory (native API or lazy zxing-wasm ponyfill)                                                                                       |
+| `src/lib/components`           | `shell/` (navigation), `ui/` (design system), `log/` (add sheet, forms, day view), `recipes/` (editors, ingredients, batches), `weight/` (entry, chart) |
+| `src/lib/stores`               | Shared client state (add sheet, toasts, unsaved changes guard)                                                                                          |
+| `src/routes/(app)/*.remote.ts` | Remote commands and queries: `foods`, `log`, `recipes/recipes`, `recipes/batches`, `weight/weight`, `settings/target`                                   |
+| `scripts/import-blv.ts`        | Generates the BLV foods migration                                                                                                                       |
+| `src/service-worker`           | Offline app shell                                                                                                                                       |
+| `drizzle/`                     | Generated SQL migrations, applied with wrangler                                                                                                         |
+| `e2e/`                         | Playwright tests (Chromium desktop, WebKit iPhone)                                                                                                      |
+| `scripts/e2e-db-reset.sh`      | Fresh migrated local D1 (plus the batches of `e2e/seed.sql`) and a `BETTER_AUTH_SECRET` for e2e                                                         |
+| `e2e/off-stub.mjs`             | Local Open Food Facts stand in (port 4174) serving recorded fixtures                                                                                    |
+| `wrangler.jsonc`               | Worker config: D1, rate limit bindings, custom domain, production vars                                                                                  |
+| `worker-configuration.d.ts`    | Generated by `pnpm gen`; `pnpm check` and `pnpm build` fail when it is stale                                                                            |
 
 ## Run locally
 

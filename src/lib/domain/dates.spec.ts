@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, isAllowedLogDate, loggedAtFor, localDate } from './dates';
+import { addDays, daysBetween, isAllowedLogDate, loggedAtFor, localDate } from './dates';
 
 const ZURICH = 'Europe/Zurich';
 
@@ -24,6 +24,26 @@ describe('addDays', () => {
 		['2028-02-28', 1, '2028-02-29']
 	])('adds %i days to %s as %s', (date, n, expected) => {
 		expect(addDays(date, n)).toBe(expected);
+	});
+});
+
+describe('daysBetween', () => {
+	it.each([
+		['2026-11-05', '2026-11-05', 0],
+		['2026-11-05', '2026-11-06', 1],
+		['2026-11-06', '2026-11-05', -1],
+		['2026-02-28', '2026-03-01', 1],
+		['2028-02-28', '2028-03-01', 2],
+		['2025-12-31', '2026-01-01', 1],
+		['2024-12-31', '2025-12-31', 365],
+		['2027-12-31', '2028-12-31', 366]
+	])('counts %s to %s as %i days', (from, to, expected) => {
+		expect(daysBetween(from, to)).toBe(expected);
+	});
+
+	it('is the inverse of addDays', () => {
+		expect(daysBetween('2026-11-05', addDays('2026-11-05', 30))).toBe(30);
+		expect(daysBetween(addDays('2026-11-05', -9), '2026-11-05')).toBe(9);
 	});
 });
 

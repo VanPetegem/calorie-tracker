@@ -10,7 +10,8 @@ import {
 	recipeIngredients,
 	recipes,
 	settings,
-	user
+	user,
+	weights
 } from './schema.ts';
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>;
@@ -217,5 +218,18 @@ describe('schema constraints', () => {
 		await expect(
 			test.db.insert(containers).values({ id: crypto.randomUUID(), name: 'Pot', tareG: 0 })
 		).rejects.toMatchObject(failedOn('CHECK constraint failed: containers_tare_positive'));
+	});
+
+	it('rejects a weight outside 20 to 400 kg', async () => {
+		for (const kg of [19.9, 400.1]) {
+			await expect(
+				test.db.insert(weights).values({ date: '2026-11-07', kg })
+			).rejects.toMatchObject(failedOn('CHECK constraint failed: weights_kg_range'));
+		}
+		await test.db.insert(weights).values([
+			{ date: '2026-11-06', kg: 20 },
+			{ date: '2026-11-07', kg: 400 }
+		]);
+		expect(await test.db.$count(weights)).toBe(2);
 	});
 });

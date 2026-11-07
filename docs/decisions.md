@@ -4,6 +4,78 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-07
 
+- **The entry card saves through `logWeightToday({ kg })`, which uses the server's today; the sheet keeps `saveWeight`
+  with an explicit date.** `data.today` is fixed when the page loads, so a page left open past midnight, or a Retry
+  after an offline resume, would have written the weigh-in to yesterday and replaced it. `logWeightTodayOn(ctx, input)`
+  saves to `ctx.today` through `saveWeightOn` (same date window). The page still decides "Logged" or "Updated" from its
+  loaded series; on a stale page that toast can name the wrong verb, which is cosmetic and the next refresh corrects it.
+- **"Add weigh-in" starts on yesterday and says when the chosen day already has a weigh-in.** Today has the entry card,
+  and a first day of today made a casual add replace today's weigh-in without a word. The sheet takes a `kgOn(date)`
+  prop (the page answers from its series) and replaces the "Up to tomorrow." hint with "This day has 70.6 kg; saving
+  replaces it" while the chosen date has a weigh-in. Replacing stays allowed, because correcting a day is the other use
+  of the add sheet.
+- **The sheet's date shows its error on blur, like every form.** `dateTouched` is set on blur and reset on each opening;
+  Save still shows it, as before. The weight keeps its rule (error once it holds a value or after Save).
+- **`MAX_WEIGHT_KG` sits next to `MIN_WEIGHT_KG`.** It was under the phase 2 manual target bounds. A move only.
+- **A 4b week row's trend and rate use only weigh-ins before its week.** The 4b plan (Tasks 5 and 7) now says a row
+  uses `trendSeries(weighIns before weekStart, addDays(weekStart, -1))`, so a weigh-in logged during the week cannot
+  change the row (Review Focus 1). `latestWeight` returns the newest date, which can be tomorrow, so the onboarding
+  prefill must use the latest up to today, not `latestWeight`.
+- **The weight commands are thin wrappers over `saveWeightOn` and `deleteWeightOn`, and the page data comes from
+  `loadWeight`.** All three live in `server/weights/commands.ts` and take `{ db, today }`, so the date window
+  (`assertLogDate`, 400 after tomorrow, for save and delete) and the load are tested against Miniflare D1 without the
+  remote function runtime. `weight.remote.ts` only calls them. `lastKg`, the entry's prefill, is the latest weigh-in up
+  to today, so a weigh-in for tomorrow does not become the prefill; it also stays out of today's trend and rate: `trendSeries(weighIns, today)` seeds the trend only from weigh-ins up to today (with fewer than three, tomorrow's would otherwise enter the seed mean), and later ones continue it, so the chart and the summary agree.
+- **The page toasts "Logged 70.6 kg" for a day without a weigh-in and "Updated 70.6 kg" for one with, and always shows
+  the Add weigh-in button.** The page decides from the loaded series (the date has a point or not), for the entry card
+  and the sheet alike. The history section and its button show with no weigh-ins too, because a missed past day can
+  be the first one; the chart and summary wait for the first weigh-in. Deleting calls `deleteWeight`, then offers the
+  5 s Undo (`withUndo`) that calls `saveWeight` with the old date and kg; a failed delete is a danger toast with Retry.
+- **`EditWeightSheet` mounts its form anew on every opening, and a changed weight drops an old failure.** The number
+  field keeps what was typed, and an invalid entry stays as text with value null, so resetting `kg` does not clear it:
+  the form sits in `{#key openings}`, bumped in the sheet's `onclose`, not on open: a sheet shown again during its exit is
+  not refocused by `Sheet`, and a remount on open would destroy the focused element. Accepted gap: `Sheet` skips `onclose` when it is reopened during its 200 ms exit, so an add sheet (weight null) reopened that fast keeps an invalid entry typed before; it shows its error and is replaced by typing. `WeightEntry` and the sheet clear the failure (and
+  the Retry label) when the weight changes; `WeightEntry` says why the step buttons are off at 20 and 400 kg.
+  `commitFocusedInput` and `fieldIssue` live in `weight/form.ts`.
+- **The weight components take callbacks and the page owns the write, the toast and the refresh.** `WeightEntry` and
+  `EditWeightSheet` only show the saving state and, when `onsave` rejects, keep the value and offer Retry (the
+  `ContainerForm` pattern). They send nothing and toast nothing, so Task 4 shows "Logged" or "Updated" (it knows
+  whether today had a value), calls `invalidateAll()`, and the components are shown whole on `/design`. The sheet
+  closes itself when `onsave` resolves. `WeightRow` deletes from a visible bin button instead of the spec's row menu,
+  with no swipe: one tap, Undo from the page, nothing hidden.
+- **`NumberInput` commits on blur only, so the weight forms commit it themselves.** Enter in the field and a step
+  button tapped while the field still has focus (iOS Safari does not focus a button, so the field never blurs) would
+  use the old number. Both call a small `commitFocusedInput` first, which blurs the focused input. Steps work in whole tenths
+  (`Math.round(kg * 10) + 1`, then `/ 10`), not `kg + 0.1`, which gives 70.69999999999999 from 70.6; the step buttons
+  turn off only at 20 and 400 kg, with a hint. They stay on while the field is empty: a step commits what is typed
+  first (so typing 70.5 and tapping + gives 70.6) and does nothing if there is still no number.
+- **A stored weigh-in keeps its date in `EditWeightSheet`; the date is editable only for a new one.** Saving is an
+  upsert by date, so changing the date of a stored weigh-in would leave the old day behind as a copy. `point` null
+  opens the same sheet as "Add weigh-in" with a date up to tomorrow (`isAllowedLogDate`, the log's rule). Spec 5's
+  "any allowed past date" is met by that add mode; the Weight page opens it from its "Add weigh-in" button.
+- **The chart ranges are calendar days ending today, and the chart is a slider over its points.** "30 days" is today
+  and the 29 days before it (`visiblePoints`), so a point 30 days back is out; a weigh-in for tomorrow is kept. A
+  fixed range always spans its whole window on the x axis (a sparse series sits where its days are), "All" starts at
+  the first weigh-in. The SVG is `aria-hidden`; the focusable wrapper has `role="slider"` with the point's date,
+  weight and trend as value text (arrow keys, Home, End, Escape), and a table of the visible points is the text
+  version. Tap and drag select the nearest point (touch), hover does for a mouse; focus shows the latest. The tooltip
+  is a row above the plot, in the flow (at least 5rem, three short lines, `w-max max-w-full`), so a larger text size makes
+  the row taller and never covers data, and the box wraps within the plot width, unclipped; a touch outside the chart puts it away, and an emptied series clears the pick. Up and Down move like Right and Left
+  (a slider's keys), and the picked index is clamped to the series, which can shrink while the chart has focus. The range is stored under `kcal-weight-range`
+  and read after mount, so server and first client render agree.
+- **The weekly rate is shown signed in kg and percent.** "+0.24 kg/week" and "+0.33 %", "-0.30 kg/week" and
+  "-0.43 %" for a loss, both rounded to 2 places and formatted with `en-GB` so tests and every device read the same;
+  the trend and chart weights have one decimal.
+- **`WeightInput` checks only that the date is a calendar date; the weight command checks `isAllowedLogDate`.** The
+  rule needs today in the settings timezone, which a shared schema used by the form cannot know, and the repository
+  keeps the plan's `saveWeight(db, input)` signature without `today`. Unlike the log repository (`assertLogDate` in
+  `server/log/repo.ts`), `saveWeight` and `deleteWeight` do not check the date window, so the Task 4 commands must call
+  `assertLogDate(date, ctx.today)` for save and delete. `saveWeight` still parses its input, like `saveContainer`, so a
+  direct call cannot skip the kg limits or the calendar date check.
+- **The `weights_kg_range` SQL check is written from `MIN_WEIGHT_KG` and `MAX_WEIGHT_KG`.** The schema builds the
+  check with `sql.raw` of the constants, so the generated migration holds the literals 20 and 400 and a changed limit
+  shows up as a schema diff instead of drifting from the Valibot schema. `updated_at` on an upsert comes from the
+  column's `$onUpdate`, as in the other tables.
 - **The `BatchRow` stale state of the spec is dropped; it cannot be shown.** Spec section 9 listed "stale" next to
   portions left and finished. Auto finish runs whenever active batches load (`activeBatches`), so an active batch past
   the threshold is finished before any row renders, and a stale active row cannot exist. `BatchRow` has portions left

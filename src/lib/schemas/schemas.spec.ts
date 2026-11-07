@@ -13,6 +13,7 @@ import {
 import { fitsUnit, LOG_UNITS } from './fields.ts';
 import { ArchiveRecipeInput, RecipeInput } from './recipe.ts';
 import { ManualTargetInput } from './settings.ts';
+import { DeleteWeightInput, WeightInput } from './weight.ts';
 
 const foodId = '019a5b2e-8f3c-7d4a-9b1e-2c3d4e5f6a7b';
 
@@ -404,5 +405,35 @@ describe('BatchIdInput and ContainerIdInput', () => {
 			expect(v.parse(schema, { id: foodId })).toEqual({ id: foodId });
 			expect(v.safeParse(schema, { id: foodId, name: 'x' }).success).toBe(false);
 		}
+	});
+});
+
+describe('WeightInput', () => {
+	it('accepts comma decimals and the limits 20 and 400 kg', () => {
+		expect(v.parse(WeightInput, { date: '2026-11-07', kg: '72,5' })).toEqual({
+			date: '2026-11-07',
+			kg: 72.5
+		});
+		expect(v.parse(WeightInput, { date: '2026-11-07', kg: 20 }).kg).toBe(20);
+		expect(v.parse(WeightInput, { date: '2026-11-07', kg: '400' }).kg).toBe(400);
+	});
+
+	it('rejects 19.9 and 400.1 kg', () => {
+		expect(v.safeParse(WeightInput, { date: '2026-11-07', kg: '19,9' }).success).toBe(false);
+		expect(v.safeParse(WeightInput, { date: '2026-11-07', kg: 400.1 }).success).toBe(false);
+	});
+
+	it('rejects a date that is not a calendar date and extra keys', () => {
+		expect(v.safeParse(WeightInput, { date: '2026-02-30', kg: 72 }).success).toBe(false);
+		expect(v.safeParse(WeightInput, { date: '2026-11-07', kg: 72, trend: 71 }).success).toBe(false);
+	});
+});
+
+describe('DeleteWeightInput', () => {
+	it('takes only a calendar date', () => {
+		expect(v.parse(DeleteWeightInput, { date: '2026-11-07' })).toEqual({ date: '2026-11-07' });
+		expect(v.safeParse(DeleteWeightInput, { date: '2026-11-07', kg: 72 }).success).toBe(false);
+		expect(v.safeParse(DeleteWeightInput, { date: '7.11.2026' }).success).toBe(false);
+		expect(v.safeParse(DeleteWeightInput, { date: '2026-02-30' }).success).toBe(false);
 	});
 });
