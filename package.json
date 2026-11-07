@@ -7,7 +7,7 @@
 		"dev": "vite dev",
 		"build": "node scripts/worker-types.mjs --check && vite build",
 		"preview": "wrangler dev .svelte-kit/cloudflare/_worker.js --port 4173 --infer-origin-from-routes=false",
-		"prepare": "svelte-kit sync || echo ''",
+		"prepare": "svelte-kit sync || echo ''; git config core.hooksPath .githooks 2>/dev/null || true",
 		"check": "node scripts/worker-types.mjs --check && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc -p src/service-worker/tsconfig.json --noEmit",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --check . && eslint .",

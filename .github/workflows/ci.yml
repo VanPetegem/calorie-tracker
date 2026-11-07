@@ -1,28 +1,55 @@
 name: CI
 
 on:
+  # Branches are checked through their pull request; a push to main checks and deploys. A branch push without a
+  # PR runs nothing in CI (the pre-push hook in .githooks/pre-push runs the full gate locally).
   push:
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
 
+# A newer push to the same PR or branch cancels the run it replaces (never a deploy: that job has its own group).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # `vite build` and svelte-check validate the variables declared in src/env.ts but do not bundle their values:
+  # the Worker reads the real ones at runtime.
+  ORIGIN: http://localhost:4173
+  BETTER_AUTH_SECRET: build-validation-only
+  OFF_CONTACT_EMAIL: build-validation-only@example.invalid
+
 jobs:
-  verify:
+  # Types and lint need no browser, so no container: the fastest job, about a minute.
+  static:
     runs-on: ubuntu-latest
-    # Hard cap: the full suite runs locally before a push, so a slow CI run is a stall, not work. Fail fast.
-    # A healthy run takes about 4.5 minutes since the scanner e2e (phase 2b); 8 leaves room for runner variance.
-    timeout-minutes: 8
-    # Browsers and their system packages come preinstalled: `playwright install --with-deps` spent 18 minutes in
-    # apt once. The tag must match the Playwright version in pnpm-lock.yaml; bump both together, digest included.
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: 10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm lint
+
+  # Vitest runs component tests in Chromium. The Playwright image ships the browser and its system packages:
+  # `playwright install --with-deps` spent 18 minutes in apt once. The tag must match the Playwright version in
+  # pnpm-lock.yaml; bump both together, digest included. The e2e job uses the same image.
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
     container:
       image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
-    env:
-      # `vite build` validates the variables declared in src/env.ts but does not bundle their values: the
-      # Worker reads the real ones at runtime. e2e overrides ORIGIN with --var and takes its secret from .dev.vars.
-      ORIGIN: http://localhost:4173
-      BETTER_AUTH_SECRET: build-validation-only
-      OFF_CONTACT_EMAIL: build-validation-only@example.invalid
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,11 +65,31 @@ jobs:
       - name: Playwright matches the container image
         run: |
           pnpm exec playwright --version | grep -qx 'Version 1.64.1' || {
-            echo "::error::Playwright in pnpm-lock.yaml is not 1.64.1: bump the verify container image (tag and digest) and this check together."
+            echo "::error::Playwright in pnpm-lock.yaml is not 1.64.1: bump the unit container image (tag and digest) and this check together."
             exit 1
           }
-      # scripts/e2e-db-reset.sh writes a random BETTER_AUTH_SECRET to .dev.vars when CI is set.
-      - run: pnpm verify
+      - run: pnpm test
+
+  # Playwright against the built Worker (wrangler dev, local D1, the OFF stub). Runs alongside the other jobs, so
+  # the slowest job sets the wall time. scripts/e2e-db-reset.sh writes a random BETTER_AUTH_SECRET to .dev.vars.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: 10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:e2e
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
@@ -52,16 +99,42 @@ jobs:
             test-results/
           if-no-files-found: ignore
 
+  # Known vulnerable dependencies (high and above) and committed secrets. CodeQL runs in codeql.yml.
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    permissions:
+      contents: read
+      # gitleaks reads the commit list of a pull request through the API.
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # gitleaks scans the commits of the push or PR, so it needs the history.
+          fetch-depth: 0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: 10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: pnpm audit --audit-level high
+      # Free for personal accounts; an organization would need a GITLEAKS_LICENSE secret.
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   deploy:
-    needs: verify
+    needs: [static, unit, e2e, security]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # Longer than verify: a timeout between `db:migrate:remote` and `wrangler deploy` would leave production on
+    # Longer than the checks: a timeout between `db:migrate:remote` and `wrangler deploy` would leave production on
     # the new schema with the old Worker.
     timeout-minutes: 10
     concurrency: deploy
     env:
-      # Build time validation only, see the verify job. Production uses vars.ORIGIN and the Worker secret.
+      # Build time validation only, see the top level env. Production uses vars.ORIGIN and the Worker secret.
       ORIGIN: https://kcal.avp.software
       BETTER_AUTH_SECRET: build-validation-only
       OFF_CONTACT_EMAIL: build-validation-only@example.invalid

@@ -8,13 +8,11 @@ cd "$(dirname "$0")/.."
 # Matches a non empty value, quoted or not: the empty BETTER_AUTH_SECRET="" from .env.example does not count.
 has_secret='^BETTER_AUTH_SECRET=["'"'"']?[^"'"'"'[:space:]]'
 if ! grep -Eq "$has_secret" .dev.vars 2>/dev/null; then
-	if [ -n "${CI:-}" ]; then
-		printf 'BETTER_AUTH_SECRET=%s\n' "$(openssl rand -base64 32)" >> .dev.vars
-	elif grep -Eq "$has_secret" .env 2>/dev/null; then
+	if grep -Eq "$has_secret" .env 2>/dev/null; then
 		grep '^BETTER_AUTH_SECRET=' .env >> .dev.vars
 	else
-		echo 'BETTER_AUTH_SECRET is missing: set it in .env (openssl rand -base64 32).' >&2
-		exit 1
+		# No .env (CI, or a fresh worktree): the e2e database is thrown away, so a random secret will do.
+		printf 'BETTER_AUTH_SECRET=%s\n' "$(openssl rand -base64 32)" >> .dev.vars
 	fi
 fi
 
