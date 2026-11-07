@@ -4,6 +4,15 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-07
 
+- **`WeightInput` checks only that the date is a calendar date; the weight command checks `isAllowedLogDate`.** The
+  rule needs today in the settings timezone, which a shared schema used by the form cannot know, and the repository
+  keeps the plan's `saveWeight(db, input)` signature without `today`. The command (Task 4) rejects a later date, as
+  the log commands do. `saveWeight` still parses its input, like `saveContainer`, so a direct call cannot skip the
+  limits.
+- **The `weights_kg_range` SQL check is written from `MIN_WEIGHT_KG` and `MAX_WEIGHT_KG`.** The schema builds the
+  check with `sql.raw` of the constants, so the generated migration holds the literals 20 and 400 and a changed limit
+  shows up as a schema diff instead of drifting from the Valibot schema. `updated_at` on an upsert comes from the
+  column's `$onUpdate`, as in the other tables.
 - **The `BatchRow` stale state of the spec is dropped; it cannot be shown.** Spec section 9 listed "stale" next to
   portions left and finished. Auto finish runs whenever active batches load (`activeBatches`), so an active batch past
   the threshold is finished before any row renders, and a stale active row cannot exist. `BatchRow` has portions left
