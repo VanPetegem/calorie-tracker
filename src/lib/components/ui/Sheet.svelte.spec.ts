@@ -175,4 +175,43 @@ describe('Sheet', () => {
 		expect(document.querySelectorAll('body > [inert]')).toHaveLength(0);
 		expect(getComputedStyle(document.documentElement).overflow).not.toBe('hidden');
 	});
+
+	// Mounted the other way round: the second sheet's layer comes first in the body. Opening must still draw it on
+	// top, and one Escape must close only it.
+	it('draws the newest sheet on top and closes only it on Escape, whatever the mount order', async () => {
+		render(SheetTestHarness, { secondFirst: true });
+		await openSheet();
+		await page.getByRole('button', { name: 'Open second' }).click();
+		const second = page.getByRole('dialog', { name: 'Second sheet' });
+		await expect.element(second).toBeVisible();
+		expect(document.body.lastElementChild).toBe(second.element().parentElement);
+		await userEvent.keyboard('{Escape}');
+		await expect.element(second).not.toBeInTheDocument();
+		expect(dialogEl().open).toBe(true);
+	});
+
+	it('does not close on an Escape that a control inside the sheet handled', async () => {
+		render(SheetTestHarness);
+		await openSheet();
+		const body = page.getByText('Body text').element() as HTMLElement;
+		body.tabIndex = -1;
+		body.focus();
+		body.addEventListener('keydown', (event) => event.preventDefault(), { once: true });
+		await userEvent.keyboard('{Escape}');
+		expect(dialogEl().open).toBe(true);
+	});
+
+	it('makes the page inert also when the sheet is mounted open', async () => {
+		render(SheetTestHarness, { startOpen: true });
+		await expect.element(page.getByRole('dialog', { name: 'Delete entry' })).toBeVisible();
+		const trigger = page.getByRole('button', { name: 'Open sheet', includeHidden: true }).element();
+		expect(trigger.closest('[inert]')).not.toBeNull();
+		await userEvent.keyboard('{Escape}');
+		await expect.poll(() => dialogEl().open, { timeout: 3000 }).toBe(false);
+	});
+
+	it('does not cover the page while closed', async () => {
+		render(SheetTestHarness);
+		expect(getComputedStyle(dialogEl().parentElement!).display).toBe('none');
+	});
 });

@@ -2,15 +2,15 @@
 	import { tick, untrack, type Snippet } from 'svelte';
 	import X from '@lucide/svelte/icons/x';
 	import IconButton from './IconButton.svelte';
-	import { isTopLayer, popLayer, pushLayer } from './sheet-stack.ts';
+	import { popLayer, pushLayer } from './sheet-stack.ts';
 
 	/**
 	 * A modal sheet on a native `<dialog>`: a bottom sheet below 640 px, a centered dialog above.
 	 *
 	 * Not `showModal()`: Brave and Firefox on iOS place top layer content below the visible screen, so only the
 	 * sheet's title showed. The dialog opens with `show()` inside a fixed layer moved to the end of the body, and
-	 * the parts of a modal are added by hand: a scrim instead of `::backdrop`, the rest of the page `inert` (see
-	 * `sheet-stack.ts`, which also stacks a sheet opened from a sheet), and Escape on the top sheet closes it.
+	 * the parts of a modal are added by hand: a scrim instead of `::backdrop`, and `sheet-stack.ts` for the rest
+	 * (newest sheet on top, the page behind `inert`, Escape and the Android back gesture close the top sheet).
 	 *
 	 * Focus: the element focused when the sheet opens is remembered and focused again after it closes, if it is still
 	 * in the page. Safari does not focus a button on click or tap, so after a touch open there is no opener to
@@ -41,11 +41,10 @@
 	let closing = $state(false);
 	let pressedOutside = false;
 	let opener: HTMLElement | null = null;
-	let layer: HTMLElement | undefined;
+	let layer = $state<HTMLElement>();
 
 	/** Moves the layer to the end of the body, out of any stacking context or `inert` page container. */
 	function portal(node: HTMLElement) {
-		layer = node;
 		document.body.appendChild(node);
 		return () => {
 			popLayer(node);
@@ -55,27 +54,30 @@
 
 	// `open` is the single source of truth. Every way of closing (Escape, scrim, close button, parent) sets it to
 	// false, and this attachment, which reruns when `open` changes, plays the exit transition before the close.
+	// It also waits for the layer, which is bound after this attachment first runs (a sheet mounted open).
 	function sync(el: HTMLDialogElement) {
 		const wantOpen = open;
-		untrack(() => (wantOpen ? show(el) : hide(el)));
+		const current = layer;
+		if (!current) return;
+		untrack(() => (wantOpen ? show(el, current) : hide(el, current)));
 	}
 
-	function show(el: HTMLDialogElement) {
+	function show(el: HTMLDialogElement, current: HTMLElement) {
 		closing = false;
-		if (layer) pushLayer(layer);
+		pushLayer(current, () => (open = false), !el.open);
 		if (el.open) return;
 		const active = document.activeElement;
 		opener = active instanceof HTMLElement && active !== document.body ? active : null;
 		el.show();
 	}
 
-	async function hide(el: HTMLDialogElement) {
+	async function hide(el: HTMLDialogElement, current: HTMLElement) {
 		if (!el.open || closing) return;
 		closing = true;
 		// The sheet below (or the page) takes input again while this one animates out.
-		if (layer) popLayer(layer);
+		popLayer(current);
 		await tick();
-		const animations = layer?.getAnimations({ subtree: true }) ?? [];
+		const animations = current.getAnimations({ subtree: true });
 		if (animations.length > 0) {
 			await Promise.race([
 				Promise.allSettled(animations.map((animation) => animation.finished)),
@@ -87,16 +89,9 @@
 		el.close();
 	}
 
-	function handleKeydown(event: KeyboardEvent) {
-		if (event.key !== 'Escape' || !open || closing || !layer || !isTopLayer(layer)) return;
-		event.preventDefault();
-		open = false;
-	}
-
 	function handleClose() {
 		closing = false;
 		open = false;
-		if (layer) popLayer(layer);
 		// Focus the opener again, if it is still in the page.
 		if (opener?.isConnected) opener.focus();
 		opener = null;
@@ -114,9 +109,7 @@
 	}
 </script>
 
-<svelte:document onkeydown={handleKeydown} />
-
-<div class="layer" {@attach portal}>
+<div class="layer" bind:this={layer} {@attach portal}>
 	<!--
 		The scrim closes on a tap. Keyboard users close with Escape or the close button, which makes this pointer
 		handler an enhancement.
@@ -184,6 +177,7 @@
 		z-index: 60;
 	}
 
+	/* A closed layer must not cover the page. */
 	.layer:not(:has(> dialog[open])) {
 		display: none;
 	}
