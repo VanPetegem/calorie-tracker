@@ -174,6 +174,8 @@
 	let weightSheetPoint = $state<WeighIn | null>(null);
 	let weightSheetLog = $state('Open the sheet to edit a weigh-in or add one.');
 	let weightSheetFails = $state(false);
+	// Whether yesterday, the add sheet's first day, already has a weigh-in (the replace hint).
+	let weightSheetTaken = $state(false);
 
 	const sampleEntry: LogEntry = {
 		id: 'design-oats',
@@ -1363,7 +1365,7 @@
 
 	<Section
 		name="EditWeightSheet"
-		description="Edits the weight of a stored weigh-in, whose date stays; or adds one for a day up to tomorrow. The weight is checked on blur and on Save with the server's schema. The sheet closes when the save works; when it fails it stays open and offers Retry."
+		description="Edits the weight of a stored weigh-in, whose date stays; or adds one for a day up to tomorrow, starting on yesterday. When the chosen day already has a weigh-in, a hint says saving replaces it. The date and the weight are checked on blur and on Save with the server's schema. The sheet closes when the save works; when it fails it stays open and offers Retry."
 	>
 		<div class="flex flex-wrap gap-2">
 			<Button
@@ -1371,6 +1373,7 @@
 				onclick={() => {
 					weightSheetPoint = { date: '2026-11-03', kg: 70.4 };
 					weightSheetFails = false;
+					weightSheetTaken = false;
 					weightSheetOpen = true;
 				}}
 			>
@@ -1381,6 +1384,7 @@
 				onclick={() => {
 					weightSheetPoint = null;
 					weightSheetFails = false;
+					weightSheetTaken = false;
 					weightSheetOpen = true;
 				}}
 			>
@@ -1389,8 +1393,20 @@
 			<Button
 				variant="secondary"
 				onclick={() => {
+					weightSheetPoint = null;
+					weightSheetFails = false;
+					weightSheetTaken = true;
+					weightSheetOpen = true;
+				}}
+			>
+				Add, the day has one
+			</Button>
+			<Button
+				variant="secondary"
+				onclick={() => {
 					weightSheetPoint = { date: '2026-11-03', kg: 70.4 };
 					weightSheetFails = true;
+					weightSheetTaken = false;
 					weightSheetOpen = true;
 				}}
 			>
@@ -1402,6 +1418,7 @@
 			bind:open={weightSheetOpen}
 			point={weightSheetPoint}
 			today={weightToday}
+			kgOn={(date) => (weightSheetTaken && date === addDays(weightToday, -1) ? 70.6 : null)}
 			onsave={async (input) => {
 				if (weightSheetFails) throw new Error('offline');
 				weightSheetLog = `Saved ${input.kg} kg on ${input.date}`;

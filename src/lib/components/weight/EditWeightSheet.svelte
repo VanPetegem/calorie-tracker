@@ -2,16 +2,17 @@
 	import { untrack } from 'svelte';
 	import * as v from 'valibot';
 	import { WEIGHT_STEP_KG } from '#lib/domain/constants.ts';
-	import { isAllowedLogDate } from '#lib/domain/dates.ts';
+	import { addDays, isAllowedLogDate } from '#lib/domain/dates.ts';
 	import type { WeighIn } from '#lib/domain/trend.ts';
 	import { WeightInput } from '#lib/schemas/weight.ts';
 	import { Button, Input, NumberInput, Sheet } from '#lib/components/ui/index.ts';
-	import { formatDay } from './chart.ts';
+	import { formatDay, formatKg } from './chart.ts';
 	import { commitFocusedInput, fieldIssue } from './form.ts';
 
 	/**
 	 * Edits the weight of a stored weigh-in, or adds one for a day (`point` null). A stored weigh-in keeps its date,
-	 * so saving only ever replaces its weight; a new one takes a day up to tomorrow, as the log does. The fields start
+	 * so saving only ever replaces its weight; a new one takes a day up to tomorrow, as the log does, and starts on
+	 * yesterday (today has the entry card), with a hint when the chosen day already has a weigh-in. The fields start
 	 * from `point` each time the sheet opens. `onsave` does the write (and the toast and refresh); the sheet closes
 	 * when it resolves, and when it fails stays open with the values and offers Retry.
 	 */
@@ -20,14 +21,17 @@
 		point: WeighIn | null;
 		/** Today in the settings timezone, `YYYY-MM-DD`. */
 		today: string;
+		/** The weight stored for a date, or null: the add form says when saving would replace it. */
+		kgOn: (date: string) => number | null;
 		onsave: (input: WeightInput) => Promise<void>;
 	};
 
-	let { open = $bindable(false), point, today, onsave }: Props = $props();
+	let { open = $bindable(false), point, today, kgOn, onsave }: Props = $props();
 
-	// The day of a new weigh-in; a stored one keeps `point.date`.
+	// The day of a new weigh-in, yesterday at first; a stored one keeps `point.date`.
 	let kg = $state<number | null>(untrack(() => point?.kg ?? null));
-	let date = $state(untrack(() => today));
+	let date = $state(untrack(() => addDays(today, -1)));
+	let dateTouched = $state(false);
 	let submitted = $state(false);
 	let busy = $state(false);
 	let failure = $state(false);
@@ -42,7 +46,8 @@
 		if (!open) return;
 		untrack(() => {
 			kg = point?.kg ?? null;
-			date = today;
+			date = addDays(today, -1);
+			dateTouched = false;
 			submitted = false;
 			failure = false;
 		});
@@ -54,6 +59,8 @@
 		fieldIssue(result.issues, 'date') ??
 			(isAllowedLogDate(day, today) ? undefined : 'Choose a day up to tomorrow')
 	);
+	const dateShown = $derived(dateTouched || submitted ? dateError : undefined);
+	const replaced = $derived(point ? null : kgOn(date));
 	const kgError = $derived(kg !== null || submitted ? fieldIssue(result.issues, 'kg') : undefined);
 
 	// A changed weight is a new attempt: the old failure and Retry go.
@@ -93,8 +100,11 @@
 					label="Date"
 					type="date"
 					bind:value={date}
-					error={submitted ? dateError : undefined}
-					hint="Up to tomorrow."
+					onblur={() => (dateTouched = true)}
+					error={dateShown}
+					hint={replaced === null
+						? 'Up to tomorrow.'
+						: `This day has ${formatKg(replaced)} kg; saving replaces it`}
 				/>
 			{/if}
 			<NumberInput

@@ -13,6 +13,11 @@ export const WeightInput = v.strictObject({
 
 export type WeightInput = v.InferOutput<typeof WeightInput>;
 
+/** The entry card's weigh-in: the day is the server's today, so the input is only the weight. */
+export const TodayWeightInput = v.strictObject({ kg: WeightInput.entries.kg });
+
+export type TodayWeightInput = v.InferOutput<typeof TodayWeightInput>;
+
 /** Deleting a weigh-in takes only its date. */
 export const DeleteWeightInput = v.strictObject({ date: isoDate });
 

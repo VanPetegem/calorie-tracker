@@ -13,7 +13,7 @@
 	import type { TrendPoint } from '#lib/domain/trend.ts';
 	import type { WeightInput } from '#lib/schemas/weight.ts';
 	import { toasts, withUndo } from '#lib/stores/toasts.svelte.ts';
-	import { deleteWeight, saveWeight } from './weight.remote.ts';
+	import { deleteWeight, logWeightToday, saveWeight } from './weight.remote.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -33,15 +33,30 @@
 		}
 	}
 
-	/** Saves and toasts. A rejected write reaches the caller (entry card or sheet), which keeps the value and offers Retry. */
-	async function save({ date, kg }: WeightInput) {
-		const existed = data.series.some((point) => point.date === date);
-		await saveWeight({ date, kg });
+	/** Toasts a write that went through, then refreshes. */
+	async function saved(existed: boolean, kg: number) {
 		toasts.show({
 			message: `${existed ? 'Updated' : 'Logged'} ${formatKg(kg)} kg`,
 			tone: 'success'
 		});
 		await refresh();
+	}
+
+	/** Saves the sheet's weigh-in for its date. A rejected write reaches the sheet, which keeps the value and offers Retry. */
+	async function save({ date, kg }: WeightInput) {
+		const existed = data.series.some((point) => point.date === date);
+		await saveWeight({ date, kg });
+		await saved(existed, kg);
+	}
+
+	/**
+	 * Saves the entry card's weight on the server's today, not on `data.today`, which is fixed at load: a page left
+	 * open past midnight, or a Retry after an offline resume, must not overwrite yesterday's weigh-in.
+	 */
+	async function logToday(kg: number) {
+		const existed = data.series.some((point) => point.date === data.today);
+		await logWeightToday({ kg });
+		await saved(existed, kg);
 	}
 
 	function edit(point: TrendPoint) {
@@ -98,12 +113,7 @@
 <div class="flex flex-col gap-6">
 	<h1 class="text-3xl font-semibold tracking-tight text-text">Weight</h1>
 
-	<WeightEntry
-		today={data.today}
-		todayKg={data.todayKg}
-		lastKg={data.lastKg}
-		onsave={(kg) => save({ date: data.today, kg })}
-	/>
+	<WeightEntry today={data.today} todayKg={data.todayKg} lastKg={data.lastKg} onsave={logToday} />
 
 	{#if data.series.length === 0}
 		<Card>
@@ -135,4 +145,10 @@
 	</section>
 </div>
 
-<EditWeightSheet bind:open={sheetOpen} point={sheetPoint} today={data.today} onsave={save} />
+<EditWeightSheet
+	bind:open={sheetOpen}
+	point={sheetPoint}
+	today={data.today}
+	kgOn={(date) => data.series.find((point) => point.date === date)?.kg ?? null}
+	onsave={save}
+/>

@@ -160,6 +160,7 @@ e2e/weight.e2e.ts (4a), e2e/targets.e2e.ts and onboarding in e2e/auth.setup.ts (
 
 **Interfaces:**
 - Consumes: `trendOn`, `TrendPoint`, `addDays`.
+- A week row's trend and rate come from `trendSeries(weighIns, seedUntil)` (`seedUntil` is the second parameter, see `src/lib/domain/trend.ts`) with `seedUntil = addDays(weekStart, -1)`, built from the weigh-ins dated before `weekStart` only. The `series` handed to `weekTarget` and `adaptiveTdee` is that series, so a row does not depend on weigh-ins logged during its week (Review Focus 1).
 - Produces:
   - `type Sex = 'male' | 'female'`, `type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active'`, `PAL: Record<ActivityLevel, number>`.
   - `bmr({ sex, kg, heightCm, ageYears }): number`, `ageOn(birthDate, date): number`, `formulaTdee(bmr, level): number`.
@@ -170,7 +171,7 @@ e2e/weight.e2e.ts (4a), e2e/targets.e2e.ts and onboarding in e2e/auth.setup.ts (
   - `weekTarget(input: { weekStart; profile; rules; series; intakes; previousUsed }): WeekTargetRow` (all `weekly_targets` columns except `computed_at`).
   - `weekStart(date): string`.
   - Constants: `ADAPTIVE_WINDOW_DAYS = 21`, `MIN_VALID_DAYS = 14`, `MIN_WEIGH_INS = 6`, `VALID_INTAKE_FRACTION = 0.5`, `BLEND_PRIOR_DAYS = 7`, `TDEE_SMOOTHING = 0.7`, `MAX_WEEKLY_TDEE_CHANGE = 150`, `TARGET_MIN_FACTOR = 1.05`, `TARGET_MAX_FACTOR = 1.2`, `TARGET_ROUND_KCAL = 10`, `GOAL_RATES = [0.25, 0.35, 0.5]`, `DEFAULT_GOAL_RATE = 0.35`, `DEFAULT_ENERGY_DENSITY = 5000`, profile and rule limits.
-- [ ] **Step 1: Write failing tests**: spec section 11 domain list; BMR fixtures for both sexes; window excludes `windowEnd`; a day at 49 percent of the median is invalid; observed TDEE on a flat trend equals mean intake; blend with n = 14; first week unsmoothed; smoothing clamp +150 and -150; target clamp low and high and rounding to 10; `weekTarget` with the gate failing has `tdeeAdaptive` null and uses the formula.
+- [ ] **Step 1: Write failing tests**: spec section 11 domain list; BMR fixtures for both sexes; window excludes `windowEnd`; a day at 49 percent of the median is invalid; observed TDEE on a flat trend equals mean intake; blend with n = 14; first week unsmoothed; smoothing clamp +150 and -150; target clamp low and high and rounding to 10; `weekTarget` with the gate failing has `tdeeAdaptive` null and uses the formula; a series built from the weigh-ins before `weekStart` with `seedUntil = addDays(weekStart, -1)` gives the same row whether or not weigh-ins from the week itself exist.
 - [ ] **Step 2: Run**; fail.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the gate.
@@ -198,6 +199,7 @@ e2e/weight.e2e.ts (4a), e2e/targets.e2e.ts and onboarding in e2e/auth.setup.ts (
 
 **Interfaces:**
 - Consumes: Task 5 domain, `listWeights`, `AppContext`.
+- The row's weights: `currentTarget` takes `listWeights`, keeps only weigh-ins dated before `weekStart` and builds `trendSeries(thoseWeighIns, addDays(weekStart, -1))`. Weigh-ins from the week itself (including one for tomorrow) never enter the row, so it is identical whichever day of the week computes it (Review Focus 1).
 - Produces:
   - `dailyIntakes(db, from, to): Promise<Record<string, number>>` (live entries only).
   - `isProfileComplete(settings): boolean`.
@@ -207,7 +209,7 @@ e2e/weight.e2e.ts (4a), e2e/targets.e2e.ts and onboarding in e2e/auth.setup.ts (
   - `saveOnboarding(ctx, input: OnboardingInput)`: profile, today's weigh-in and the week row in one batch.
   - `targetsHistory(db, limit?)`.
   - `DayTarget` gains nothing but is built from a row; `loadDay` uses `targetFor(ctx, date)`.
-- [ ] **Step 1: Write failing tests**: spec section 11 server list; two `currentTarget` calls at once leave one row; a row computed on Monday equals one computed on Sunday with the same data; a weigh-in after the row exists does not change it; `recomputeCurrentWeek` leaves last week's row byte for byte; `targetFor` cases; soft deleted entries do not count as intake.
+- [ ] **Step 1: Write failing tests**: spec section 11 server list; two `currentTarget` calls at once leave one row; a row computed on Monday equals one computed on Sunday with the same data; a weigh-in after the row exists does not change it; a weigh-in dated inside the week (including tomorrow) before the row is computed does not change it either, and the row equals one computed from only the weigh-ins before `weekStart`; `recomputeCurrentWeek` leaves last week's row byte for byte; `targetFor` cases; soft deleted entries do not count as intake.
 - [ ] **Step 2: Run**; fail.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the gate.
@@ -221,7 +223,7 @@ e2e/weight.e2e.ts (4a), e2e/targets.e2e.ts and onboarding in e2e/auth.setup.ts (
 
 **Interfaces:**
 - Produces: command `completeOnboarding(OnboardingInput): WeeklyTarget`. `ProfileForm` props `{ value; withWeight: boolean; submitLabel; onsubmit }`, validates on blur. `TargetExplainer` props `{ target: WeeklyTarget }`.
-- Behaviour: spec section 7. Weight prefilled from `latestWeight`.
+- Behaviour: spec section 7. Weight prefilled from the latest weigh-in up to today. Not `latestWeight` from `src/lib/server/weights/repo.ts`: it returns the newest date, which can be tomorrow. Use `loadWeight(ctx).lastKg` or a new repository query with `date <= today`; test that a weigh-in for tomorrow is not the prefill.
 - [ ] **Step 1: Write failing tests**: redirect helper: app pages redirect without a profile, `/onboarding` redirects to `/` with one, remote paths never redirect; ProfileForm blur errors; e2e setup completes onboarding and lands on Today with a target in the hero.
 - [ ] **Step 2: Run**; fail.
 - [ ] **Step 3: Implement**, with `/design` sections.

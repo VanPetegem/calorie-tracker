@@ -1,5 +1,5 @@
 import { trendOn, trendSeries, weeklyRate, type TrendPoint } from '../../domain/trend.ts';
-import type { DeleteWeightInput, WeightInput } from '../../schemas/weight.ts';
+import type { DeleteWeightInput, TodayWeightInput, WeightInput } from '../../schemas/weight.ts';
 import type { Db } from '../db/index.ts';
 import { assertLogDate } from '../log/repo.ts';
 import { deleteWeight, listWeights, saveWeight } from './repo.ts';
@@ -24,6 +24,14 @@ export type WeightData = {
 export async function saveWeightOn(ctx: WeightContext, input: WeightInput): Promise<void> {
 	assertLogDate(input.date, ctx.today);
 	await saveWeight(ctx.db, input);
+}
+
+/**
+ * Saves the entry card's weigh-in on the server's today. The page's own `today` is fixed at load, so a page left open
+ * past midnight, or a Retry after an offline resume, would otherwise overwrite the day before.
+ */
+export async function logWeightTodayOn(ctx: WeightContext, input: TodayWeightInput): Promise<void> {
+	await saveWeightOn(ctx, { date: ctx.today, kg: input.kg });
 }
 
 /** Deletes the weigh-in of a date, with the same date window as saving. */

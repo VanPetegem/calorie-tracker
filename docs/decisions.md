@@ -4,6 +4,23 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-07
 
+- **The entry card saves through `logWeightToday({ kg })`, which uses the server's today; the sheet keeps `saveWeight`
+  with an explicit date.** `data.today` is fixed when the page loads, so a page left open past midnight, or a Retry
+  after an offline resume, would have written the weigh-in to yesterday and replaced it. `logWeightTodayOn(ctx, input)`
+  saves to `ctx.today` through `saveWeightOn` (same date window). The page still decides "Logged" or "Updated" from its
+  loaded series; on a stale page that toast can name the wrong verb, which is cosmetic and the next refresh corrects it.
+- **"Add weigh-in" starts on yesterday and says when the chosen day already has a weigh-in.** Today has the entry card,
+  and a first day of today made a casual add replace today's weigh-in without a word. The sheet takes a `kgOn(date)`
+  prop (the page answers from its series) and replaces the "Up to tomorrow." hint with "This day has 70.6 kg; saving
+  replaces it" while the chosen date has a weigh-in. Replacing stays allowed, because correcting a day is the other use
+  of the add sheet.
+- **The sheet's date shows its error on blur, like every form.** `dateTouched` is set on blur and reset on each opening;
+  Save still shows it, as before. The weight keeps its rule (error once it holds a value or after Save).
+- **`MAX_WEIGHT_KG` sits next to `MIN_WEIGHT_KG`.** It was under the phase 2 manual target bounds. A move only.
+- **A 4b week row's trend and rate use only weigh-ins before its week.** The 4b plan (Tasks 5 and 7) now says a row
+  uses `trendSeries(weighIns before weekStart, addDays(weekStart, -1))`, so a weigh-in logged during the week cannot
+  change the row (Review Focus 1). `latestWeight` returns the newest date, which can be tomorrow, so the onboarding
+  prefill must use the latest up to today, not `latestWeight`.
 - **The weight commands are thin wrappers over `saveWeightOn` and `deleteWeightOn`, and the page data comes from
   `loadWeight`.** All three live in `server/weights/commands.ts` and take `{ db, today }`, so the date window
   (`assertLogDate`, 400 after tomorrow, for save and delete) and the load are tested against Miniflare D1 without the

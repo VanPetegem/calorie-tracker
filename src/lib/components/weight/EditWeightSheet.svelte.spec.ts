@@ -7,10 +7,14 @@ const today = '2026-11-07';
 const point = { date: '2026-11-03', kg: 70.4 };
 
 function setup(
-	props: { point?: { date: string; kg: number } | null; onsave?: () => Promise<void> } = {}
+	props: {
+		point?: { date: string; kg: number } | null;
+		kgOn?: (date: string) => number | null;
+		onsave?: () => Promise<void>;
+	} = {}
 ) {
 	const onsave = vi.fn<(input: { date: string; kg: number }) => Promise<void>>(async () => {});
-	render(EditWeightSheet, { open: true, point, today, onsave, ...props });
+	render(EditWeightSheet, { open: true, point, today, kgOn: () => null, onsave, ...props });
 	return { onsave };
 }
 
@@ -39,11 +43,42 @@ describe('EditWeightSheet', () => {
 		await opened();
 		await expect.element(page.getByRole('dialog', { name: 'Add weigh-in' })).toBeVisible();
 		const date = page.getByLabelText('Date');
-		await expect.element(date).toHaveValue(today);
 		await date.fill('2026-10-30');
 		await page.getByLabelText('Weight', { exact: true }).fill('69.5');
 		await page.getByRole('button', { name: 'Save' }).click();
 		expect(onsave).toHaveBeenCalledWith({ date: '2026-10-30', kg: 69.5 });
+	});
+
+	it('starts a new weigh-in on yesterday, so today is not replaced by accident', async () => {
+		const { onsave } = setup({ point: null });
+		await opened();
+		await expect.element(page.getByLabelText('Date')).toHaveValue('2026-11-06');
+		await page.getByLabelText('Weight', { exact: true }).fill('69.5');
+		await page.getByRole('button', { name: 'Save' }).click();
+		expect(onsave).toHaveBeenCalledWith({ date: '2026-11-06', kg: 69.5 });
+	});
+
+	it('says when the chosen day already has a weigh-in that saving replaces', async () => {
+		setup({ point: null, kgOn: (date) => (date === '2026-11-07' ? 70.6 : null) });
+		await opened();
+		const dialog = page.getByRole('dialog', { name: 'Add weigh-in' });
+		await expect.element(dialog).not.toHaveTextContent('saving replaces it');
+		await expect.element(dialog).toHaveTextContent('Up to tomorrow.');
+		await page.getByLabelText('Date').fill('2026-11-07');
+		await expect.element(dialog).toHaveTextContent('This day has 70.6 kg; saving replaces it');
+		await page.getByLabelText('Date').fill('2026-11-05');
+		await expect.element(dialog).not.toHaveTextContent('saving replaces it');
+	});
+
+	it('shows the date error after blur, before Save', async () => {
+		const { onsave } = setup({ point: null });
+		await opened();
+		const date = page.getByLabelText('Date');
+		await date.fill('2026-11-09');
+		expect(page.getByRole('alert').elements()).toHaveLength(0);
+		(date.element() as HTMLInputElement).blur();
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Choose a day up to tomorrow');
+		expect(onsave).not.toHaveBeenCalled();
 	});
 
 	it('takes a new weigh-in up to tomorrow and not a day later', async () => {
@@ -72,7 +107,7 @@ describe('EditWeightSheet', () => {
 
 	it('stays open with the value after a failed save and offers Retry', async () => {
 		const onsave = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
-		render(EditWeightSheet, { open: true, point, today, onsave });
+		render(EditWeightSheet, { open: true, point, today, kgOn: () => null, onsave });
 		await opened();
 		await page.getByLabelText('Weight', { exact: true }).fill('71');
 		await page.getByRole('button', { name: 'Save' }).click();
@@ -84,7 +119,13 @@ describe('EditWeightSheet', () => {
 
 	it('opens clean again after an invalid entry was left behind', async () => {
 		const onsave = vi.fn(async () => {});
-		const view = render(EditWeightSheet, { open: true, point: null, today, onsave });
+		const view = render(EditWeightSheet, {
+			open: true,
+			point: null,
+			today,
+			kgOn: () => null,
+			onsave
+		});
 		await opened();
 		const input = page.getByLabelText('Weight', { exact: true });
 		await input.fill('abc');
@@ -101,7 +142,7 @@ describe('EditWeightSheet', () => {
 
 	it('drops the failure and Retry as soon as the weight changes', async () => {
 		const onsave = vi.fn().mockRejectedValue(new Error('offline'));
-		render(EditWeightSheet, { open: true, point, today, onsave });
+		render(EditWeightSheet, { open: true, point, today, kgOn: () => null, onsave });
 		await opened();
 		await page.getByRole('button', { name: 'Save' }).click();
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Could not save');
@@ -113,7 +154,13 @@ describe('EditWeightSheet', () => {
 	});
 
 	it('keeps the focus in the sheet when it is reopened during its exit', async () => {
-		const view = render(EditWeightSheet, { open: true, point, today, onsave: async () => {} });
+		const view = render(EditWeightSheet, {
+			open: true,
+			point,
+			today,
+			kgOn: () => null,
+			onsave: async () => {}
+		});
 		await opened();
 		await page.getByRole('button', { name: 'Cancel' }).click();
 		await view.rerender({ open: true });

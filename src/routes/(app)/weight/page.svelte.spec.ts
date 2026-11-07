@@ -7,12 +7,14 @@ import Page from './+page.svelte';
 
 const mocks = vi.hoisted(() => ({
 	saveWeight: vi.fn(),
+	logWeightToday: vi.fn(),
 	deleteWeight: vi.fn(),
 	invalidateAll: vi.fn()
 }));
 
 vi.mock('./weight.remote.ts', () => ({
 	saveWeight: mocks.saveWeight,
+	logWeightToday: mocks.logWeightToday,
 	deleteWeight: mocks.deleteWeight
 }));
 vi.mock('$app/navigation', () => ({ invalidateAll: mocks.invalidateAll }));
@@ -21,6 +23,7 @@ const TODAY = '2026-11-07';
 
 beforeEach(() => {
 	mocks.saveWeight.mockReset().mockResolvedValue(undefined);
+	mocks.logWeightToday.mockReset().mockResolvedValue(undefined);
 	mocks.deleteWeight.mockReset().mockResolvedValue(undefined);
 	mocks.invalidateAll.mockReset().mockResolvedValue(undefined);
 });
@@ -77,7 +80,9 @@ describe('weight page', () => {
 		await entryField().fill('70.6');
 		await page.getByRole('button', { name: 'Save', exact: true }).click();
 		await vi.waitFor(() => expect(toastTexts()).toEqual(['Logged 70.6 kg']));
-		expect(mocks.saveWeight).toHaveBeenCalledWith({ date: TODAY, kg: 70.6 });
+		// The entry card sends no date: the server's today decides, so a page left open past midnight is safe.
+		expect(mocks.logWeightToday).toHaveBeenCalledWith({ kg: 70.6 });
+		expect(mocks.saveWeight).not.toHaveBeenCalled();
 		expect(mocks.invalidateAll).toHaveBeenCalledOnce();
 	});
 
@@ -86,11 +91,11 @@ describe('weight page', () => {
 		await page.getByRole('button', { name: 'Increase weight by 0.1 kg' }).click();
 		await page.getByRole('button', { name: 'Save', exact: true }).click();
 		await vi.waitFor(() => expect(toastTexts()).toEqual(['Updated 70.1 kg']));
-		expect(mocks.saveWeight).toHaveBeenCalledWith({ date: TODAY, kg: 70.1 });
+		expect(mocks.logWeightToday).toHaveBeenCalledWith({ kg: 70.1 });
 	});
 
 	it('keeps the value and offers Retry when the write fails, with no toast and no refresh', async () => {
-		mocks.saveWeight.mockRejectedValue(new Error('offline'));
+		mocks.logWeightToday.mockRejectedValue(new Error('offline'));
 		show([{ date: '2026-11-01', kg: 70 }]);
 		await page.getByRole('button', { name: 'Save', exact: true }).click();
 		await expect.element(page.getByRole('button', { name: 'Retry' })).toBeVisible();
@@ -130,6 +135,13 @@ describe('weight page', () => {
 		await dialog.getByRole('button', { name: 'Save' }).click();
 		await vi.waitFor(() => expect(toastTexts()).toEqual(['Logged 70.2 kg']));
 		expect(mocks.saveWeight).toHaveBeenCalledWith({ date: '2026-11-02', kg: 70.2 });
+	});
+
+	it('warns in the add sheet that the default day, yesterday, already has a weigh-in', async () => {
+		show([{ date: '2026-11-06', kg: 70.6 }]);
+		await page.getByRole('button', { name: 'Add weigh-in' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Add weigh-in' });
+		await expect.element(dialog).toHaveTextContent('This day has 70.6 kg; saving replaces it');
 	});
 
 	it('deletes with an Undo toast that saves the old values again', async () => {

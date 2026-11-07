@@ -3,7 +3,7 @@ import { trendSeries, weeklyRate } from '../../domain/trend.ts';
 import { weights } from '../db/schema.ts';
 import { createTestDb } from '../test/d1.ts';
 import { listWeights } from './repo.ts';
-import { deleteWeightOn, loadWeight, saveWeightOn } from './commands.ts';
+import { deleteWeightOn, loadWeight, logWeightTodayOn, saveWeightOn } from './commands.ts';
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>;
 
@@ -32,6 +32,20 @@ describe('weight commands and page data', () => {
 			{ date: '2020-01-01', kg: 70 },
 			{ date: TODAY, kg: 71.5 },
 			{ date: '2026-11-08', kg: 72 }
+		]);
+	});
+
+	it("logs the entry card weight on the server's today, not on a day the page was loaded for", async () => {
+		await logWeightTodayOn(ctx(), { kg: 70.6 });
+		await logWeightTodayOn({ db: test.db, today: '2026-11-08' }, { kg: 71 });
+		expect(await listWeights(test.db)).toEqual([
+			{ date: TODAY, kg: 70.6 },
+			{ date: '2026-11-08', kg: 71 }
+		]);
+		await logWeightTodayOn({ db: test.db, today: '2026-11-08' }, { kg: 71.2 });
+		expect(await listWeights(test.db)).toEqual([
+			{ date: TODAY, kg: 70.6 },
+			{ date: '2026-11-08', kg: 71.2 }
 		]);
 	});
 
