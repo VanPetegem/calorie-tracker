@@ -140,7 +140,7 @@ e2e/weight.e2e.ts (4a), e2e/targets.e2e.ts and onboarding in e2e/auth.setup.ts (
 
 **Interfaces:**
 - Produces: commands `saveWeight(WeightInput)`, `deleteWeight(DeleteWeightInput)` (each calls `assertLogDate(date, ctx.today)` from `server/log/repo.ts`, 400 otherwise; tests for a date after tomorrow on save and delete). Load `{ today, series: TrendPoint[], todayKg, lastKg, trendKg, rate }`.
-- Behaviour: spec section 5. Delete shows a 5 s Undo toast that calls `saveWeight` with the old values. History is newest first.
+- Behaviour: spec section 5. Delete shows a 5 s Undo toast that calls `saveWeight` with the old values. History is newest first. An "Add weigh-in" button opens `EditWeightSheet` with `point` null for a missed past day. Update spec section 5 to match what Task 3 decided: delete by a visible button on the row (no row menu), a stored weigh-in keeps its date, past days are added through "Add weigh-in".
 - [ ] **Step 1: Write failing tests**: e2e on its own past dates per project and retry: log today's weight with the stepper and see it in history; edit a past weigh-in; delete with Undo restores it; chart range switch keeps working; empty state copy before the first weigh-in is covered in the component spec instead (other tests share the database).
 - [ ] **Step 2: Run**; fail.
 - [ ] **Step 3: Implement** and update the docs.
