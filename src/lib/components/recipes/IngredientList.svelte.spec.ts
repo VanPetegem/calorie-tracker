@@ -68,9 +68,9 @@ beforeEach(() => {
 
 afterEach(async () => {
 	// Menus stay open after a move: close what a test left open.
-	if (document.querySelector('dialog[open]')) await userEvent.keyboard('{Escape}');
+	if (document.querySelector('[data-sheet][data-open]')) await userEvent.keyboard('{Escape}');
 	for (const item of [...toasts.items]) toasts.dismiss(item.id);
-	await vi.waitFor(() => expect(document.querySelector('dialog[open]')).toBeNull());
+	await vi.waitFor(() => expect(document.querySelector('[data-sheet][data-open]')).toBeNull());
 });
 
 /** Names of the rows, top to bottom. The name is the first line of each row's main button. */
@@ -84,13 +84,15 @@ function order(): string[] {
 /** Waits for a sheet to finish sliding in: a click on the moving sheet can land on the backdrop and close it. */
 async function sheetSettled() {
 	await vi.waitFor(() =>
-		expect(document.querySelector('dialog[open]')?.getAnimations({ subtree: true })).toHaveLength(0)
+		expect(
+			document.querySelector('[data-sheet][data-open]')?.getAnimations({ subtree: true })
+		).toHaveLength(0)
 	);
 }
 
 async function closeSheet() {
 	await userEvent.keyboard('{Escape}');
-	await vi.waitFor(() => expect(document.querySelector('dialog[open]')).toBeNull());
+	await vi.waitFor(() => expect(document.querySelector('[data-sheet][data-open]')).toBeNull());
 }
 
 /** The name of the row whose main button has focus, or the label of another focused button. */
@@ -170,7 +172,7 @@ describe('IngredientList', () => {
 		await page.getByRole('button', { name: 'Add', exact: true }).click();
 		await expect.poll(order).toEqual(['Oats', 'Banana']);
 		await expect.element(page.getByText('Total 508 kcal')).toBeVisible();
-		await expect.poll(() => document.querySelector('dialog[open]')).toBeNull();
+		await expect.poll(() => document.querySelector('[data-sheet][data-open]')).toBeNull();
 	});
 
 	it('moves a row down and up', async () => {
@@ -274,7 +276,7 @@ describe('IngredientList', () => {
 		add.element().focus();
 		await userEvent.keyboard('{Enter}');
 		await expect.element(page.getByText(`At most ${MAX_INGREDIENTS} ingredients`)).toBeVisible();
-		expect(document.querySelector('dialog[open]')).toBeNull();
+		expect(document.querySelector('[data-sheet][data-open]')).toBeNull();
 	});
 });
 

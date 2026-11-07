@@ -110,7 +110,7 @@ async function openScanner(page: Page) {
 	const phone = (page.viewportSize()?.width ?? 0) < 1024;
 	const nav = page.getByRole('navigation', { name: 'Primary' });
 	await nav.getByRole('button', { name: phone ? 'Add food' : /^Add food/ }).click();
-	const sheet = page.locator('dialog[data-sheet][open]');
+	const sheet = page.locator('[data-sheet][data-open]');
 	await expect(sheet.getByRole('searchbox', { name: 'Search foods' })).toBeVisible();
 	// The camera stays off until Scan is tapped: no stream is live before it (an earlier one has ended).
 	expect(
@@ -219,7 +219,7 @@ test('a browser without a camera API falls back to manual entry', async ({ page 
 		.getByRole('navigation', { name: 'Primary' })
 		.getByRole('button', { name: phone ? 'Add food' : /^Add food/ })
 		.click();
-	const sheet = page.locator('dialog[data-sheet][open]');
+	const sheet = page.locator('[data-sheet][data-open]');
 	await sheet.getByRole('button', { name: 'Scan', exact: true }).click();
 	await expect(sheet.getByText(/cannot open the camera/)).toBeVisible();
 	await expect(sheet.getByLabel('Barcode number')).toBeVisible();

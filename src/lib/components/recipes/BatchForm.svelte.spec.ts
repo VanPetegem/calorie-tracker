@@ -172,20 +172,23 @@ beforeEach(() => {
 
 afterEach(async () => {
 	vi.restoreAllMocks();
-	if (document.querySelector('dialog[open]')) await userEvent.keyboard('{Escape}');
+	if (document.querySelector('[data-sheet][data-open]')) await userEvent.keyboard('{Escape}');
 	for (const item of [...toasts.items]) toasts.dismiss(item.id);
-	await vi.waitFor(() => expect(document.querySelector('dialog[open]')).toBeNull());
+	await vi.waitFor(() => expect(document.querySelector('[data-sheet][data-open]')).toBeNull());
 });
 
 const field = (label: string) => page.getByLabelText(label, { exact: true });
 const saveButton = () => page.getByRole('button', { name: /^(Save batch|Retry)$/ });
 
-const closed = () => vi.waitFor(() => expect(document.querySelector('dialog[open]')).toBeNull());
+const closed = () =>
+	vi.waitFor(() => expect(document.querySelector('[data-sheet][data-open]')).toBeNull());
 
 /** Waits for a sheet to finish sliding in: a click on the moving sheet can miss its buttons. */
 async function sheetSettled() {
 	await vi.waitFor(() =>
-		expect(document.querySelector('dialog[open]')?.getAnimations({ subtree: true })).toHaveLength(0)
+		expect(
+			document.querySelector('[data-sheet][data-open]')?.getAnimations({ subtree: true })
+		).toHaveLength(0)
 	);
 }
 
@@ -468,7 +471,7 @@ describe('BatchForm header and actions', () => {
 			.element(remove)
 			.toHaveAccessibleDescription('Logged batches can be finished, not deleted');
 		await remove.click({ force: true });
-		expect(document.querySelector('dialog[open]')).toBeNull();
+		expect(document.querySelector('[data-sheet][data-open]')).toBeNull();
 		expect(mocks.deleteBatch).not.toHaveBeenCalled();
 	});
 

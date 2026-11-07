@@ -166,7 +166,7 @@ async function openAddSheet(page: import('@playwright/test').Page) {
 	await nav.getByRole('button', { name: phone ? 'Add food' : /^Add food/ }).click();
 	await expect(page.getByRole('dialog', { name: 'Add food' })).toBeVisible();
 	// The dialog is named after the chosen food on the amount step, so the rest of a test holds the element.
-	return page.locator('dialog[data-sheet][open]');
+	return page.locator('[data-sheet][data-open]');
 }
 
 test('searching the library finds a BLV food, logs 200 g, and the entry can be edited', async ({
@@ -323,7 +323,7 @@ test('a custom food can be created from the add sheet and logged', async ({ page
 	// Tapping the entry and choosing Edit food changes the food, not the entry already logged.
 	await page.getByRole('button', { name: new RegExp(`^${name}`) }).click();
 	// The dialog is renamed by each step, so hold the element.
-	const editSheet = page.locator('dialog[data-sheet][open]');
+	const editSheet = page.locator('[data-sheet][data-open]');
 	await editSheet.getByRole('button', { name: 'Edit food' }).click();
 	await expect(editSheet.getByText(/Days you already logged keep their values/)).toBeVisible();
 	await editSheet.getByLabel('Calories', { exact: true }).fill('400');

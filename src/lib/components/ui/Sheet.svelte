@@ -5,16 +5,18 @@
 	import { popLayer, pushLayer } from './sheet-stack.ts';
 
 	/**
-	 * A modal sheet on a native `<dialog>`: a bottom sheet below 640 px, a centered dialog above.
+	 * A modal sheet: a bottom sheet below 640 px, a centered dialog above.
 	 *
-	 * Not `showModal()`: Brave and Firefox on iOS place top layer content below the visible screen, so only the
-	 * sheet's title showed. The dialog opens with `show()` inside a fixed layer moved to the end of the body, and
-	 * the parts of a modal are added by hand: a scrim instead of `::backdrop`, and `sheet-stack.ts` for the rest
-	 * (newest sheet on top, the page behind `inert`, Escape closes the top sheet).
+	 * Not a `<dialog>`: on iOS, Brave and Firefox placed a `showModal()` dialog below the visible screen, and with
+	 * `show()` Safari and Brave showed only a strip of the sheet at the bottom. A plain fixed panel is the one
+	 * thing every iOS browser placed correctly, so the sheet is a `div` with `role="dialog"` in a fixed layer moved
+	 * to the end of the body, and the parts of a modal are added by hand: a scrim, initial focus, and
+	 * `sheet-stack.ts` for the rest (newest sheet on top, the page behind `inert`, Escape closes the top sheet).
+	 * The slide in is a transition on `data-shown`, set after a forced layout of the start position, not `@starting-style`.
 	 *
-	 * Focus: the element focused when the sheet opens is remembered and focused again after it closes, if it is still
-	 * in the page. Safari does not focus a button on click or tap, so after a touch open there is no opener to
-	 * restore and focus falls back to the browser default (the page body).
+	 * Focus: on open, the element with `autofocus` (else the first focusable one, else the panel) is focused. The
+	 * element focused before is focused again after close, if it is still in the page. Safari does not focus a
+	 * button on click or tap, so after a touch open there is no opener to restore.
 	 * Scroll: the page behind is locked with `overflow: hidden` on the root while a sheet is open, because
 	 * `overscroll-behavior` alone does not stop iOS scrolling the page behind a sheet that does not overflow.
 	 */
@@ -38,10 +40,17 @@
 	// Max time to wait for the exit transition, in case it never reports as finished.
 	const EXIT_TIMEOUT_MS = 400;
 
+	const FOCUSABLE =
+		'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+	/** In the page (the layer is displayed); `shown` slides it in, `closing` plays the exit. */
+	let visible = $state(false);
+	let shown = $state(false);
 	let closing = $state(false);
 	let pressedOutside = false;
 	let opener: HTMLElement | null = null;
 	let layer = $state<HTMLElement>();
+	let panel = $state<HTMLElement>();
 
 	/** Moves the layer to the end of the body, out of any stacking context or `inert` page container. */
 	function portal(node: HTMLElement) {
@@ -53,28 +62,42 @@
 	}
 
 	// `open` is the single source of truth. Every way of closing (Escape, scrim, close button, parent) sets it to
-	// false, and this attachment, which reruns when `open` changes, plays the exit transition before the close.
-	// It also waits for the layer, which is bound after this attachment first runs (a sheet mounted open).
-	function sync(el: HTMLDialogElement) {
+	// false, and this effect plays the exit transition before the close. It waits for the bound elements.
+	$effect(() => {
 		const wantOpen = open;
 		const current = layer;
-		if (!current) return;
-		untrack(() => (wantOpen ? show(el, current) : hide(el, current)));
-	}
+		const el = panel;
+		if (!current || !el) return;
+		untrack(() => (wantOpen ? show(el, current) : hide(current)));
+	});
 
-	function show(el: HTMLDialogElement, current: HTMLElement) {
-		closing = false;
+	async function show(el: HTMLElement, current: HTMLElement) {
 		// Read before pushLayer: making the page inert can blur the focused trigger.
 		const active = document.activeElement;
-		pushLayer(current, () => (open = false), !el.open);
-		if (el.open) return;
+		const reopened = visible;
+		closing = false;
+		pushLayer(current, () => (open = false), !reopened);
+		if (reopened) {
+			shown = true;
+			return;
+		}
 		opener = active instanceof HTMLElement && active !== document.body ? active : null;
-		el.show();
+		visible = true;
+		await tick();
+		const target =
+			el.querySelector<HTMLElement>('[autofocus]') ??
+			el.querySelector<HTMLElement>(FOCUSABLE) ??
+			el;
+		target.focus({ preventScroll: true });
+		// Lay the panel out at its start position (off screen) now, so setting `data-shown` starts the transition.
+		void el.offsetHeight;
+		shown = true;
 	}
 
-	async function hide(el: HTMLDialogElement, current: HTMLElement) {
-		if (!el.open || closing) return;
+	async function hide(current: HTMLElement) {
+		if (!visible || closing) return;
 		closing = true;
+		shown = false;
 		// The sheet below (or the page) takes input again while this one animates out: the closing layer is taken off
 		// the stack and lets taps through (`data-closing` on the layer).
 		popLayer(current);
@@ -88,12 +111,8 @@
 		}
 		// Reopened while the exit was playing.
 		if (!closing) return;
-		el.close();
-	}
-
-	function handleClose() {
 		closing = false;
-		open = false;
+		visible = false;
 		// Focus the opener again, if it is still in the page.
 		if (opener?.isConnected) opener.focus();
 		opener = null;
@@ -111,27 +130,37 @@
 	}
 </script>
 
-<div class="layer" data-closing={closing || undefined} bind:this={layer} {@attach portal}>
+<div
+	class="layer"
+	hidden={!visible}
+	data-closing={closing || undefined}
+	bind:this={layer}
+	{@attach portal}
+>
 	<!--
 		The scrim closes on a tap. Keyboard users close with Escape or the close button, which makes this pointer
 		handler an enhancement.
 	-->
 	<div
 		class="scrim duration-300 ease-out data-closing:duration-200 data-closing:ease-in"
+		data-shown={shown || undefined}
 		data-closing={closing || undefined}
 		aria-hidden="true"
 		onpointerdown={handlePointerDown}
 		onclick={handleClick}
 	></div>
-	<dialog
-		{@attach sync}
+	<div
+		bind:this={panel}
+		role="dialog"
 		aria-modal="true"
 		aria-labelledby={titleId}
 		aria-describedby={description ? descriptionId : undefined}
-		data-closing={closing || undefined}
-		onclose={handleClose}
+		tabindex="-1"
 		data-sheet
-		class="sheet rounded-t-lg border-t border-border bg-surface-raised text-text shadow-lg duration-300 ease-out data-closing:duration-200 data-closing:ease-in sm:rounded-lg sm:border"
+		data-open={visible || undefined}
+		data-shown={shown || undefined}
+		data-closing={closing || undefined}
+		class="sheet rounded-t-lg border-t border-border bg-surface-raised text-text shadow-lg duration-300 ease-out outline-none data-closing:duration-200 data-closing:ease-in sm:rounded-lg sm:border"
 	>
 		<div
 			class="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-border-strong sm:hidden"
@@ -156,37 +185,37 @@
 				{@render footer()}
 			</footer>
 		{/if}
-	</dialog>
+	</div>
 </div>
 
 <style>
 	/*
 	 * Values Tailwind has no token for. Bottom sheet by default, centered dialog from 640 px.
-	 * The base rule is the closed/exit state; the [open] rule is the open state and animates in from the base through
-	 * @starting-style. Durations and easings come from the utilities on the elements: 300 ms ease-out in, 200 ms
+	 * The base rule is the closed/exit state; [data-shown] is the open state, set after the start position is laid
+	 * out so the transition runs. Durations and easings come from the utilities on the elements: 300 ms ease-out in, 200 ms
 	 * ease-in out. The global reduced motion rule sets them to 0 ms.
 	 */
 	/* Page scroll lock. Global because the rule targets the root, which this component does not render. */
-	:global(html:has(dialog[data-sheet][open])) {
+	:global(html:has([data-sheet][data-open])) {
 		overflow: hidden;
 		scrollbar-gutter: stable;
 	}
 
-	/* Fixed like the tab bar, which Brave and Firefox on iOS place correctly, and above it and the toasts. */
+	/* A plain fixed box, like the tab bar, which every iOS browser places correctly; above it and the toasts. */
 	.layer {
 		position: fixed;
 		inset: 0;
 		z-index: 60;
 	}
 
+	/* A closed layer must not cover the page. */
+	.layer[hidden] {
+		display: none;
+	}
+
 	/* A closing layer lets taps through to what is below it. */
 	.layer[data-closing] {
 		pointer-events: none;
-	}
-
-	/* A closed layer must not cover the page. */
-	.layer:not(:has(> dialog[open])) {
-		display: none;
 	}
 
 	.scrim {
@@ -198,21 +227,17 @@
 		transition-property: background-color;
 	}
 
-	.scrim:not([data-closing]) {
+	.scrim[data-shown] {
 		background-color: var(--kc-scrim);
-
-		@starting-style {
-			background-color: transparent;
-		}
 	}
 
 	.sheet {
-		position: fixed;
+		position: absolute;
 		inset: auto 0 0;
+		display: flex;
+		flex-direction: column;
 		width: 100%;
-		max-width: none;
 		max-height: 90dvh;
-		margin: 0;
 		padding: 0 0 env(safe-area-inset-bottom);
 		overflow: hidden;
 		overscroll-behavior: contain;
@@ -220,17 +245,8 @@
 		transition-property: transform, opacity;
 	}
 
-	.sheet[open] {
-		display: flex;
-		flex-direction: column;
-	}
-
-	.sheet[open]:not([data-closing]) {
+	.sheet[data-shown] {
 		transform: none;
-
-		@starting-style {
-			transform: translateY(100%);
-		}
 	}
 
 	@media (min-width: 640px) {
@@ -244,14 +260,9 @@
 			transform: scale(0.96);
 		}
 
-		.sheet[open]:not([data-closing]) {
+		.sheet[data-shown] {
 			opacity: 1;
 			transform: none;
-
-			@starting-style {
-				opacity: 0;
-				transform: scale(0.96);
-			}
 		}
 	}
 </style>

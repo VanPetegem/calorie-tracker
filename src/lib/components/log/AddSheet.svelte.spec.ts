@@ -39,7 +39,7 @@ beforeEach(() => {
 afterEach(async () => {
 	addSheet.open = false;
 	addSheet.batch = null;
-	await vi.waitFor(() => expect(document.querySelector('dialog[open]')).toBeNull());
+	await vi.waitFor(() => expect(document.querySelector('[data-sheet][data-open]')).toBeNull());
 });
 
 async function openQuickAdd() {
@@ -47,7 +47,9 @@ async function openQuickAdd() {
 	await expect.element(page.getByRole('dialog', { name: 'Add food' })).toBeVisible();
 	// Clicking while the sheet still slides in can land on the backdrop and close it.
 	await vi.waitFor(() =>
-		expect(document.querySelector('dialog[open]')?.getAnimations({ subtree: true })).toHaveLength(0)
+		expect(
+			document.querySelector('[data-sheet][data-open]')?.getAnimations({ subtree: true })
+		).toHaveLength(0)
 	);
 	await page.getByRole('button', { name: 'Quick add' }).click();
 }
@@ -94,9 +96,9 @@ describe('AddSheet batches', () => {
 		addSheet.show();
 		await expect.element(page.getByRole('dialog', { name: 'Add food' })).toBeVisible();
 		await vi.waitFor(() =>
-			expect(document.querySelector('dialog[open]')?.getAnimations({ subtree: true })).toHaveLength(
-				0
-			)
+			expect(
+				document.querySelector('[data-sheet][data-open]')?.getAnimations({ subtree: true })
+			).toHaveLength(0)
 		);
 	}
 
@@ -148,7 +150,7 @@ describe('AddSheet batches', () => {
 		});
 		await vi.waitFor(() => expect(mocks.invalidateAll).toHaveBeenCalled());
 		expect(toasts.items.map((item) => item.message)).toContain('Logged Beef stew');
-		await vi.waitFor(() => expect(document.querySelector('dialog[open]')).toBeNull());
+		await vi.waitFor(() => expect(document.querySelector('[data-sheet][data-open]')).toBeNull());
 	});
 
 	it('logs grams of a weighed batch', async () => {
@@ -185,7 +187,7 @@ describe('AddSheet batches', () => {
 		await expect.element(page.getByRole('dialog', { name: 'Beef stew' })).toBeVisible();
 		await expect.element(page.getByLabelText('Amount')).toHaveValue('1');
 		addSheet.open = false;
-		await vi.waitFor(() => expect(document.querySelector('dialog[open]')).toBeNull());
+		await vi.waitFor(() => expect(document.querySelector('[data-sheet][data-open]')).toBeNull());
 		addSheet.show();
 		await expect.element(page.getByRole('dialog', { name: 'Add food' })).toBeVisible();
 	});
