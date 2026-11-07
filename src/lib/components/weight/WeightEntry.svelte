@@ -11,7 +11,9 @@
 
 	/**
 	 * Today's weigh-in: a number field with a step button for each direction, and Save. The field starts at today's
-	 * weigh-in, else the latest one, else empty (the buttons stay off until there is a number to step from). The
+	 * weigh-in, else the latest one, else empty. A step button commits what is typed first (a tapped button takes no
+	 * focus on iOS, so the field has not blurred) and does nothing while there is still no number; it is off only at
+	 * the limits, never because the field is empty or holds text that is not a number yet. The
 	 * weight is checked against `WeightInput`, the schema the server uses, once the field has been committed (when it
 	 * loses focus, or on Save), and all of it on Save. `onsave` does the write, and the toast and the refresh: the
 	 * component only shows the saving state and, when the write fails, keeps the value and offers Retry. "Logged
@@ -43,9 +45,10 @@
 	// error at once, as it does after the field loses focus. An empty field is an error only after Save.
 	const shownError = $derived(kg !== null || submitted ? kgError : undefined);
 
+	// Says why a step button is off.
 	const hint = $derived(
 		kg === null
-			? `Enter a weight, then adjust it by ${WEIGHT_STEP_KG} kg.`
+			? undefined
 			: kg <= MIN_WEIGHT_KG
 				? `${MIN_WEIGHT_KG} kg is the lowest weight you can save.`
 				: kg >= MAX_WEIGHT_KG
@@ -106,14 +109,14 @@
 				label="Decrease weight by {WEIGHT_STEP_KG} kg"
 				icon={Minus}
 				variant="secondary"
-				disabled={kg === null || kg <= MIN_WEIGHT_KG}
+				disabled={kg !== null && kg <= MIN_WEIGHT_KG}
 				onclick={() => step(-1)}
 			/>
 			<IconButton
 				label="Increase weight by {WEIGHT_STEP_KG} kg"
 				icon={Plus}
 				variant="secondary"
-				disabled={kg === null || kg >= MAX_WEIGHT_KG}
+				disabled={kg !== null && kg >= MAX_WEIGHT_KG}
 				onclick={() => step(1)}
 			/>
 			<Button type="submit" loading={busy} class="flex-1">{failure ? 'Retry' : 'Save'}</Button>

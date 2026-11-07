@@ -57,10 +57,8 @@ test('logs today with the stepper and shows it first in the history', async ({ p
 	await gotoHydrated(page, '/weight');
 
 	const entry = page.locator('form').first();
-	// The field commits on blur, which turns the step buttons on.
 	const field = page.getByLabel('Weight', { exact: true }).first();
 	await field.fill(String(start));
-	await field.blur();
 	await page.getByRole('button', { name: 'Increase weight by 0.1 kg' }).click();
 	await page.getByRole('button', { name: 'Increase weight by 0.1 kg' }).click();
 	await entry.getByRole('button', { name: 'Save' }).click();

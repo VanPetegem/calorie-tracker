@@ -28,13 +28,14 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
   with no swipe: one tap, Undo from the page, nothing hidden.
 - **`NumberInput` commits on blur only, so the weight forms commit it themselves.** Enter in the field and a step
   button tapped while the field still has focus (iOS Safari does not focus a button, so the field never blurs) would
-  use the old number. Both call a small `commitField` first, which blurs the focused input. Steps work in whole tenths
+  use the old number. Both call a small `commitFocusedInput` first, which blurs the focused input. Steps work in whole tenths
   (`Math.round(kg * 10) + 1`, then `/ 10`), not `kg + 0.1`, which gives 70.69999999999999 from 70.6; the step buttons
-  turn off at 20 and 400 kg and are off while the field is empty or not a number, with a hint.
+  turn off only at 20 and 400 kg, with a hint. They stay on while the field is empty: a step commits what is typed
+  first (so typing 70.5 and tapping + gives 70.6) and does nothing if there is still no number.
 - **A stored weigh-in keeps its date in `EditWeightSheet`; the date is editable only for a new one.** Saving is an
   upsert by date, so changing the date of a stored weigh-in would leave the old day behind as a copy. `point` null
   opens the same sheet as "Add weigh-in" with a date up to tomorrow (`isAllowedLogDate`, the log's rule). Spec 5's
-  "any allowed past date" is met by that add mode; the page has no entry point for it yet.
+  "any allowed past date" is met by that add mode; the Weight page opens it from its "Add weigh-in" button.
 - **The chart ranges are calendar days ending today, and the chart is a slider over its points.** "30 days" is today
   and the 29 days before it (`visiblePoints`), so a point 30 days back is out; a weigh-in for tomorrow is kept. A
   fixed range always spans its whole window on the x axis (a sparse series sits where its days are), "All" starts at

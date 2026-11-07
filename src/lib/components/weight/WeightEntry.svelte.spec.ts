@@ -104,11 +104,25 @@ describe('WeightEntry', () => {
 		expect(onsave).toHaveBeenCalledWith(71.4);
 	});
 
-	it('asks for a number when the field is empty and keeps the steppers off', async () => {
-		const { onsave, save } = setup({ lastKg: null });
-		await expect
-			.element(page.getByRole('button', { name: 'Increase weight by 0.1 kg' }))
-			.toBeDisabled();
+	it('steps from a number typed into an empty field, without the field losing focus', async () => {
+		// iOS Safari does not focus a tapped button, so the field never blurs: the click is dispatched without moving focus.
+		const { onsave, input, save } = setup({ lastKg: null });
+		await input.fill('70.5');
+		const field = input.element() as HTMLInputElement;
+		expect(document.activeElement).toBe(field);
+		const plus = page.getByRole('button', { name: 'Increase weight by 0.1 kg' });
+		await expect.element(plus).toBeEnabled();
+		(plus.element() as HTMLButtonElement).click();
+		await expect.element(input).toHaveValue('70.6');
+		await save.click();
+		expect(onsave).toHaveBeenCalledWith(70.6);
+	});
+
+	it('asks for a number when the field is empty and a step has nothing to start from', async () => {
+		const { onsave, input, save } = setup({ lastKg: null });
+		await page.getByRole('button', { name: 'Decrease weight by 0.1 kg' }).click();
+		await expect.element(input).toHaveValue('');
+		expect(page.getByRole('alert').elements()).toHaveLength(0);
 		await save.click();
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Enter a number');
 		expect(onsave).not.toHaveBeenCalled();
