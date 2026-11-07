@@ -4,6 +4,32 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-07
 
+- **The weight components take callbacks and the page owns the write, the toast and the refresh.** `WeightEntry` and
+  `EditWeightSheet` only show the saving state and, when `onsave` rejects, keep the value and offer Retry (the
+  `ContainerForm` pattern). They send nothing and toast nothing, so Task 4 shows "Logged" or "Updated" (it knows
+  whether today had a value), calls `invalidateAll()`, and the components are shown whole on `/design`. The sheet
+  closes itself when `onsave` resolves. `WeightRow` deletes from a visible bin button instead of the spec's row menu,
+  with no swipe: one tap, Undo from the page, nothing hidden.
+- **`NumberInput` commits on blur only, so the weight forms commit it themselves.** Enter in the field and a step
+  button tapped while the field still has focus (iOS Safari does not focus a button, so the field never blurs) would
+  use the old number. Both call a small `commitField` first, which blurs the focused input. Steps work in whole tenths
+  (`Math.round(kg * 10) + 1`, then `/ 10`), not `kg + 0.1`, which gives 70.69999999999999 from 70.6; the step buttons
+  turn off at 20 and 400 kg and are off while the field is empty or not a number, with a hint.
+- **A stored weigh-in keeps its date in `EditWeightSheet`; the date is editable only for a new one.** Saving is an
+  upsert by date, so changing the date of a stored weigh-in would leave the old day behind as a copy. `point` null
+  opens the same sheet as "Add weigh-in" with a date up to tomorrow (`isAllowedLogDate`, the log's rule). Spec 5's
+  "any allowed past date" is met by that add mode; the page has no entry point for it yet.
+- **The chart ranges are calendar days ending today, and the chart is a slider over its points.** "30 days" is today
+  and the 29 days before it (`visiblePoints`), so a point 30 days back is out; a weigh-in for tomorrow is kept. A
+  fixed range always spans its whole window on the x axis (a sparse series sits where its days are), "All" starts at
+  the first weigh-in. The SVG is `aria-hidden`; the focusable wrapper has `role="slider"` with the point's date,
+  weight and trend as value text (arrow keys, Home, End, Escape), and a table of the visible points is the text
+  version. Tap and drag select the nearest point (touch), hover does for a mouse; focus shows the latest. The tooltip
+  sits in a reserved top margin of the plot, so it never covers data. The range is stored under `kcal-weight-range`
+  and read after mount, so server and first client render agree.
+- **The weekly rate is shown signed in kg and percent.** "+0.24 kg/week" and "+0.33 %", "-0.30 kg/week" and
+  "-0.43 %" for a loss, both rounded to 2 places and formatted with `en-GB` so tests and every device read the same;
+  the trend and chart weights have one decimal.
 - **`WeightInput` checks only that the date is a calendar date; the weight command checks `isAllowedLogDate`.** The
   rule needs today in the settings timezone, which a shared schema used by the form cannot know, and the repository
   keeps the plan's `saveWeight(db, input)` signature without `today`. Unlike the log repository (`assertLogDate` in

@@ -1,0 +1,102 @@
+<script lang="ts">
+	import { untrack } from 'svelte';
+	import * as v from 'valibot';
+	import { WEIGHT_STEP_KG } from '#lib/domain/constants.ts';
+	import { isAllowedLogDate } from '#lib/domain/dates.ts';
+	import type { WeighIn } from '#lib/domain/trend.ts';
+	import { WeightInput } from '#lib/schemas/weight.ts';
+	import { Button, Input, NumberInput, Sheet } from '#lib/components/ui/index.ts';
+	import { formatDay } from './chart.ts';
+
+	/**
+	 * Edits the weight of a stored weigh-in, or adds one for a day (`point` null). A stored weigh-in keeps its date,
+	 * so saving only ever replaces its weight; a new one takes a day up to tomorrow, as the log does. The fields start
+	 * from `point` each time the sheet opens. `onsave` does the write (and the toast and refresh); the sheet closes
+	 * when it resolves, and when it fails stays open with the values and offers Retry.
+	 */
+	type Props = {
+		open: boolean;
+		point: WeighIn | null;
+		/** Today in the settings timezone, `YYYY-MM-DD`. */
+		today: string;
+		onsave: (input: WeightInput) => Promise<void>;
+	};
+
+	let { open = $bindable(false), point, today, onsave }: Props = $props();
+
+	// The day of a new weigh-in; a stored one keeps `point.date`.
+	let kg = $state<number | null>(untrack(() => point?.kg ?? null));
+	let date = $state(untrack(() => today));
+	let submitted = $state(false);
+	let busy = $state(false);
+	let failure = $state(false);
+	let form = $state<HTMLFormElement>();
+
+	// Each opening starts from the point it was opened for.
+	$effect(() => {
+		if (!open) return;
+		untrack(() => {
+			kg = point?.kg ?? null;
+			date = today;
+			submitted = false;
+			failure = false;
+		});
+	});
+
+	const day = $derived(point ? point.date : date);
+	const result = $derived(v.safeParse(WeightInput, { date: day, kg }));
+	const issue = (field: 'date' | 'kg') =>
+		result.issues?.find((found) => found.path?.[0]?.key === field)?.message;
+	const dateError = $derived(
+		issue('date') ?? (isAllowedLogDate(day, today) ? undefined : 'Choose a day up to tomorrow')
+	);
+	const kgError = $derived(kg !== null || submitted ? issue('kg') : undefined);
+
+	function commitField() {
+		const active = document.activeElement;
+		if (active instanceof HTMLInputElement && form?.contains(active)) active.blur();
+	}
+
+	async function submit(event: SubmitEvent) {
+		event.preventDefault();
+		commitField();
+		submitted = true;
+		if (!result.success || dateError) return;
+		busy = true;
+		failure = false;
+		try {
+			await onsave(result.output);
+			open = false;
+		} catch {
+			failure = true;
+		} finally {
+			busy = false;
+		}
+	}
+</script>
+
+<Sheet
+	bind:open
+	title={point ? 'Edit weigh-in' : 'Add weigh-in'}
+	description={point ? formatDay(point.date, { year: true }) : undefined}
+>
+	<form class="flex flex-col gap-4" onsubmit={submit} bind:this={form} novalidate>
+		{#if !point}
+			<Input
+				label="Date"
+				type="date"
+				bind:value={date}
+				error={submitted ? dateError : undefined}
+				hint="Up to tomorrow."
+			/>
+		{/if}
+		<NumberInput label="Weight" unit="kg" bind:value={kg} step={WEIGHT_STEP_KG} error={kgError} />
+		{#if failure}
+			<p role="alert" class="text-sm text-danger">Could not save. Try again.</p>
+		{/if}
+		<div class="flex gap-2">
+			<Button variant="secondary" disabled={busy} onclick={() => (open = false)}>Cancel</Button>
+			<Button type="submit" loading={busy}>{failure ? 'Retry' : 'Save'}</Button>
+		</div>
+	</form>
+</Sheet>

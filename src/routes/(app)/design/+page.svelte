@@ -54,6 +54,13 @@
 		draftTotals,
 		type DraftIngredient
 	} from '#lib/components/recipes/draft.ts';
+	import { addDays } from '#lib/domain/dates.ts';
+	import { trendSeries, weeklyRate, type TrendPoint, type WeighIn } from '#lib/domain/trend.ts';
+	import EditWeightSheet from '#lib/components/weight/EditWeightSheet.svelte';
+	import WeightChart from '#lib/components/weight/WeightChart.svelte';
+	import WeightEntry from '#lib/components/weight/WeightEntry.svelte';
+	import WeightRow from '#lib/components/weight/WeightRow.svelte';
+	import WeightSummary from '#lib/components/weight/WeightSummary.svelte';
 	import type { BatchSummary } from '#lib/server/batches/repo.ts';
 	import type { RecipeSummary } from '#lib/server/recipes/repo.ts';
 	import ScannerPanel from '#lib/components/log/ScannerPanel.svelte';
@@ -145,6 +152,27 @@
 			}
 		});
 	}
+
+	// Weigh-ins for the weight components: a fixed "today" and a made up, repeatable series (no random numbers).
+	const weightToday = '2026-11-07';
+	/** `count` weigh-ins `every` days apart, the last on today, drifting up by 0.02 kg a day with a daily wobble. */
+	function weighIns(count: number, every = 1): WeighIn[] {
+		return Array.from({ length: count }, (_, i) => ({
+			date: addDays(weightToday, -(count - 1 - i) * every),
+			kg: Math.round((68 + i * every * 0.02 + (((i * 7) % 5) - 2) * 0.15) * 10) / 10
+		}));
+	}
+	const weightDense = trendSeries(weighIns(365));
+	const weightSparse = trendSeries(weighIns(9, 11));
+	const weightOne = trendSeries([{ date: weightToday, kg: 70.4 }]);
+	const weightSteady = trendSeries(weighIns(20));
+	const weightRateNow = weeklyRate(weightDense, weightToday);
+	const weightRows: TrendPoint[] = weightSteady.slice(-3).reverse();
+	let weightLog = $state('Tap a row to edit it, or the bin to delete it.');
+	let weightSheetOpen = $state(false);
+	let weightSheetPoint = $state<WeighIn | null>(null);
+	let weightSheetLog = $state('Open the sheet to edit a weigh-in or add one.');
+	let weightSheetFails = $state(false);
 
 	const sampleEntry: LogEntry = {
 		id: 'design-oats',
@@ -1204,6 +1232,180 @@
 			</div>
 		</div>
 		<span class="text-sm text-text-muted">{containerLog}</span>
+	</Section>
+
+	<Section
+		name="WeightEntry"
+		description="Today's weigh-in: a number field, a button for 0.1 kg down and up, and Save. It starts from today's weigh-in, else the latest, else empty (the step buttons stay off until there is a number). The weight is checked against the server's schema when the field loses focus and on Save; a weight outside 20 to 400 kg is an error under the field. A failed save keeps the value and offers Retry. Saving and the failed save are triggered by pressing Save in the last two examples."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Empty, no weigh-in yet</span>
+				<WeightEntry
+					today={weightToday}
+					todayKg={null}
+					lastKg={null}
+					onsave={async (kg) => void (weightLog = `Saved ${kg} kg`)}
+				/>
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Prefilled with the latest weigh-in</span>
+				<WeightEntry
+					today={weightToday}
+					todayKg={null}
+					lastKg={70.2}
+					onsave={async (kg) => void (weightLog = `Saved ${kg} kg`)}
+				/>
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Logged today</span>
+				<WeightEntry
+					today={weightToday}
+					todayKg={70.6}
+					lastKg={70.6}
+					onsave={async (kg) => void (weightLog = `Saved ${kg} kg`)}
+				/>
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Saving (Save never finishes)</span>
+				<WeightEntry
+					today={weightToday}
+					todayKg={null}
+					lastKg={70.2}
+					onsave={() => new Promise<void>(() => {})}
+				/>
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">The save fails</span>
+				<WeightEntry
+					today={weightToday}
+					todayKg={null}
+					lastKg={70.2}
+					onsave={async () => {
+						throw new Error('offline');
+					}}
+				/>
+			</div>
+		</div>
+		<span class="text-sm text-text-muted">{weightLog}</span>
+	</Section>
+
+	<Section
+		name="WeightSummary"
+		description="The trend weight today and the weekly rate in kg and percent of the trend, signed. Until there are 14 days of weigh-ins it says when the rate comes; before the first weigh-in it says there is none."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<WeightSummary trendKg={weightDense.at(-1)?.trend ?? null} rate={weightRateNow} />
+			<WeightSummary trendKg={70.4} rate={{ kg: -0.3, pct: -0.43 }} />
+			<WeightSummary trendKg={70.4} rate={null} />
+			<WeightSummary trendKg={null} rate={null} />
+		</div>
+	</Section>
+
+	<Section
+		name="WeightChart"
+		description="Weigh-ins as dots and the trend as a line, in an inline SVG. The range control (30 days, 90 days, 1 year, All) is remembered on this device; a fixed range spans its whole window. Tap or drag the chart, hover it, or focus it and use the arrow keys to read a point; Escape closes the tooltip. A table of the visible points is there for screen readers. A dashed line shows the goal slope when a goal is given."
+	>
+		<div class="grid gap-6">
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Empty</span>
+				<WeightChart series={[]} today={weightToday} />
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">One weigh-in</span>
+				<WeightChart series={weightOne} today={weightToday} />
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted"
+					>Sparse, nine weigh-ins eleven days apart</span
+				>
+				<WeightChart series={weightSparse} today={weightToday} />
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted"
+					>Dense, a year of daily weigh-ins (try each range)</span
+				>
+				<WeightChart series={weightDense} today={weightToday} />
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">With a goal slope</span>
+				<WeightChart
+					series={weightSteady}
+					today={weightToday}
+					goal={{
+						from: addDays(weightToday, -6),
+						trendKg: weightSteady.at(-7)?.trend ?? 70,
+						kgPerWeek: 0.35
+					}}
+				/>
+			</div>
+		</div>
+	</Section>
+
+	<Section
+		name="WeightRow"
+		description="One weigh-in in the history: date, weight and the trend on that day. A tap on the row edits it; the bin button deletes it, and the page offers Undo. Both are buttons, so nothing needs a swipe or a hover. At least 56 px tall."
+	>
+		<ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
+			{#each weightRows as point (point.date)}
+				<li>
+					<WeightRow
+						{point}
+						onedit={(p) => (weightLog = `Edit ${p.date}`)}
+						ondelete={(p) => (weightLog = `Delete ${p.date}`)}
+					/>
+				</li>
+			{/each}
+		</ul>
+		<span class="text-sm text-text-muted">{weightLog}</span>
+	</Section>
+
+	<Section
+		name="EditWeightSheet"
+		description="Edits the weight of a stored weigh-in, whose date stays; or adds one for a day up to tomorrow. The weight is checked on blur and on Save with the server's schema. The sheet closes when the save works; when it fails it stays open and offers Retry."
+	>
+		<div class="flex flex-wrap gap-2">
+			<Button
+				variant="secondary"
+				onclick={() => {
+					weightSheetPoint = { date: '2026-11-03', kg: 70.4 };
+					weightSheetFails = false;
+					weightSheetOpen = true;
+				}}
+			>
+				Edit a weigh-in
+			</Button>
+			<Button
+				variant="secondary"
+				onclick={() => {
+					weightSheetPoint = null;
+					weightSheetFails = false;
+					weightSheetOpen = true;
+				}}
+			>
+				Add a weigh-in
+			</Button>
+			<Button
+				variant="secondary"
+				onclick={() => {
+					weightSheetPoint = { date: '2026-11-03', kg: 70.4 };
+					weightSheetFails = true;
+					weightSheetOpen = true;
+				}}
+			>
+				Edit, the save fails
+			</Button>
+		</div>
+		<span class="text-sm text-text-muted">{weightSheetLog}</span>
+		<EditWeightSheet
+			bind:open={weightSheetOpen}
+			point={weightSheetPoint}
+			today={weightToday}
+			onsave={async (input) => {
+				if (weightSheetFails) throw new Error('offline');
+				weightSheetLog = `Saved ${input.kg} kg on ${input.date}`;
+			}}
+		/>
 	</Section>
 
 	<Section
