@@ -6,7 +6,8 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 - **`EditWeightSheet` mounts its form anew on every opening, and a changed weight drops an old failure.** The number
   field keeps what was typed, and an invalid entry stays as text with value null, so resetting `kg` does not clear it:
-  the form sits in `{#key openings}`, bumped when the sheet opens. `WeightEntry` and the sheet clear the failure (and
+  the form sits in `{#key openings}`, bumped in the sheet's `onclose`, not on open: a sheet shown again during its exit is
+  not refocused by `Sheet`, and a remount on open would destroy the focused element. Accepted gap: `Sheet` skips `onclose` when it is reopened during its 200 ms exit, so an add sheet (weight null) reopened that fast keeps an invalid entry typed before; it shows its error and is replaced by typing. `WeightEntry` and the sheet clear the failure (and
   the Retry label) when the weight changes; `WeightEntry` says why the step buttons are off at 20 and 400 kg.
   `commitFocusedInput` and `fieldIssue` live in `weight/form.ts`.
 - **The weight components take callbacks and the page owns the write, the toast and the refresh.** `WeightEntry` and
@@ -30,8 +31,8 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
   the first weigh-in. The SVG is `aria-hidden`; the focusable wrapper has `role="slider"` with the point's date,
   weight and trend as value text (arrow keys, Home, End, Escape), and a table of the visible points is the text
   version. Tap and drag select the nearest point (touch), hover does for a mouse; focus shows the latest. The tooltip
-  is a row above the plot, in the flow (at least 5rem, three short lines, `w-max`, nowrap), so a larger text size makes
-  the row taller and never covers data; a touch outside the chart puts it away. Up and Down move like Right and Left
+  is a row above the plot, in the flow (at least 5rem, three short lines, `w-max max-w-full`), so a larger text size makes
+  the row taller and never covers data, and the box wraps within the plot width, unclipped; a touch outside the chart puts it away, and an emptied series clears the pick. Up and Down move like Right and Left
   (a slider's keys), and the picked index is clamped to the series, which can shrink while the chart has focus. The range is stored under `kcal-weight-range`
   and read after mount, so server and first client render agree.
 - **The weekly rate is shown signed in kg and percent.** "+0.24 kg/week" and "+0.33 %", "-0.30 kg/week" and

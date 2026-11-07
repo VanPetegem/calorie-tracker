@@ -222,4 +222,39 @@ describe('WeightChart', () => {
 		touch(page.getByRole('radiogroup', { name: 'Range' }).element(), box.left);
 		await expect.poll(() => tooltip().element().textContent?.trim()).toBe('');
 	});
+
+	it('moves nothing when a point is picked', async () => {
+		render(WeightChart, { series: series(10), today });
+		const svgTop = () => plot().element().querySelector('svg')!.getBoundingClientRect().top;
+		const before = svgTop();
+		(plot().element() as HTMLElement).focus();
+		await expect.element(tooltip()).toHaveTextContent(/kg/);
+		expect(svgTop()).toBe(before);
+		await userEvent.keyboard('{Home}');
+		await expect.element(tooltip()).toHaveTextContent('Thu 29 Oct');
+		expect(svgTop()).toBe(before);
+	});
+
+	it('shows no old tooltip when the series is refilled after it was empty', async () => {
+		const view = render(WeightChart, { series: series(5), today });
+		// A touch pick, without focus: on iOS a slider that goes away does not blur, so nothing else would clear it.
+		plot()
+			.element()
+			.dispatchEvent(
+				new PointerEvent('pointerdown', { pointerType: 'touch', clientX: 100, bubbles: true })
+			);
+		await expect.element(tooltip()).toHaveTextContent(/kg/);
+		await view.rerender({ series: [], today });
+		await view.rerender({ series: series(5), today });
+		await expect.poll(() => tooltip().element().textContent?.trim()).toBe('');
+	});
+
+	it('keeps a tooltip wider than the plot inside it, with its shadow unclipped', async () => {
+		render(WeightChart, { series: series(10), today });
+		(plot().element() as HTMLElement).focus();
+		await expect.element(tooltip()).toHaveTextContent(/kg/);
+		expect(getComputedStyle(tooltip().element()).overflow).toBe('visible');
+		const box = tooltip().element().firstElementChild as HTMLElement;
+		expect(getComputedStyle(box).maxWidth).toBe('100%');
+	});
 });

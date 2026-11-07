@@ -31,8 +31,9 @@
 	let submitted = $state(false);
 	let busy = $state(false);
 	let failure = $state(false);
-	// Bumped on every opening: the number field keeps what was typed (an invalid entry stays as text), so the form is
-	// mounted anew each time the sheet opens.
+	// Bumped after every close: the number field keeps what was typed (an invalid entry stays as text), so the form is
+	// mounted anew once the sheet is gone. Not on open: that would destroy the focused element of a sheet that is
+	// shown again during its exit, which `Sheet` does not refocus.
 	let openings = $state(0);
 	let form = $state<HTMLFormElement>();
 
@@ -44,7 +45,6 @@
 			date = today;
 			submitted = false;
 			failure = false;
-			openings++;
 		});
 	});
 
@@ -82,6 +82,7 @@
 
 <Sheet
 	bind:open
+	onclose={() => openings++}
 	title={point ? 'Edit weigh-in' : 'Add weigh-in'}
 	description={point ? formatDay(point.date, { year: true }) : undefined}
 >

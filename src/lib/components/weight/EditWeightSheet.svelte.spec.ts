@@ -111,4 +111,15 @@ describe('EditWeightSheet', () => {
 		await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: 'Save' })).toBeVisible();
 	});
+
+	it('keeps the focus in the sheet when it is reopened during its exit', async () => {
+		const view = render(EditWeightSheet, { open: true, point, today, onsave: async () => {} });
+		await opened();
+		await page.getByRole('button', { name: 'Cancel' }).click();
+		await view.rerender({ open: true });
+		await opened();
+		const dialog = page.getByRole('dialog').element();
+		expect(dialog.contains(document.activeElement)).toBe(true);
+		expect(document.activeElement).not.toBe(document.body);
+	});
 });

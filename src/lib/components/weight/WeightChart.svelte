@@ -135,6 +135,12 @@
 	const describe = (point: TrendPoint) =>
 		`${formatDay(point.date, { year: true })}, ${formatKg(point.kg)} kg, trend ${formatKg(point.trend)} kg`;
 
+	// An empty chart has no picked point. Without this a refilled series would show the old pick: a focused slider that
+	// goes away does not always blur (iOS Safari), so nothing else clears it.
+	$effect(() => {
+		if (visible.length === 0) activeIndex = null;
+	});
+
 	// The picked point, kept inside the series: it can shrink under the focus (a delete while the chart is focused).
 	const lastIndex = $derived(dots.length - 1);
 	const index = $derived(activeIndex === null ? null : Math.min(activeIndex, lastIndex));
@@ -239,16 +245,12 @@
 			>
 				<!--
 					Seen only: the slider's value text tells assistive technology the same. In the flow above the plot, so a
-					larger text size makes the row taller instead of covering data; at least 5rem, so showing it moves nothing.
+					larger text size makes the row taller instead of covering data; at least 5rem (the box is about 4rem), so showing it moves nothing.
 				-->
-				<div
-					data-testid="tooltip"
-					aria-hidden="true"
-					class="pointer-events-none min-h-20 overflow-hidden pb-2"
-				>
+				<div data-testid="tooltip" aria-hidden="true" class="pointer-events-none mb-2 min-h-20">
 					{#if active}
 						<div
-							class="relative flex w-max -translate-x-1/2 flex-col rounded-md border border-border bg-surface-raised px-3 py-1 whitespace-nowrap shadow-md"
+							class="relative flex w-max max-w-full -translate-x-1/2 flex-col rounded-md border border-border bg-surface-raised px-3 py-1 shadow-md"
 							style:left="{tooltipLeft}px"
 							bind:clientWidth={tooltipWidth}
 						>
