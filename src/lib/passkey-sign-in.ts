@@ -1,4 +1,5 @@
 import {
+	browserSupportsWebAuthn,
 	startAuthentication,
 	WebAuthnAbortService,
 	WebAuthnError,
@@ -64,6 +65,10 @@ export function createPasskeySignIn(now = () => Date.now()) {
 	}
 
 	async function signIn({ autofill = false } = {}): Promise<PasskeySignInResult> {
+		// Some iOS browsers (Firefox) may not offer WebAuthn at all: say so instead of a generic failure.
+		if (!browserSupportsWebAuthn()) {
+			return { ok: false, reason: 'cancelled', error: { code: 'NOT_SUPPORTED', status: 400 } };
+		}
 		const { data, error } = await options();
 		if (!data) return { ok: false, reason: 'options', error: error ?? { status: 500 } };
 
@@ -72,7 +77,14 @@ export function createPasskeySignIn(now = () => Date.now()) {
 			assertion = await startAuthentication({ optionsJSON: data, useBrowserAutofill: autofill });
 		} catch (cause) {
 			// Leave the options for the ceremony that aborted this one (the button aborts the autofill).
-			const code = cause instanceof WebAuthnError ? cause.code : 'AUTH_CANCELLED';
+			// A browser error keeps its name (NotAllowedError, SecurityError), so the message can show it. The library
+			// passes NotAllowedError through under a generic code, with the browser's name on the error itself.
+			const code =
+				cause instanceof WebAuthnError && cause.code !== 'ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY'
+					? cause.code
+					: cause instanceof Error && cause.name !== 'Error'
+						? cause.name
+						: 'AUTH_CANCELLED';
 			return { ok: false, reason: 'cancelled', error: { code, status: 400 } };
 		}
 

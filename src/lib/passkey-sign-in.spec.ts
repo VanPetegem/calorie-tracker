@@ -2,13 +2,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const $fetch = vi.fn();
 const startAuthentication = vi.fn();
+const browserSupportsWebAuthn = vi.fn(() => true);
 
 vi.mock('#lib/auth-client.ts', () => ({ authClient: { $fetch } }));
 vi.mock('@simplewebauthn/browser', () => ({
 	startAuthentication,
+	browserSupportsWebAuthn,
 	WebAuthnAbortService: { cancelCeremony: vi.fn() },
 	WebAuthnError: class extends Error {
-		code = 'ERROR_CEREMONY_ABORTED';
+		code: string;
+		constructor({ code, name }: { code: string; name: string }) {
+			super(code);
+			this.code = code;
+			this.name = name;
+		}
 	}
 }));
 
@@ -80,6 +87,48 @@ describe('createPasskeySignIn', () => {
 		startAuthentication.mockRejectedValue(new Error('NotAllowedError'));
 		const result = await passkey.signIn();
 		expect(result).toMatchObject({ ok: false, reason: 'cancelled', error: { status: 400 } });
+	});
+
+	it('keeps the name of a browser error that is not a WebAuthnError', async () => {
+		const passkey = createPasskeySignIn();
+		startAuthentication.mockRejectedValue(new DOMException('nope', 'SecurityError'));
+		expect(await passkey.signIn()).toMatchObject({
+			ok: false,
+			reason: 'cancelled',
+			error: { code: 'SecurityError', status: 400 }
+		});
+	});
+
+	it('keeps the library code of a WebAuthnError it identified', async () => {
+		const { WebAuthnError } = await import('@simplewebauthn/browser');
+		const passkey = createPasskeySignIn();
+		startAuthentication.mockRejectedValue(
+			new WebAuthnError({ code: 'ERROR_INVALID_RP_ID', name: 'SecurityError' } as never)
+		);
+		expect(await passkey.signIn()).toMatchObject({ error: { code: 'ERROR_INVALID_RP_ID' } });
+	});
+
+	it('reports the browser error name of a WebAuthnError the library passed through', async () => {
+		const { WebAuthnError } = await import('@simplewebauthn/browser');
+		const passkey = createPasskeySignIn();
+		startAuthentication.mockRejectedValue(
+			new WebAuthnError({
+				code: 'ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY',
+				name: 'NotAllowedError'
+			} as never)
+		);
+		expect(await passkey.signIn()).toMatchObject({ error: { code: 'NotAllowedError' } });
+	});
+
+	it('says a browser without WebAuthn is not supported, without starting a ceremony', async () => {
+		browserSupportsWebAuthn.mockReturnValueOnce(false);
+		const passkey = createPasskeySignIn();
+		expect(await passkey.signIn()).toMatchObject({
+			ok: false,
+			reason: 'cancelled',
+			error: { code: 'NOT_SUPPORTED' }
+		});
+		expect(startAuthentication).not.toHaveBeenCalled();
 	});
 
 	it('passes a failed verification through', async () => {
