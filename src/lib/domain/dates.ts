@@ -74,6 +74,13 @@ export function addDays(date: string, n: number): string {
 	return formatDate(d);
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Whole days from `from` to `to`, negative when `to` is earlier. Calendar dates only, no time zone. */
+export function daysBetween(from: string, to: string): number {
+	return Math.round((parseDate(to).getTime() - parseDate(from).getTime()) / DAY_MS);
+}
+
 /** True when `date` is a `YYYY-MM-DD` string naming a real calendar date. */
 export function isCalendarDate(date: string): boolean {
 	return DATE_FORMAT.test(date) && formatDate(parseDate(date)) === date;

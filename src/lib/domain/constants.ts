@@ -35,3 +35,14 @@ export const MAX_NOTES = 2000;
 
 /** A batch with no activity for this many days finishes automatically. */
 export const BATCH_AUTO_FINISH_DAYS = 7;
+
+/** Weight limits and weight trend constants (phase 4a). Weight maximum is MAX_WEIGHT_KG. */
+export const MIN_WEIGHT_KG = 20;
+export const WEIGHT_STEP_KG = 0.1;
+/** Smoothing factor of the weight trend for one day between weigh-ins (parent spec 6.3). */
+export const TREND_ALPHA = 0.1;
+/** The trend starts at the mean of this many first weigh-ins. */
+export const TREND_SEED_WEIGH_INS = 3;
+/** The weekly rate compares today's trend with the trend this many days earlier. */
+export const RATE_WINDOW_DAYS = 14;
+export const DAYS_PER_WEEK = 7;
