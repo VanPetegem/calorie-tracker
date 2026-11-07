@@ -94,9 +94,9 @@ beforeEach(() => {
 
 afterEach(async () => {
 	vi.restoreAllMocks();
-	if (document.querySelector('dialog[open]')) await userEvent.keyboard('{Escape}');
+	if (document.querySelector('[data-sheet][data-open]')) await userEvent.keyboard('{Escape}');
 	for (const item of [...toasts.items]) toasts.dismiss(item.id);
-	await vi.waitFor(() => expect(document.querySelector('dialog[open]')).toBeNull());
+	await vi.waitFor(() => expect(document.querySelector('[data-sheet][data-open]')).toBeNull());
 });
 
 const field = (label: string) => page.getByLabelText(label, { exact: true });
@@ -113,7 +113,9 @@ function navigate(type = 'link') {
 /** Waits for a sheet to finish sliding in: a click on the moving sheet can miss its buttons. */
 async function sheetSettled() {
 	await vi.waitFor(() =>
-		expect(document.querySelector('dialog[open]')?.getAnimations({ subtree: true })).toHaveLength(0)
+		expect(
+			document.querySelector('[data-sheet][data-shown]')?.getAnimations({ subtree: true })
+		).toHaveLength(0)
 	);
 }
 
@@ -270,7 +272,7 @@ describe('RecipeForm unsaved changes', () => {
 		await expect.element(page.getByRole('dialog', { name: 'Discard changes?' })).toBeVisible();
 		await sheetSettled();
 		await page.getByRole('button', { name: 'Keep editing' }).click();
-		await vi.waitFor(() => expect(document.querySelector('dialog[open]')).toBeNull());
+		await vi.waitFor(() => expect(document.querySelector('[data-sheet][data-open]')).toBeNull());
 		expect(mocks.goto).not.toHaveBeenCalled();
 		expect(field('Portions').element()).toHaveValue('5');
 	});
@@ -347,7 +349,8 @@ function deferred<T>() {
 	return { promise, resolve };
 }
 
-const closed = () => vi.waitFor(() => expect(document.querySelector('dialog[open]')).toBeNull());
+const closed = () =>
+	vi.waitFor(() => expect(document.querySelector('[data-sheet][data-open]')).toBeNull());
 
 /** Changes the amount of a row through its amount sheet. */
 async function setAmount(row: string, value: string) {
@@ -428,7 +431,7 @@ describe('RecipeForm first save with an edit in flight', () => {
 
 		// Not moved: the edit made while saving is not in the saved recipe yet, and no question was asked.
 		expect(mocks.goto).not.toHaveBeenCalled();
-		expect(document.querySelector('dialog[open]')).toBeNull();
+		expect(document.querySelector('[data-sheet][data-open]')).toBeNull();
 		expect(field('Portions').element()).toHaveValue('6');
 
 		// The next save updates the same recipe, and now the form is clean, so it opens the saved recipe.

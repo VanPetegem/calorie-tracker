@@ -12,7 +12,7 @@ import { gotoHydrated } from './helpers.ts';
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Primary' });
 
 /** The open sheet. The dialog is renamed by each step, so a test holds the element. */
-const openSheet = (page: Page) => page.locator('dialog[data-sheet][open]');
+const openSheet = (page: Page) => page.locator('[data-sheet][data-open]');
 
 const unique = (label: string, testInfo: TestInfo) =>
 	`${label} ${testInfo.project.name} ${testInfo.retry} ${Date.now()}`;

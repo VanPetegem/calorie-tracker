@@ -26,7 +26,7 @@ async function openAddSheet(page: Page) {
 	await nav.getByRole('button', { name: phone ? 'Add food' : /^Add food/ }).click();
 	await expect(page.getByRole('dialog', { name: 'Add food' })).toBeVisible();
 	// The dialog is named after the chosen batch on the amount step, so the rest of a test holds the element.
-	return page.locator('dialog[data-sheet][open]');
+	return page.locator('[data-sheet][data-open]');
 }
 
 test('logs 1.5 portions of a batch, the day total matches, and the entry edits to 2 portions', async ({
@@ -63,7 +63,7 @@ test('logs 1.5 portions of a batch, the day total matches, and the entry edits t
 
 	// Tapping the entry opens the batch amount step in edit mode.
 	await entry.click();
-	const edit = page.locator('dialog[data-sheet][open]');
+	const edit = page.locator('[data-sheet][data-open]');
 	await expect(edit.getByLabel('Amount')).toHaveValue('1.5');
 	await expect(edit.getByTestId('preview-kcal')).toHaveText('750 kcal');
 	await edit.getByLabel('Amount').fill('2');
@@ -106,7 +106,7 @@ test('logs 200 g of a weighed batch and keeps the quantity when switching units'
 
 	// Editing converts grams to portions through the batch: 200 g is 0.5 portions of 400 g.
 	await entry.click();
-	const edit = page.locator('dialog[data-sheet][open]');
+	const edit = page.locator('[data-sheet][data-open]');
 	await edit.getByRole('radio', { name: 'portion' }).click();
 	await expect(edit.getByLabel('Amount')).toHaveValue('0.5');
 	await edit.getByLabel('Amount').fill('1');
@@ -141,7 +141,7 @@ test('a batch without a cooked weight logs by portion only, and so does its entr
 	const entry = page.getByRole('button', { name: new RegExp(`^${name}`) });
 	await expect(entry).toContainText('1 portion');
 	await entry.click();
-	const edit = page.locator('dialog[data-sheet][open]');
+	const edit = page.locator('[data-sheet][data-open]');
 	await expect(edit.getByRole('radio', { name: 'g', exact: true })).toHaveAttribute(
 		'aria-disabled',
 		'true'

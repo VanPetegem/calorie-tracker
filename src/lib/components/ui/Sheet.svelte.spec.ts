@@ -5,10 +5,10 @@ import SheetTestHarness from './SheetTestHarness.svelte';
 
 const state = () => page.getByTestId('state');
 const dialogEl = () =>
-	page
-		.getByRole('dialog', { name: 'Delete entry', includeHidden: true })
-		.element() as HTMLDialogElement;
-const scrimOf = (dialog: HTMLDialogElement) => dialog.previousElementSibling as HTMLElement;
+	page.getByRole('dialog', { name: 'Delete entry', includeHidden: true }).element() as HTMLElement;
+/** Open from the moment it is shown until its exit has finished, like a dialog's `open`. */
+const isOpen = (el: HTMLElement = dialogEl()) => el.hasAttribute('data-open');
+const scrimOf = (dialog: HTMLElement) => dialog.previousElementSibling as HTMLElement;
 
 async function openSheet() {
 	await page.getByRole('button', { name: 'Open sheet' }).click();
@@ -18,9 +18,9 @@ async function openSheet() {
 describe('Sheet', () => {
 	it('shows a dialog named by its title when open becomes true', async () => {
 		render(SheetTestHarness);
-		expect(dialogEl().open).toBe(false);
+		expect(isOpen()).toBe(false);
 		await openSheet();
-		expect(dialogEl().open).toBe(true);
+		expect(isOpen()).toBe(true);
 		await expect.element(page.getByText('This removes it from today.')).toBeVisible();
 		await expect.element(state()).toHaveTextContent('open');
 	});
@@ -30,7 +30,7 @@ describe('Sheet', () => {
 		render(SheetTestHarness, { onclose });
 		await openSheet();
 		await userEvent.keyboard('{Escape}');
-		await expect.poll(() => dialogEl().open, { timeout: 3000 }).toBe(false);
+		await expect.poll(() => isOpen(), { timeout: 3000 }).toBe(false);
 		await expect.element(state()).toHaveTextContent('closed');
 		expect(onclose).toHaveBeenCalledOnce();
 	});
@@ -40,7 +40,7 @@ describe('Sheet', () => {
 		await openSheet();
 		// The top left corner is outside the sheet (above it, or left of the centered dialog).
 		await page.elementLocator(scrimOf(dialogEl())).click({ position: { x: 2, y: 2 } });
-		await expect.poll(() => dialogEl().open, { timeout: 3000 }).toBe(false);
+		await expect.poll(() => isOpen(), { timeout: 3000 }).toBe(false);
 		await expect.element(state()).toHaveTextContent('closed');
 	});
 
@@ -49,14 +49,14 @@ describe('Sheet', () => {
 		await openSheet();
 		await page.getByText('Body text').click();
 		await expect.element(state()).toHaveTextContent('open');
-		expect(dialogEl().open).toBe(true);
+		expect(isOpen()).toBe(true);
 	});
 
 	it('closes with the close button', async () => {
 		render(SheetTestHarness);
 		await openSheet();
 		await page.getByRole('button', { name: 'Close' }).click();
-		await expect.poll(() => dialogEl().open, { timeout: 3000 }).toBe(false);
+		await expect.poll(() => isOpen(), { timeout: 3000 }).toBe(false);
 		await expect.element(state()).toHaveTextContent('closed');
 	});
 
@@ -64,7 +64,35 @@ describe('Sheet', () => {
 		render(SheetTestHarness);
 		await openSheet();
 		await page.getByRole('button', { name: 'Cancel' }).click();
-		await expect.poll(() => dialogEl().open, { timeout: 3000 }).toBe(false);
+		await expect.poll(() => isOpen(), { timeout: 3000 }).toBe(false);
+	});
+
+	it('focuses the first focusable element on open', async () => {
+		render(SheetTestHarness);
+		await openSheet();
+		const close = page.getByRole('button', { name: 'Close' }).element();
+		await expect.poll(() => document.activeElement).toBe(close);
+	});
+
+	it('focuses the autofocus element over the first focusable one', async () => {
+		render(SheetTestHarness, { autofocusCancel: true });
+		await openSheet();
+		const cancel = page.getByRole('button', { name: 'Cancel' }).element();
+		await expect.poll(() => document.activeElement).toBe(cancel);
+	});
+
+	it('slides in by setting data-shown after open', async () => {
+		render(SheetTestHarness);
+		await openSheet();
+		await expect.poll(() => dialogEl().hasAttribute('data-shown')).toBe(true);
+	});
+
+	it('stays closed when closed again while opening', async () => {
+		render(SheetTestHarness);
+		await page.getByRole('button', { name: 'Flash sheet' }).click();
+		await expect.poll(() => isOpen(), { timeout: 3000 }).toBe(false);
+		expect(dialogEl().hasAttribute('data-shown')).toBe(false);
+		expect(dialogEl().contains(document.activeElement)).toBe(false);
 	});
 
 	it('returns focus to the trigger button on close', async () => {
@@ -91,7 +119,7 @@ describe('Sheet', () => {
 		await openSheet();
 		expect(getComputedStyle(root).overflow).toBe('hidden');
 		await userEvent.keyboard('{Escape}');
-		await expect.poll(() => dialogEl().open, { timeout: 3000 }).toBe(false);
+		await expect.poll(() => isOpen(), { timeout: 3000 }).toBe(false);
 		await expect.poll(() => getComputedStyle(root).overflow).not.toBe('hidden');
 	});
 
@@ -111,7 +139,7 @@ describe('Sheet', () => {
 		trigger.focus();
 		await openSheet();
 		await page.getByRole('button', { name: 'Close' }).click();
-		await expect.poll(() => dialogEl().open, { timeout: 3000 }).toBe(false);
+		await expect.poll(() => isOpen(), { timeout: 3000 }).toBe(false);
 		await expect.poll(() => document.activeElement).toBe(trigger);
 	});
 
@@ -123,17 +151,17 @@ describe('Sheet', () => {
 		await expect.element(page.getByRole('dialog', { name: 'Delete entry' })).toBeVisible();
 		trigger.remove();
 		await userEvent.keyboard('{Escape}');
-		await expect.poll(() => dialogEl().open, { timeout: 3000 }).toBe(false);
+		await expect.poll(() => isOpen(), { timeout: 3000 }).toBe(false);
 		expect(document.activeElement).not.toBe(trigger);
 		unmount();
 	});
 
-	// Brave and Firefox on iOS place top layer content (showModal) below the visible screen, so the sheet is a
-	// non-modal dialog in a fixed layer. These pin what showModal used to provide.
+	// iOS browsers misplace a <dialog> (showModal and show), so the sheet is a plain fixed panel. These pin what
+	// showModal used to provide.
 	it('is not in the top layer, and sits in a fixed layer at the end of the body', async () => {
 		render(SheetTestHarness);
 		await openSheet();
-		expect(dialogEl().matches(':modal')).toBe(false);
+		expect(dialogEl().tagName).toBe('DIV');
 		const layer = dialogEl().parentElement!;
 		expect(layer.parentElement).toBe(document.body);
 		expect(getComputedStyle(layer).position).toBe('fixed');
@@ -149,7 +177,7 @@ describe('Sheet', () => {
 		expect(pageRoot.inert).toBe(true);
 		expect(dialogEl().closest('[inert]')).toBeNull();
 		await userEvent.keyboard('{Escape}');
-		await expect.poll(() => dialogEl().open, { timeout: 3000 }).toBe(false);
+		await expect.poll(() => isOpen(), { timeout: 3000 }).toBe(false);
 		expect(pageRoot.inert).toBe(false);
 	});
 
@@ -162,10 +190,10 @@ describe('Sheet', () => {
 		expect(dialogEl().parentElement!.inert).toBe(true);
 		await userEvent.keyboard('{Escape}');
 		await expect.element(second).not.toBeInTheDocument();
-		expect(dialogEl().open).toBe(true);
+		expect(isOpen()).toBe(true);
 		expect(dialogEl().parentElement!.inert).toBe(false);
 		await page.getByRole('button', { name: 'Cancel' }).click();
-		await expect.poll(() => dialogEl().open, { timeout: 3000 }).toBe(false);
+		await expect.poll(() => isOpen(), { timeout: 3000 }).toBe(false);
 	});
 
 	it('releases the page when it unmounts while open', async () => {
@@ -187,7 +215,7 @@ describe('Sheet', () => {
 		expect(document.body.lastElementChild).toBe(second.element().parentElement);
 		await userEvent.keyboard('{Escape}');
 		await expect.element(second).not.toBeInTheDocument();
-		expect(dialogEl().open).toBe(true);
+		expect(isOpen()).toBe(true);
 	});
 
 	it('does not close on an Escape that a control inside the sheet handled', async () => {
@@ -198,7 +226,7 @@ describe('Sheet', () => {
 		body.focus();
 		body.addEventListener('keydown', (event) => event.preventDefault(), { once: true });
 		await userEvent.keyboard('{Escape}');
-		expect(dialogEl().open).toBe(true);
+		expect(isOpen()).toBe(true);
 	});
 
 	it('makes the page inert also when the sheet is mounted open', async () => {
@@ -207,7 +235,7 @@ describe('Sheet', () => {
 		const trigger = page.getByRole('button', { name: 'Open sheet', includeHidden: true }).element();
 		expect(trigger.closest('[inert]')).not.toBeNull();
 		await userEvent.keyboard('{Escape}');
-		await expect.poll(() => dialogEl().open, { timeout: 3000 }).toBe(false);
+		await expect.poll(() => isOpen(), { timeout: 3000 }).toBe(false);
 	});
 
 	it('lets taps through to the page while it animates out', async () => {
@@ -216,7 +244,7 @@ describe('Sheet', () => {
 		const layer = dialogEl().parentElement!;
 		await userEvent.keyboard('{Escape}');
 		expect(getComputedStyle(layer).pointerEvents).toBe('none');
-		await expect.poll(() => dialogEl().open, { timeout: 3000 }).toBe(false);
+		await expect.poll(() => isOpen(), { timeout: 3000 }).toBe(false);
 	});
 
 	it('keeps the page inert without a gap when a node is added to the body', async () => {
