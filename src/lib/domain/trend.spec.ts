@@ -24,6 +24,26 @@ describe('trendSeries', () => {
 		expect(series[2].trend).toBeCloseTo(71.1, 10);
 	});
 
+	it('seeds only from weigh-ins up to the seed date, and continues the trend past it', () => {
+		const series = trendSeries(
+			[
+				{ date: '2026-11-01', kg: 70 },
+				{ date: '2026-11-02', kg: 71 },
+				{ date: '2026-11-03', kg: 90 }
+			],
+			'2026-11-02'
+		);
+		expect(series[0].trend).toBeCloseTo(70.5, 10);
+		expect(series[1].trend).toBeCloseTo(70.55, 10);
+		// The later weigh-in moves the trend by its share instead of entering the seed.
+		expect(series[2].trend).toBeCloseTo(70.55 + 0.1 * (90 - 70.55), 10);
+	});
+
+	it('seeds from every weigh-in up to three when none is on or before the seed date', () => {
+		const series = trendSeries([{ date: '2026-11-03', kg: 72 }], '2026-11-02');
+		expect(series[0].trend).toBe(72);
+	});
+
 	it('takes the mean of the weigh-ins there are when there are fewer than three', () => {
 		const series = trendSeries([
 			{ date: '2026-11-01', kg: 70 },

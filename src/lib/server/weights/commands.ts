@@ -34,7 +34,7 @@ export async function deleteWeightOn(ctx: WeightContext, input: DeleteWeightInpu
 
 /** The Weight page: every weigh-in with its trend, today's weigh-in, the latest up to today, trend and weekly rate. */
 export async function loadWeight({ db, today }: WeightContext): Promise<WeightData> {
-	const series = trendSeries(await listWeights(db));
+	const series = trendSeries(await listWeights(db), today);
 	const upToToday = series.filter((point) => point.date <= today);
 	return {
 		today,

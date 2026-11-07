@@ -8,7 +8,7 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
   `loadWeight`.** All three live in `server/weights/commands.ts` and take `{ db, today }`, so the date window
   (`assertLogDate`, 400 after tomorrow, for save and delete) and the load are tested against Miniflare D1 without the
   remote function runtime. `weight.remote.ts` only calls them. `lastKg`, the entry's prefill, is the latest weigh-in up
-  to today, so a weigh-in for tomorrow does not become the prefill; it also stays out of today's trend and rate.
+  to today, so a weigh-in for tomorrow does not become the prefill; it also stays out of today's trend and rate: `trendSeries(weighIns, today)` seeds the trend only from weigh-ins up to today (with fewer than three, tomorrow's would otherwise enter the seed mean), and later ones continue it, so the chart and the summary agree.
 - **The page toasts "Logged 70.6 kg" for a day without a weigh-in and "Updated 70.6 kg" for one with, and always shows
   the Add weigh-in button.** The page decides from the loaded series (the date has a point or not), for the entry card
   and the sheet alike. The history section and its button show with no weigh-ins too, because a missed past day can

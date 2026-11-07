@@ -10,12 +10,15 @@ export type TrendPoint = WeighIn & { trend: number };
 /**
  * The weight trend of every weigh-in, oldest first. The trend starts at the mean of the first weigh-ins (up to
  * TREND_SEED_WEIGH_INS) and moves toward each later weigh-in by a share that grows with the days since the previous
- * one: 1 - (1 - TREND_ALPHA)^days. The input is not changed.
+ * one: 1 - (1 - TREND_ALPHA)^days. With `seedUntil`, only weigh-ins on or before it enter the seed (when there are
+ * any), so a weigh-in for tomorrow cannot change today's trend. The input is not changed.
  */
-export function trendSeries(weighIns: WeighIn[]): TrendPoint[] {
+export function trendSeries(weighIns: WeighIn[], seedUntil?: string): TrendPoint[] {
 	if (weighIns.length === 0) return [];
 	const sorted = [...weighIns].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-	const seed = sorted.slice(0, TREND_SEED_WEIGH_INS);
+	const seedable =
+		seedUntil === undefined ? sorted : sorted.filter((weighIn) => weighIn.date <= seedUntil);
+	const seed = (seedable.length > 0 ? seedable : sorted).slice(0, TREND_SEED_WEIGH_INS);
 	let trend = seed.reduce((sum, weighIn) => sum + weighIn.kg, 0) / seed.length;
 	const first = sorted[0];
 	const series: TrendPoint[] = [{ date: first.date, kg: first.kg, trend }];

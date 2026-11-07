@@ -62,6 +62,20 @@ describe('weight commands and page data', () => {
 		});
 	});
 
+	it('keeps a weigh-in of tomorrow out of the trend seed when there are fewer than three up to today', async () => {
+		await saveWeightOn(ctx(), { date: '2026-10-20', kg: 70 });
+		await saveWeightOn(ctx(), { date: '2026-11-03', kg: 71 });
+		await saveWeightOn(ctx(), { date: '2026-11-08', kg: 90 });
+		const data = await loadWeight(ctx());
+		const upToToday = trendSeries([
+			{ date: '2026-10-20', kg: 70 },
+			{ date: '2026-11-03', kg: 71 }
+		]);
+		expect(data.trendKg).toBeCloseTo(upToToday[1].trend, 10);
+		expect(data.series[1].trend).toBeCloseTo(upToToday[1].trend, 10);
+		expect(data.rate).toEqual(weeklyRate(upToToday, TODAY));
+	});
+
 	it('loads the series, today and the latest weight up to today, the trend and the rate', async () => {
 		// Three weigh-ins up to today fill the trend seed, so tomorrow's weigh-in cannot reach the trend through it.
 		await saveWeightOn(ctx(), { date: '2026-10-10', kg: 69 });
