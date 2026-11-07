@@ -1,6 +1,6 @@
 /**
- * The open sheet layers, last one on top, and everything `showModal()` used to provide for them (Sheet.svelte
- * explains why sheets do not use it):
+ * The open sheet layers, last one on top, and the modal behavior a native modal dialog would provide (Sheet.svelte
+ * explains why sheets are not `<dialog>` elements):
  * - paint order: an opening layer moves to the end of the body, and each layer's z-index follows its place in the
  *   stack, so the top sheet is drawn on top even when it was reopened without moving;
  * - inert: every other element at the top of the body is made `inert`, also one added while a sheet is open, so
@@ -64,8 +64,8 @@ function remove(layer: HTMLElement) {
 }
 
 /**
- * Puts the layer on top of the stack (again). When `move`, it is also drawn above the others: only while opening,
- * because moving an open dialog in the DOM can close it.
+ * Puts the layer on top of the stack (again). When `move`, it is also moved to the end of the body: only while
+ * opening, because moving a node in the DOM blurs the element focused inside it.
  */
 export function pushLayer(layer: HTMLElement, requestClose: () => void, move: boolean) {
 	remove(layer);

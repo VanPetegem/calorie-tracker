@@ -85,7 +85,7 @@ function order(): string[] {
 async function sheetSettled() {
 	await vi.waitFor(() =>
 		expect(
-			document.querySelector('[data-sheet][data-open]')?.getAnimations({ subtree: true })
+			document.querySelector('[data-sheet][data-shown]')?.getAnimations({ subtree: true })
 		).toHaveLength(0)
 	);
 }

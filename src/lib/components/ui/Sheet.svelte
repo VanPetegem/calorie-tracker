@@ -41,7 +41,7 @@
 	const EXIT_TIMEOUT_MS = 400;
 
 	const FOCUSABLE =
-		'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+		'button:not([disabled]), a[href], area[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [contenteditable]:not([contenteditable="false"]), audio[controls], video[controls], iframe, [tabindex]:not([tabindex="-1"])';
 
 	/** In the page (the layer is displayed); `shown` slides it in, `closing` plays the exit. */
 	let visible = $state(false);
@@ -84,11 +84,15 @@
 		opener = active instanceof HTMLElement && active !== document.body ? active : null;
 		visible = true;
 		await tick();
+		// Closed again while this tick ran: hide() owns the sheet now.
+		if (!open || closing) return;
 		const target =
 			el.querySelector<HTMLElement>('[autofocus]') ??
 			el.querySelector<HTMLElement>(FOCUSABLE) ??
 			el;
 		target.focus({ preventScroll: true });
+		// The target may not take focus (hidden at this breakpoint, inside a closed <details>): focus the panel.
+		if (document.activeElement !== target) el.focus({ preventScroll: true });
 		// Lay the panel out at its start position (off screen) now, so setting `data-shown` starts the transition.
 		void el.offsetHeight;
 		shown = true;

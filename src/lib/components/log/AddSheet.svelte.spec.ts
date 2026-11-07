@@ -45,10 +45,11 @@ afterEach(async () => {
 async function openQuickAdd() {
 	addSheet.show();
 	await expect.element(page.getByRole('dialog', { name: 'Add food' })).toBeVisible();
-	// Clicking while the sheet still slides in can land on the backdrop and close it.
+	// Clicking while the sheet still slides in can land on the backdrop and close it. Wait for data-shown (the
+	// slide in has started) and then for no running animation.
 	await vi.waitFor(() =>
 		expect(
-			document.querySelector('[data-sheet][data-open]')?.getAnimations({ subtree: true })
+			document.querySelector('[data-sheet][data-shown]')?.getAnimations({ subtree: true })
 		).toHaveLength(0)
 	);
 	await page.getByRole('button', { name: 'Quick add' }).click();
@@ -97,7 +98,7 @@ describe('AddSheet batches', () => {
 		await expect.element(page.getByRole('dialog', { name: 'Add food' })).toBeVisible();
 		await vi.waitFor(() =>
 			expect(
-				document.querySelector('[data-sheet][data-open]')?.getAnimations({ subtree: true })
+				document.querySelector('[data-sheet][data-shown]')?.getAnimations({ subtree: true })
 			).toHaveLength(0)
 		);
 	}

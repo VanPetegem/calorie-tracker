@@ -67,6 +67,34 @@ describe('Sheet', () => {
 		await expect.poll(() => isOpen(), { timeout: 3000 }).toBe(false);
 	});
 
+	it('focuses the first focusable element on open', async () => {
+		render(SheetTestHarness);
+		await openSheet();
+		const close = page.getByRole('button', { name: 'Close' }).element();
+		await expect.poll(() => document.activeElement).toBe(close);
+	});
+
+	it('focuses the autofocus element over the first focusable one', async () => {
+		render(SheetTestHarness, { autofocusCancel: true });
+		await openSheet();
+		const cancel = page.getByRole('button', { name: 'Cancel' }).element();
+		await expect.poll(() => document.activeElement).toBe(cancel);
+	});
+
+	it('slides in by setting data-shown after open', async () => {
+		render(SheetTestHarness);
+		await openSheet();
+		await expect.poll(() => dialogEl().hasAttribute('data-shown')).toBe(true);
+	});
+
+	it('stays closed when closed again while opening', async () => {
+		render(SheetTestHarness);
+		await page.getByRole('button', { name: 'Flash sheet' }).click();
+		await expect.poll(() => isOpen(), { timeout: 3000 }).toBe(false);
+		expect(dialogEl().hasAttribute('data-shown')).toBe(false);
+		expect(dialogEl().contains(document.activeElement)).toBe(false);
+	});
+
 	it('returns focus to the trigger button on close', async () => {
 		render(SheetTestHarness);
 		const trigger = page.getByRole('button', { name: 'Open sheet' });
