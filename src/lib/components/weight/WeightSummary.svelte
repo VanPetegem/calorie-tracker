@@ -6,7 +6,7 @@
 	/**
 	 * The weight trend today and the weekly rate. The rate is signed (a gain is "+0.24 kg/week") and shown in percent
 	 * of the trend as well; until there are RATE_WINDOW_DAYS days of history it says when the rate comes. Without a
-	 * trend (no weigh-in yet) it says so and shows no numbers.
+	 * trend (no weigh-in up to today) it says so and shows no numbers.
 	 */
 	type Props = {
 		trendKg: number | null;
@@ -18,7 +18,7 @@
 
 <Card>
 	{#if trendKg === null}
-		<p class="text-base text-text-muted">No weigh-ins yet</p>
+		<p class="text-base text-text-muted">No weigh-ins up to today yet</p>
 	{:else}
 		<dl class="grid grid-cols-2 gap-4">
 			<div class="flex min-w-0 flex-col gap-1">

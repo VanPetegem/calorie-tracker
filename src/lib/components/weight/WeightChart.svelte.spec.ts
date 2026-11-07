@@ -157,6 +157,16 @@ describe('WeightChart', () => {
 		await expect.poll(() => tooltip().element().textContent?.trim()).toBe('');
 	});
 
+	it('keeps the keyboard pick when the mouse leaves the focused chart', async () => {
+		render(WeightChart, { series: series(10), today });
+		await plot().hover();
+		(plot().element() as HTMLElement).focus();
+		await userEvent.keyboard('{Home}');
+		await expect.element(plot()).toHaveAttribute('aria-valuenow', '0');
+		await page.getByRole('radiogroup', { name: 'Range' }).hover();
+		await expect.element(plot()).toHaveAttribute('aria-valuenow', '0');
+	});
+
 	// Five daily weigh-ins, Tue 3 Nov to Sat 7 Nov.
 	const five = () => series(5);
 

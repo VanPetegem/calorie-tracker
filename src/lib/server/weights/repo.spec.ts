@@ -2,7 +2,7 @@ import * as v from 'valibot';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { weights } from '../db/schema.ts';
 import { createTestDb } from '../test/d1.ts';
-import { deleteWeight, latestWeight, listWeights, saveWeight } from './repo.ts';
+import { deleteWeight, listWeights, restoreWeight, saveWeight, weightOn } from './repo.ts';
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>;
 
@@ -20,8 +20,8 @@ describe('weights repository', () => {
 		await test.db.delete(weights);
 	});
 
-	it('lists weigh-ins oldest first, and the latest is the newest date', async () => {
-		expect(await latestWeight(test.db)).toBeNull();
+	it('lists weigh-ins oldest first, and reads the weigh-in of one date', async () => {
+		expect(await weightOn(test.db, '2026-11-03')).toBeNull();
 		await saveWeight(test.db, { date: '2026-11-07', kg: 72.4 });
 		await saveWeight(test.db, { date: '2026-10-31', kg: 71.8 });
 		await saveWeight(test.db, { date: '2026-11-03', kg: 72.1 });
@@ -31,7 +31,7 @@ describe('weights repository', () => {
 			{ date: '2026-11-03', kg: 72.1 },
 			{ date: '2026-11-07', kg: 72.4 }
 		]);
-		expect(await latestWeight(test.db)).toEqual({ date: '2026-11-07', kg: 72.4 });
+		expect(await weightOn(test.db, '2026-11-03')).toEqual({ date: '2026-11-03', kg: 72.1 });
 	});
 
 	it('replaces the kg of a saved date, keeping created_at and setting updated_at', async () => {
@@ -59,9 +59,20 @@ describe('weights repository', () => {
 		await saveWeight(test.db, { date: '2026-11-06', kg: 72 });
 		await saveWeight(test.db, { date: '2026-11-07', kg: 72.2 });
 
-		await deleteWeight(test.db, '2026-11-07');
-		await deleteWeight(test.db, '2026-11-07');
+		expect(await deleteWeight(test.db, '2026-11-07')).toBe(true);
+		expect(await deleteWeight(test.db, '2026-11-07')).toBe(false);
 
 		expect(await listWeights(test.db)).toEqual([{ date: '2026-11-06', kg: 72 }]);
+	});
+
+	it('restores a weigh-in only when its date has none', async () => {
+		expect(await restoreWeight(test.db, { date: '2026-11-06', kg: 72 })).toBe(true);
+		await saveWeight(test.db, { date: '2026-11-07', kg: 71 });
+		expect(await restoreWeight(test.db, { date: '2026-11-07', kg: 72.4 })).toBe(false);
+
+		expect(await listWeights(test.db)).toEqual([
+			{ date: '2026-11-06', kg: 72 },
+			{ date: '2026-11-07', kg: 71 }
+		]);
 	});
 });

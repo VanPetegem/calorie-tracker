@@ -117,6 +117,22 @@ describe('EditWeightSheet', () => {
 		expect(onsave).toHaveBeenLastCalledWith({ date: '2026-11-03', kg: 71 });
 	});
 
+	it('lets a save from a closed opening act on nothing in the next one', async () => {
+		let fail!: (error: Error) => void;
+		const onsave = vi.fn(() => new Promise<void>((_, reject) => (fail = reject)));
+		const view = render(EditWeightSheet, { open: true, point, today, kgOn: () => null, onsave });
+		await opened();
+		await page.getByRole('button', { name: 'Save' }).click();
+		await view.rerender({ open: false });
+		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+		await view.rerender({ open: true });
+		await opened();
+		fail(new Error('offline'));
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		expect(page.getByRole('alert').elements()).toHaveLength(0);
+		await expect.element(page.getByRole('button', { name: 'Save' })).toBeEnabled();
+	});
+
 	it('opens clean again after an invalid entry was left behind', async () => {
 		const onsave = vi.fn(async () => {});
 		const view = render(EditWeightSheet, {

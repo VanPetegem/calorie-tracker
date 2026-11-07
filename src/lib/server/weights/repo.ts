@@ -1,4 +1,4 @@
-import { asc, desc, eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import * as v from 'valibot';
 import type { WeighIn } from '../../domain/trend.ts';
 import { WeightInput } from '../../schemas/weight.ts';
@@ -12,9 +12,9 @@ export async function listWeights(db: Db): Promise<WeighIn[]> {
 	return db.select(weighIn).from(weights).orderBy(asc(weights.date));
 }
 
-/** The weigh-in with the newest date, or null when there is none. */
-export async function latestWeight(db: Db): Promise<WeighIn | null> {
-	const [row] = await db.select(weighIn).from(weights).orderBy(desc(weights.date)).limit(1);
+/** The weigh-in of a date, or null when it has none. */
+export async function weightOn(db: Db, date: string): Promise<WeighIn | null> {
+	const [row] = await db.select(weighIn).from(weights).where(eq(weights.date, date)).limit(1);
 	return row ?? null;
 }
 
@@ -28,7 +28,22 @@ export async function saveWeight(db: Db, input: WeightInput): Promise<void> {
 		.onConflictDoUpdate({ target: weights.date, set: { kg } });
 }
 
-/** Deletes the weigh-in of a date. Deleting a date without one does nothing. */
-export async function deleteWeight(db: Db, date: string): Promise<void> {
-	await db.delete(weights).where(eq(weights.date, date));
+/** Saves a weigh-in only when its date has none, and says whether it did: an Undo must not overwrite a newer one. */
+export async function restoreWeight(db: Db, input: WeightInput): Promise<boolean> {
+	const { date, kg } = v.parse(WeightInput, input);
+	const rows = await db
+		.insert(weights)
+		.values({ date, kg })
+		.onConflictDoNothing({ target: weights.date })
+		.returning({ date: weights.date });
+	return rows.length > 0;
+}
+
+/** Deletes the weigh-in of a date and says whether there was one. Deleting a date without one does nothing. */
+export async function deleteWeight(db: Db, date: string): Promise<boolean> {
+	const rows = await db
+		.delete(weights)
+		.where(eq(weights.date, date))
+		.returning({ date: weights.date });
+	return rows.length > 0;
 }

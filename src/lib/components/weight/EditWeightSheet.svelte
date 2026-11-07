@@ -50,6 +50,7 @@
 			dateTouched = false;
 			submitted = false;
 			failure = false;
+			busy = false;
 		});
 	});
 
@@ -76,13 +77,15 @@
 		if (!result.success || dateError) return;
 		busy = true;
 		failure = false;
+		// A save outlives an opening closed by Escape or the backdrop: its result must not act on the next opening.
+		const opening = openings;
 		try {
 			await onsave(result.output);
-			open = false;
+			if (opening === openings) open = false;
 		} catch {
-			failure = true;
+			if (opening === openings) failure = true;
 		} finally {
-			busy = false;
+			if (opening === openings) busy = false;
 		}
 	}
 </script>

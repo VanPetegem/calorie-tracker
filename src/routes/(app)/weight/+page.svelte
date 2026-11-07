@@ -13,7 +13,7 @@
 	import type { TrendPoint } from '#lib/domain/trend.ts';
 	import type { WeightInput } from '#lib/schemas/weight.ts';
 	import { toasts, withUndo } from '#lib/stores/toasts.svelte.ts';
-	import { deleteWeight, logWeightToday, saveWeight } from './weight.remote.ts';
+	import { deleteWeight, logWeightToday, restoreWeight, saveWeight } from './weight.remote.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -44,18 +44,17 @@
 
 	/** Saves the sheet's weigh-in for its date. A rejected write reaches the sheet, which keeps the value and offers Retry. */
 	async function save({ date, kg }: WeightInput) {
-		const existed = data.series.some((point) => point.date === date);
-		await saveWeight({ date, kg });
+		const { existed } = await saveWeight({ date, kg });
 		await saved(existed, kg);
 	}
 
 	/**
 	 * Saves the entry card's weight on the server's today, not on `data.today`, which is fixed at load: a page left
-	 * open past midnight, or a Retry after an offline resume, must not overwrite yesterday's weigh-in.
+	 * open past midnight, or a Retry after an offline resume, must not overwrite yesterday's weigh-in. The server
+	 * says whether that day had one, for the same reason.
 	 */
 	async function logToday(kg: number) {
-		const existed = data.series.some((point) => point.date === data.today);
-		await logWeightToday({ kg });
+		const { existed } = await logWeightToday({ kg });
 		await saved(existed, kg);
 	}
 
@@ -76,8 +75,9 @@
 		if (deleting.has(point.date)) return;
 		deleting.add(point.date);
 		const day = formatDay(point.date, { year: true });
+		let removed: boolean;
 		try {
-			await deleteWeight({ date: point.date });
+			({ removed } = await deleteWeight({ date: point.date }));
 		} catch {
 			const id = toasts.show({
 				message: 'Could not delete the weigh-in',
@@ -94,14 +94,18 @@
 		} finally {
 			deleting.delete(point.date);
 		}
-		withUndo({
-			message: `Deleted weigh-in of ${day}`,
-			apply: () => {},
-			revert: async () => {
-				await saveWeight({ date: point.date, kg: point.kg });
-				await refresh();
-			}
-		});
+		// Already gone (deleted elsewhere): nothing to undo, the refresh shows it.
+		if (removed) {
+			// Undo only fills the day back in: a weigh-in entered for it meanwhile is kept.
+			withUndo({
+				message: `Deleted weigh-in of ${day}`,
+				apply: () => {},
+				revert: async () => {
+					await restoreWeight({ date: point.date, kg: point.kg });
+					await refresh();
+				}
+			});
+		}
 		await refresh();
 	}
 </script>

@@ -3,7 +3,13 @@ import { trendSeries, weeklyRate } from '../../domain/trend.ts';
 import { weights } from '../db/schema.ts';
 import { createTestDb } from '../test/d1.ts';
 import { listWeights } from './repo.ts';
-import { deleteWeightOn, loadWeight, logWeightTodayOn, saveWeightOn } from './commands.ts';
+import {
+	deleteWeightOn,
+	loadWeight,
+	logWeightTodayOn,
+	restoreWeightOn,
+	saveWeightOn
+} from './commands.ts';
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>;
 
@@ -23,11 +29,11 @@ describe('weight commands and page data', () => {
 		await test.db.delete(weights);
 	});
 
-	it('saves and replaces a weigh-in on a past day, today and tomorrow', async () => {
+	it('saves and replaces a weigh-in on a past day, today and tomorrow, and says whether it existed', async () => {
 		await saveWeightOn(ctx(), { date: '2020-01-01', kg: 70 });
-		await saveWeightOn(ctx(), { date: TODAY, kg: 71 });
+		expect(await saveWeightOn(ctx(), { date: TODAY, kg: 71 })).toEqual({ existed: false });
 		await saveWeightOn(ctx(), { date: '2026-11-08', kg: 72 });
-		await saveWeightOn(ctx(), { date: TODAY, kg: 71.5 });
+		expect(await saveWeightOn(ctx(), { date: TODAY, kg: 71.5 })).toEqual({ existed: true });
 		expect(await listWeights(test.db)).toEqual([
 			{ date: '2020-01-01', kg: 70 },
 			{ date: TODAY, kg: 71.5 },
@@ -37,7 +43,10 @@ describe('weight commands and page data', () => {
 
 	it("logs the entry card weight on the server's today, not on a day the page was loaded for", async () => {
 		await logWeightTodayOn(ctx(), { kg: 70.6 });
-		await logWeightTodayOn({ db: test.db, today: '2026-11-08' }, { kg: 71 });
+		// A page loaded yesterday, which has a weigh-in, saves on a today that has none.
+		expect(await logWeightTodayOn({ db: test.db, today: '2026-11-08' }, { kg: 71 })).toEqual({
+			existed: false
+		});
 		expect(await listWeights(test.db)).toEqual([
 			{ date: TODAY, kg: 70.6 },
 			{ date: '2026-11-08', kg: 71 }
@@ -56,13 +65,31 @@ describe('weight commands and page data', () => {
 		expect(await listWeights(test.db)).toEqual([]);
 	});
 
-	it('deletes a weigh-in, and refuses a delete after tomorrow with 400', async () => {
+	it('deletes a weigh-in and says whether there was one', async () => {
 		await saveWeightOn(ctx(), { date: '2026-11-01', kg: 70 });
-		await deleteWeightOn(ctx(), { date: '2026-11-01' });
+		expect(await deleteWeightOn(ctx(), { date: '2026-11-01' })).toEqual({ removed: true });
+		expect(await deleteWeightOn(ctx(), { date: '2026-11-01' })).toEqual({ removed: false });
 		expect(await listWeights(test.db)).toEqual([]);
-		await expect(deleteWeightOn(ctx(), { date: '2026-11-09' })).rejects.toMatchObject({
-			status: 400
+	});
+
+	it('deletes a weigh-in that a timezone change moved past tomorrow', async () => {
+		await saveWeightOn({ db: test.db, today: '2026-11-08' }, { date: '2026-11-09', kg: 70 });
+		expect(await deleteWeightOn(ctx(), { date: '2026-11-09' })).toEqual({ removed: true });
+		expect(await listWeights(test.db)).toEqual([]);
+	});
+
+	it('restores a deleted weigh-in, but not over one entered meanwhile', async () => {
+		expect(await restoreWeightOn(ctx(), { date: '2026-11-01', kg: 70 })).toEqual({
+			restored: true
 		});
+		await saveWeightOn(ctx(), { date: '2026-11-02', kg: 71 });
+		expect(await restoreWeightOn(ctx(), { date: '2026-11-02', kg: 72 })).toEqual({
+			restored: false
+		});
+		expect(await listWeights(test.db)).toEqual([
+			{ date: '2026-11-01', kg: 70 },
+			{ date: '2026-11-02', kg: 71 }
+		]);
 	});
 
 	it('loads nothing before the first weigh-in', async () => {

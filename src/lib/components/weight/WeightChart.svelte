@@ -237,7 +237,8 @@
 					if (event.pointerType === 'mouse' || event.buttons) select(event.clientX);
 				}}
 				onpointerleave={(event) => {
-					if (event.pointerType === 'mouse') activeIndex = null;
+					// Keyboard focus keeps its pick: the mouse leaving does not move the slider.
+					if (event.pointerType === 'mouse' && document.activeElement !== plot) activeIndex = null;
 				}}
 				onfocus={() => (activeIndex ??= lastIndex)}
 				onblur={() => (activeIndex = null)}

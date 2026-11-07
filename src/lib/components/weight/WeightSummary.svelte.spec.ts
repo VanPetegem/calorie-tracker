@@ -25,7 +25,7 @@ describe('WeightSummary', () => {
 
 	it('shows no numbers before the first weigh-in', async () => {
 		render(WeightSummary, { trendKg: null, rate: null });
-		await expect.element(page.getByText('No weigh-ins yet')).toBeVisible();
+		await expect.element(page.getByText('No weigh-ins up to today yet')).toBeVisible();
 		expect(page.getByTestId('trend').elements()).toHaveLength(0);
 	});
 });

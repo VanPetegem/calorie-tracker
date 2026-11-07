@@ -9,22 +9,25 @@ const mocks = vi.hoisted(() => ({
 	saveWeight: vi.fn(),
 	logWeightToday: vi.fn(),
 	deleteWeight: vi.fn(),
+	restoreWeight: vi.fn(),
 	invalidateAll: vi.fn()
 }));
 
 vi.mock('./weight.remote.ts', () => ({
 	saveWeight: mocks.saveWeight,
 	logWeightToday: mocks.logWeightToday,
-	deleteWeight: mocks.deleteWeight
+	deleteWeight: mocks.deleteWeight,
+	restoreWeight: mocks.restoreWeight
 }));
 vi.mock('$app/navigation', () => ({ invalidateAll: mocks.invalidateAll }));
 
 const TODAY = '2026-11-07';
 
 beforeEach(() => {
-	mocks.saveWeight.mockReset().mockResolvedValue(undefined);
-	mocks.logWeightToday.mockReset().mockResolvedValue(undefined);
-	mocks.deleteWeight.mockReset().mockResolvedValue(undefined);
+	mocks.saveWeight.mockReset().mockResolvedValue({ existed: false });
+	mocks.logWeightToday.mockReset().mockResolvedValue({ existed: false });
+	mocks.deleteWeight.mockReset().mockResolvedValue({ removed: true });
+	mocks.restoreWeight.mockReset().mockResolvedValue({ restored: true });
 	mocks.invalidateAll.mockReset().mockResolvedValue(undefined);
 });
 
@@ -86,7 +89,8 @@ describe('weight page', () => {
 		expect(mocks.invalidateAll).toHaveBeenCalledOnce();
 	});
 
-	it('toasts "Updated" when today already has a weigh-in', async () => {
+	it('toasts "Updated" when the server says its today already had a weigh-in', async () => {
+		mocks.logWeightToday.mockResolvedValue({ existed: true });
 		show([{ date: TODAY, kg: 70 }], 70);
 		await page.getByRole('button', { name: 'Increase weight by 0.1 kg' }).click();
 		await page.getByRole('button', { name: 'Save', exact: true }).click();
@@ -112,6 +116,7 @@ describe('weight page', () => {
 	});
 
 	it('edits a past weigh-in from its row and toasts "Updated"', async () => {
+		mocks.saveWeight.mockResolvedValue({ existed: true });
 		show([
 			{ date: '2026-11-01', kg: 70 },
 			{ date: '2026-11-03', kg: 70.5 }
@@ -144,7 +149,15 @@ describe('weight page', () => {
 		await expect.element(dialog).toHaveTextContent('This day has 70.6 kg; saving replaces it');
 	});
 
-	it('deletes with an Undo toast that saves the old values again', async () => {
+	it('offers no Undo when the weigh-in was already gone', async () => {
+		mocks.deleteWeight.mockResolvedValue({ removed: false });
+		show([{ date: '2026-11-03', kg: 70.5 }]);
+		await page.getByRole('button', { name: 'Delete weigh-in of Tue 3 Nov 2026' }).click();
+		await vi.waitFor(() => expect(mocks.invalidateAll).toHaveBeenCalledOnce());
+		expect(toastTexts()).toEqual([]);
+	});
+
+	it('deletes with an Undo toast that restores the old values', async () => {
 		show([
 			{ date: '2026-11-01', kg: 70 },
 			{ date: '2026-11-03', kg: 70.5 }
@@ -157,8 +170,9 @@ describe('weight page', () => {
 		expect(toasts.items[0].action?.label).toBe('Undo');
 		await toasts.items[0].action!.run();
 		await vi.waitFor(() =>
-			expect(mocks.saveWeight).toHaveBeenCalledWith({ date: '2026-11-03', kg: 70.5 })
+			expect(mocks.restoreWeight).toHaveBeenCalledWith({ date: '2026-11-03', kg: 70.5 })
 		);
+		expect(mocks.saveWeight).not.toHaveBeenCalled();
 		await vi.waitFor(() => expect(mocks.invalidateAll).toHaveBeenCalledTimes(2));
 	});
 
