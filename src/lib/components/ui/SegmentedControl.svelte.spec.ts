@@ -60,4 +60,59 @@ describe('SegmentedControl', () => {
 			.element(page.getByRole('radio', { name: 'Dark' }))
 			.toHaveAttribute('tabindex', '-1');
 	});
+
+	describe('with a disabled option', () => {
+		const withDisabled = [
+			{ value: 'portion', label: 'portion' },
+			{ value: 'g', label: 'g', disabled: true },
+			{ value: 'ml', label: 'ml' }
+		];
+
+		function setupDisabled() {
+			const setter = vi.fn();
+			const state = $state({ value: 'portion' });
+			render(SegmentedControl, {
+				options: withDisabled,
+				label: 'Unit',
+				get value() {
+					return state.value;
+				},
+				set value(v: string) {
+					setter(v);
+					state.value = v;
+				}
+			});
+			return { setter };
+		}
+
+		it('marks it aria-disabled and ignores a click on it', async () => {
+			const { setter } = setupDisabled();
+			const radio = page.getByRole('radio', { name: 'g', exact: true });
+			await expect.element(radio).toHaveAttribute('aria-disabled', 'true');
+			await radio.click({ force: true });
+			expect(setter).not.toHaveBeenCalled();
+			await expect.element(page.getByRole('radio', { name: 'portion' })).toBeChecked();
+		});
+
+		it('points the group at the element that explains it', async () => {
+			render(SegmentedControl, {
+				options: withDisabled,
+				label: 'Unit',
+				value: 'portion',
+				describedby: 'why'
+			});
+			await expect
+				.element(page.getByRole('radiogroup', { name: 'Unit' }))
+				.toHaveAttribute('aria-describedby', 'why');
+		});
+
+		it('skips it with the arrow keys', async () => {
+			const { setter } = setupDisabled();
+			(page.getByRole('radio', { name: 'portion' }).element() as HTMLElement).focus();
+			await userEvent.keyboard('{ArrowRight}');
+			expect(setter).toHaveBeenLastCalledWith('ml');
+			await userEvent.keyboard('{ArrowLeft}');
+			expect(setter).toHaveBeenLastCalledWith('portion');
+		});
+	});
 });

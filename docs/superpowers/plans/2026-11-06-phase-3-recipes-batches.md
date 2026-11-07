@@ -180,6 +180,8 @@ e2e/recipes.e2e.ts (3a), e2e/batches.e2e.ts (3b)
 
 **Interfaces:**
 - Produces: tables `containers`, `batches`, `batchIngredients` per spec section 3 (3b); `logEntries.batchId` references `batches.id`; index `batches(finished_at)` and `log_entries(batch_id)`; types `Batch`, `BatchIngredient`, `Container`.
+- Also (from the 3a review): index `recipe_ingredients(food_id)` in the same migration.
+- `toGrams` now accepts `portion` (Task 5). Adding `portion` to `LOG_UNITS` must not let a food entry use it: food log input and `gramsFor` in `server/log/repo.ts` keep rejecting `portion` (separate unit list or explicit check), with a test.
 - `migrations.spec.ts`: applies migrations up to 0019, inserts food, quick and soft deleted entries, applies the rest, asserts every row and column is unchanged and that foreign keys pass (`PRAGMA foreign_key_check` returns nothing). If drizzle-kit's rebuild uses `PRAGMA foreign_keys=OFF` (ignored inside D1's transaction), switch it to `PRAGMA defer_foreign_keys = on` by hand. If no safe rebuild exists, keep the plain column, enforce the link in the repo and record why in `docs/decisions.md`.
 - [ ] **Step 1: Write failing tests** (migration check, a log entry with an unknown `batch_id` fails, deleting a batch cascades its ingredients).
 - [ ] **Step 2: Run**; fail. **Step 3: Implement**, `pnpm db:generate`, inspect the SQL, `pnpm db:migrate:local`. **Step 4: Gate.** **Step 5: Commit** `feat(db): batches, containers`.
@@ -201,6 +203,8 @@ e2e/recipes.e2e.ts (3a), e2e/batches.e2e.ts (3b)
   - `finishBatch`, `reopenBatch` (idempotent), `deleteBatch` (refuses with `BatchLoggedError` when a live entry references it; else hard deletes its soft deleted entries and the batch in one `db.batch`).
   - `listContainers`, `saveContainer`, `deleteContainer`.
   - `addBatchEntry(db, input, ctx)`: snapshot via `batchEntrySnapshot`, label = batch name, `kind = 'batch'`; logging a finished batch is allowed.
+  - `saveRecipe` (3a review): throws `RecipeNotFoundError` when the update returns no row.
+  - `portionsLeft` throws on units other than `portion` and `g`: `logBatch` and `updateEntryAmount` accept only those two for batch entries, so one bad row cannot break `activeBatches`. Batch summaries use `cookedWeightG === null ? null : per100g(...)`.
   - `updateEntryAmount`: same unit rescales by amount ratio; a unit switch needs stored `grams` (else `UnitNotAvailableError`), then rescales by grams ratio.
   - Remote commands in `batches.remote.ts`: `saveBatch`, `finishBatch`, `reopenBatch`, `deleteBatch`, `saveContainer`, `deleteContainer`; `logBatch` in `log.remote.ts`.
 - [ ] **Step 1: Write failing tests**: draft from recipe copies ingredients and default portions; save snapshots from foods; edit a food then save the batch with a changed amount and one new ingredient: old ingredient keeps its old per 100, new one has the new values; a foreign ingredient id is rejected and writes nothing; auto finish boundary (6 days 23 h stays, 7 days plus 1 min finishes, a log 2 days ago keeps it active); delete refused with a live entry, allowed with only soft deleted ones; log 1.5 portions and 200 g give the domain values; edit a portion entry without grams to 2 portions; switching it to grams is refused; editing the batch after logging leaves the entry unchanged.
@@ -215,6 +219,7 @@ e2e/recipes.e2e.ts (3a), e2e/batches.e2e.ts (3b)
 **Interfaces:**
 - Consumes: `activeBatches`, `logBatch`, `editAmount`, `batchEntrySnapshot`.
 - Produces: `addSheet.openBatch(batch: BatchSummary)` for the batch page's Log button. `AmountStep` accepts a batch source: `{ kind: 'batch'; batch: BatchShape & { name: string } }` with units `portion` and `g` (g disabled with "Add the cooked weight to log grams" when unknown), default 1 portion, preview via `batchEntrySnapshot`. `BatchRow` props `{ batch: BatchSummary; onpick?; href? }` showing "N of M portions left" (clamped at 0) and kcal per portion.
+- Task 7 review: the server converts a batch entry from g to portions with the batch's current portion weight. `DayData` carries that `portionG` (or null) for each batch entry, finished batches included, so the edit preview matches the server; without it only same unit edits are offered. A portion entry without grams edits in portions only.
 - Behaviour: spec section 7. Active batches above quick actions while the search is empty. Batch entries on Today open the batch amount step in edit mode with the entry's per 100 implied by its snapshot.
 - [ ] **Step 1: Write failing tests**: AmountStep batch preview for 1,5 portions; g disabled without cooked weight; AddSheet spec shows batches first; e2e (seeded batch): log 1.5 portions, Today total matches; edit to 2 portions.
 - [ ] **Step 2: Run**; fail. **Step 3: Implement**, `/design` sections for `BatchRow` (active, 0 left, finished) and the batch amount step. **Step 4: Gate.** **Step 5: Commit** `feat(log): log batches`.
@@ -228,6 +233,7 @@ e2e/recipes.e2e.ts (3a), e2e/batches.e2e.ts (3b)
 **Interfaces:**
 - Consumes: Task 7 repo and commands, Task 3 `IngredientList` (with snapshot `per100`), Task 8 `addSheet.openBatch`.
 - Produces: `WeightField` props `{ value: number | null (bindable, net); containers: Container[]; oncreatecontainer(input): Promise<Container> }`: container picker (None plus saved), gross input with net shown, net error from `netWeight`, "New container" inline `ContainerForm`. `BatchForm` reuses the unsaved changes guard from Task 4.
+- Task 7 review: the editor keeps each existing line's `id` through reorder, amount edit and remove with Undo, and omits it only for new lines (a line without an id is re-snapshotted). Serving lines price from `ingredient.servingG`, never `food.servingG`. `draftFromRecipe` returns food ids only, so the new batch page also loads the foods (e.g. via `getRecipe`).
 - Behaviour: spec section 6. `/recipes/batches/new?recipe=<id>` loads `draftFromRecipe` (404 for unknown recipe); without `recipe` it is a one-off. Batch page header with portions left, per portion, per 100 g; Log, Finish or Reopen, Delete (disabled with the explanation when logged).
 - [ ] **Step 1: Write failing tests**: WeightField: gross 1850 with a 650 g pot gives 1200 net; gross below tare shows the error; e2e: cook a batch from the 3a recipe, create a container inline, enter gross weight, save; log 1.5 portions and 200 g from the add sheet; Today totals match; finish hides it from the add sheet and shows it under Finished; Reopen brings it back; a one-off batch without cooked weight logs by portion only; Settings renames and deletes a container.
 - [ ] **Step 2: Run**; fail. **Step 3: Implement** and update the docs. **Step 4: Run** the full gate. **Step 5: Commit** `feat(batches): batch pages and containers`.

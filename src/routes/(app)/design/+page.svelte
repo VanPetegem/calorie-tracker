@@ -32,10 +32,18 @@
 	import DateSwitcher from '#lib/components/log/DateSwitcher.svelte';
 	import DayHero from '#lib/components/log/DayHero.svelte';
 	import AmountStep from '#lib/components/log/AmountStep.svelte';
+	import {
+		batchSource,
+		entryBatchSource,
+		type BatchAmountValue
+	} from '#lib/components/log/amount.ts';
 	import EntryRow from '#lib/components/log/EntryRow.svelte';
 	import FoodForm from '#lib/components/log/FoodForm.svelte';
 	import FoodRow from '#lib/components/log/FoodRow.svelte';
 	import QuickAddForm from '#lib/components/log/QuickAddForm.svelte';
+	import BatchRow from '#lib/components/recipes/BatchRow.svelte';
+	import ContainerForm from '#lib/components/recipes/ContainerForm.svelte';
+	import WeightField from '#lib/components/recipes/WeightField.svelte';
 	import AddIngredientSheet from '#lib/components/recipes/AddIngredientSheet.svelte';
 	import IngredientList from '#lib/components/recipes/IngredientList.svelte';
 	import IngredientRow from '#lib/components/recipes/IngredientRow.svelte';
@@ -46,6 +54,7 @@
 		draftTotals,
 		type DraftIngredient
 	} from '#lib/components/recipes/draft.ts';
+	import type { BatchSummary } from '#lib/server/batches/repo.ts';
 	import type { RecipeSummary } from '#lib/server/recipes/repo.ts';
 	import ScannerPanel from '#lib/components/log/ScannerPanel.svelte';
 	import type { LogEntry } from '#lib/server/db/schema.ts';
@@ -100,6 +109,7 @@
 	});
 
 	let range = $state<'day' | 'week' | 'month'>('week');
+	let disabledUnit = $state<'portion' | 'g'>('portion');
 	let nameText = $state('');
 	let filled = $state('Maria Keller');
 	let email = $state('maria@');
@@ -243,6 +253,50 @@
 		totals: { kcal: 2480, protein: 96, carbs: 300, fat: 88, fiber: 40 },
 		perPortion: { kcal: 620, protein: 24, carbs: 75, fat: 22, fiber: 10 },
 		ingredientCount: 6
+	};
+
+	const sampleBatch: BatchSummary = {
+		id: 'design-batch',
+		recipeId: null,
+		name: 'Beef stew',
+		cookedOn: '2026-11-05',
+		portions: 4,
+		cookedWeightG: 1600,
+		kcal: 2000,
+		protein: 120,
+		carbs: 200,
+		fat: 80,
+		fiber: 16,
+		finishedAt: null,
+		createdAt: '2026-11-05T18:00:00.000Z',
+		updatedAt: '2026-11-05T18:00:00.000Z',
+		portionsLeft: 2.5,
+		perPortion: { kcal: 500, protein: 30, carbs: 50, fat: 20, fiber: 4 },
+		per100g: { kcal: 125, protein: 7.5, carbs: 12.5, fat: 5, fiber: 1 },
+		lastActivity: '2026-11-05T18:00:00.000Z'
+	};
+	let batchLog = $state('Nothing picked yet.');
+
+	// WeightField and ContainerForm: a parent that keeps the list, as a batch form does.
+	let designContainers = $state([
+		{ id: 'design-pot', name: 'Pot', tareG: 650, createdAt: '2026-11-06T09:00:00.000Z' },
+		{ id: 'design-box', name: 'Lunch box', tareG: 180, createdAt: '2026-11-06T09:00:00.000Z' }
+	]);
+	let weightNone = $state<number | null>(null);
+	let weightStored = $state<number | null>(1600);
+	let weightNoContainers = $state<number | null>(null);
+	let containerLog = $state('Nothing saved yet.');
+	// A logged entry of the batch: 1.5 portions at 500 kcal a portion, 600 g. Edited from its own snapshot.
+	const sampleBatchEntry = {
+		kcal: 750,
+		protein: 45,
+		carbs: 75,
+		fat: 30,
+		fiber: 6,
+		label: 'Beef stew',
+		amount: 1.5,
+		unit: 'portion',
+		grams: 600
 	};
 
 	function showRowMenu(event: MouseEvent) {
@@ -461,7 +515,10 @@
 		</div>
 	</Section>
 
-	<Section name="SegmentedControl" description="Arrow keys move the selection.">
+	<Section
+		name="SegmentedControl"
+		description="Arrow keys move the selection. An option that cannot be chosen stays visible and aria-disabled, the arrow keys skip it, and the caller says why next to the control."
+	>
 		<div class="flex flex-col gap-3">
 			<SegmentedControl
 				label="Range"
@@ -473,6 +530,15 @@
 				bind:value={range}
 			/>
 			<p class="text-sm text-text-muted">Selected: {range}</p>
+			<SegmentedControl
+				label="Unit, grams off"
+				options={[
+					{ value: 'portion', label: 'portion' },
+					{ value: 'g', label: 'g', disabled: true }
+				]}
+				bind:value={disabledUnit}
+			/>
+			<p class="text-sm text-text-muted">Add the cooked weight to log grams</p>
 		</div>
 	</Section>
 
@@ -802,6 +868,56 @@
 	</Section>
 
 	<Section
+		name="Batch amount step"
+		description="The amount step for a batch: portions, or grams when the batch has a cooked weight (grams are off, with the reason, when it has none). It starts at one portion and the preview is live. Editing a logged entry prices it from the entry's own snapshot, so later changes to the batch never reach it, and an entry without grams changes in portions only."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Weighed batch: portions or grams</span>
+				<AmountStep
+					batch={batchSource(sampleBatch)}
+					mode="add"
+					onsubmit={(value: BatchAmountValue) =>
+						void (batchLog = `Log ${value.amount} ${value.unit}`)}
+					onback={() => (batchLog = 'Back')}
+				/>
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted"
+					>Batch without a cooked weight: grams are off</span
+				>
+				<AmountStep
+					batch={batchSource({ ...sampleBatch, cookedWeightG: null })}
+					mode="add"
+					onsubmit={(value: BatchAmountValue) =>
+						void (batchLog = `Log ${value.amount} ${value.unit}`)}
+				/>
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Editing an entry of 1.5 portions</span>
+				<AmountStep
+					batch={entryBatchSource(sampleBatchEntry, 400)!}
+					mode="edit"
+					initial={{ amount: 1.5, unit: 'portion' }}
+					onsubmit={(value: BatchAmountValue) =>
+						void (batchLog = `Save ${value.amount} ${value.unit}`)}
+				/>
+			</div>
+			<div class="flex flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Editing an entry without grams</span>
+				<AmountStep
+					batch={entryBatchSource({ ...sampleBatchEntry, amount: 2, grams: null }, 400)!}
+					mode="edit"
+					initial={{ amount: 2, unit: 'portion' }}
+					onsubmit={(value: BatchAmountValue) =>
+						void (batchLog = `Save ${value.amount} ${value.unit}`)}
+				/>
+			</div>
+		</div>
+		<span class="text-sm text-text-muted">{batchLog}</span>
+	</Section>
+
+	<Section
 		name="FoodForm"
 		description="Creates or edits a food. Each field is checked when it loses focus, so 901 kcal or fiber 'abc' shows its message at once; comma decimals work. Editing says that days already logged keep their values. These previews save nothing."
 	>
@@ -986,8 +1102,113 @@
 	</Section>
 
 	<Section
+		name="BatchRow"
+		description="A batch in the add sheet (a button) or the Recipes tab (a link): name, how many portions are left of all, kcal per portion. The count never shows below 0; a finished batch says so. At least 56 px tall."
+	>
+		<ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
+			<li>
+				<BatchRow batch={sampleBatch} onpick={() => (batchLog = 'Picked Beef stew')} />
+			</li>
+			<li>
+				<BatchRow
+					batch={{
+						...sampleBatch,
+						id: 'design-batch-empty',
+						name: 'Lentil curry',
+						portionsLeft: 0
+					}}
+					onpick={() => (batchLog = 'Picked Lentil curry')}
+				/>
+			</li>
+			<li>
+				<BatchRow
+					batch={{
+						...sampleBatch,
+						id: 'design-batch-finished',
+						name: 'Chili with a very long name for a batch of beans and rice',
+						portionsLeft: 1,
+						finishedAt: '2026-11-06T09:00:00.000Z'
+					}}
+					href="/design#BatchRow"
+				/>
+			</li>
+		</ul>
+		<span class="text-sm text-text-muted">{batchLog}</span>
+	</Section>
+
+	<Section
+		name="WeightField"
+		description="The cooked weight of a batch. Without a container the number is the net weight; with one, type the weight on the scale and the net after the tare shows. A weight at or below the tare, or over 20000 g, is an error under the field and keeps Save off. New container opens the container form inline. Empty is allowed: the batch then logs by portion only."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Empty, containers saved</span>
+				<WeightField
+					bind:value={weightNone}
+					containers={designContainers}
+					oncreatecontainer={async (input) => {
+						const made = { ...input, id: `design-${designContainers.length}`, createdAt: '' };
+						designContainers = [...designContainers, made];
+						return made;
+					}}
+				/>
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">A stored batch weight, no container</span>
+				<WeightField
+					bind:value={weightStored}
+					containers={designContainers}
+					oncreatecontainer={async (input) => ({ ...input, id: 'design-new', createdAt: '' })}
+				/>
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">No containers saved yet</span>
+				<WeightField
+					bind:value={weightNoContainers}
+					containers={[]}
+					oncreatecontainer={async (input) => ({ ...input, id: 'design-first', createdAt: '' })}
+				/>
+			</div>
+		</div>
+	</Section>
+
+	<Section
+		name="ContainerForm"
+		description="Name and tare of a container, in the weight field and in Settings. Checked on blur with the schema the server uses. A failed save keeps the form and offers Retry."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">New</span>
+				<ContainerForm
+					onsave={async (input) => void (containerLog = `Saved ${input.name}, ${input.tareG} g`)}
+					oncancel={() => (containerLog = 'Cancelled')}
+				/>
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">Editing</span>
+				<ContainerForm
+					container={designContainers[0]}
+					submitLabel="Save"
+					onsave={async (input) => void (containerLog = `Saved ${input.name}, ${input.tareG} g`)}
+				/>
+			</div>
+			<div class="flex min-w-0 flex-col gap-2">
+				<span class="text-sm font-medium text-text-muted">The save fails</span>
+				<ContainerForm
+					container={designContainers[1]}
+					submitLabel="Save"
+					onsave={async () => {
+						throw new Error('offline');
+					}}
+				/>
+			</div>
+		</div>
+		<span class="text-sm text-text-muted">{containerLog}</span>
+	</Section>
+
+	<Section
 		name="AddSheet"
-		description="Search field, then Quick add, New food and Scan, recents and frequents; typing searches the library after 200 ms, Enter or the Open Food Facts row searches OFF. Opens from the add button, the sidebar and Cmd or Ctrl K."
+		description="Search field, then active batches (portions left, kcal per portion), Quick add, New food and Scan, recents and frequents; typing searches the library after 200 ms, Enter or the Open Food Facts row searches OFF. Opens from the add button, the sidebar and Cmd or Ctrl K."
 	>
 		<div>
 			<Button icon={Plus} onclick={() => addSheet.show()}>Open the add sheet</Button>

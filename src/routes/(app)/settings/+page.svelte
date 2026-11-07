@@ -3,13 +3,28 @@
 	import * as v from 'valibot';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import LogOut from '@lucide/svelte/icons/log-out';
+	import Pencil from '@lucide/svelte/icons/pencil';
+	import Soup from '@lucide/svelte/icons/soup';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { Button, Card, Input, ListItem } from '#lib/components/ui/index.ts';
+	import {
+		Button,
+		Card,
+		EmptyState,
+		IconButton,
+		Input,
+		ListItem,
+		Sheet
+	} from '#lib/components/ui/index.ts';
+	import ContainerForm from '#lib/components/recipes/ContainerForm.svelte';
+	import type { ContainerInput } from '#lib/schemas/batch.ts';
+	import type { Container } from '#lib/server/db/schema.ts';
 	import { signOutOrWarn } from '#lib/auth-client.ts';
 	import { macroTargets } from '#lib/domain/targets.ts';
 	import { ManualTargetInput } from '#lib/schemas/settings.ts';
 	import { toasts } from '#lib/stores/toasts.svelte.ts';
+	import { deleteContainer, saveContainer } from '../recipes/batches.remote.ts';
 	import { saveTarget } from './target.remote.ts';
 
 	let { data } = $props();
@@ -85,6 +100,49 @@
 		touched = { kcal: false, weightKg: false };
 		submitted = false;
 		await persist({ kcal: null, weightKg: null }, 'Target cleared');
+	}
+
+	// Containers: one sheet each for editing and for the delete question. The container is kept after closing so the
+	// content does not vanish during the exit transition.
+	let editing = $state<Container | null>(null);
+	let editOpen = $state(false);
+	// Bumped on every Edit tap so the form remounts from the stored values, not what was typed before Cancel.
+	let editOpenings = $state(0);
+	let removing = $state<Container | null>(null);
+	let removeOpen = $state(false);
+	let deleting = $state(false);
+
+	async function refresh() {
+		// Saved: a failed refresh only means the list catches up on its next load.
+		try {
+			await invalidateAll();
+		} catch {
+			// ignored on purpose
+		}
+	}
+
+	async function saveEdit(input: ContainerInput) {
+		await saveContainer(input);
+		editOpen = false;
+		toasts.show({ message: 'Container saved', tone: 'success' });
+		await refresh();
+	}
+
+	async function removeContainer() {
+		const container = removing;
+		if (!container || deleting) return;
+		deleting = true;
+		try {
+			await deleteContainer({ id: container.id });
+		} catch {
+			toasts.show({ message: 'Could not delete. Try again.', tone: 'danger' });
+			deleting = false;
+			return;
+		}
+		removeOpen = false;
+		toasts.show({ message: `Deleted ${container.name}`, tone: 'success' });
+		await refresh();
+		deleting = false;
 	}
 
 	async function handleSignOut() {
@@ -172,6 +230,52 @@
 			</form>
 		</Card>
 	</section>
+	<section class="flex flex-col gap-3" aria-labelledby="containers-heading">
+		<div class="flex flex-col gap-1">
+			<h2 id="containers-heading" class="text-lg font-semibold text-text">Containers</h2>
+			<p class="text-sm text-text-muted">
+				The pots and boxes you weigh batches in. Add one when you enter a cooked weight. Batches
+				keep their weight when a container is deleted.
+			</p>
+		</div>
+		{#if data.containers.length === 0}
+			<Card>
+				<EmptyState
+					icon={Soup}
+					title="No containers yet"
+					body="Add one from the cooked weight of a batch."
+				/>
+			</Card>
+		{:else}
+			<ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
+				{#each data.containers as container (container.id)}
+					<li>
+						<ListItem title={container.name} subtitle="{container.tareG} g empty">
+							{#snippet trailing()}
+								<IconButton
+									label="Edit {container.name}"
+									icon={Pencil}
+									onclick={() => {
+										editing = container;
+										editOpenings++;
+										editOpen = true;
+									}}
+								/>
+								<IconButton
+									label="Delete {container.name}"
+									icon={Trash2}
+									onclick={() => {
+										removing = container;
+										removeOpen = true;
+									}}
+								/>
+							{/snippet}
+						</ListItem>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</section>
 	<div class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
 		<ListItem
 			title="Security"
@@ -218,3 +322,24 @@
 		Sign out
 	</Button>
 </div>
+
+<Sheet bind:open={editOpen} title="Edit container" description={editing?.name}>
+	{#if editing}
+		{#key `${editing.id}:${editOpenings}`}
+			<ContainerForm
+				container={editing}
+				onsave={saveEdit}
+				oncancel={() => (editOpen = false)}
+				submitLabel="Save"
+			/>
+		{/key}
+	{/if}
+</Sheet>
+
+<Sheet bind:open={removeOpen} title="Delete this container?" description={removing?.name}>
+	<p class="text-base text-text-muted">Batches weighed in it keep their net weight.</p>
+	{#snippet footer()}
+		<Button variant="secondary" onclick={() => (removeOpen = false)}>Keep it</Button>
+		<Button variant="destructive" loading={deleting} onclick={removeContainer}>Delete</Button>
+	{/snippet}
+</Sheet>

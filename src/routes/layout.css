@@ -55,6 +55,15 @@
 	transition-timing-function: var(--tw-ease, cubic-bezier(0.16, 1, 0.3, 1));
 }
 
+/* No disclosure triangle on a `summary`: `list-style` for current browsers, the pseudo-element for WebKit. */
+@utility details-marker-none {
+	list-style: none;
+
+	&::-webkit-details-marker {
+		display: none;
+	}
+}
+
 /* Tailwind default color, type, radius and shadow scales are removed; only the tokens below exist. */
 @theme inline {
 	--color-*: initial;

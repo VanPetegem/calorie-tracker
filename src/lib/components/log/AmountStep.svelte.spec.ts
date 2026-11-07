@@ -1,8 +1,11 @@
+import { error } from '@sveltejs/kit';
 import { describe, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import type { Food } from '#lib/server/db/schema.ts';
+import { sampleBatch } from '../recipes/batch.fixture.ts';
 import AmountStep from './AmountStep.svelte';
+import { batchSource, entryBatchSource, NO_ENTRY_WEIGHT_HINT } from './amount.ts';
 
 type TestFood = Pick<
 	Food,
@@ -119,6 +122,15 @@ describe('AmountStep', () => {
 		expect(onsubmit).toHaveBeenCalledTimes(2);
 	});
 
+	it('shows the reason the server rejected the amount with', async () => {
+		const onsubmit = vi.fn(async () => error(400, 'Add the cooked weight to log grams'));
+		render(AmountStep, props(oats, { onsubmit }));
+		await page.getByRole('button', { name: 'Log' }).click();
+		await expect
+			.element(page.getByRole('alert'))
+			.toHaveTextContent('Add the cooked weight to log grams');
+	});
+
 	it('offers Edit food only when asked to', async () => {
 		const onedit = vi.fn();
 		const view = render(AmountStep, props(oats, { onedit }));
@@ -133,5 +145,153 @@ describe('AmountStep', () => {
 		render(AmountStep, props(oats, { submitLabel: 'Add' }));
 		await expect.element(page.getByRole('button', { name: 'Add', exact: true })).toBeVisible();
 		expect(page.getByRole('button', { name: 'Log' }).elements()).toHaveLength(0);
+	});
+});
+
+describe('AmountStep for a batch', () => {
+	const stew = () => batchSource(sampleBatch());
+	const unweighed = () => batchSource(sampleBatch({ cookedWeightG: null }));
+
+	function batchProps(batch = stew(), extra: Record<string, unknown> = {}) {
+		return { batch, mode: 'add' as const, onsubmit: vi.fn(), ...extra };
+	}
+
+	it('starts at one portion and previews its kcal', async () => {
+		render(AmountStep, batchProps());
+		await expect.element(amountField()).toHaveValue('1');
+		await expect.element(page.getByRole('radio', { name: 'portion' })).toBeChecked();
+		await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('500 kcal');
+		await expect.element(page.getByText('500 kcal per portion')).toBeVisible();
+	});
+
+	it('shows the same per portion kcal as the 1 portion preview, rounding to 0,1 first', async () => {
+		// 1501,4 / 3 = 500,47: to 0,1 first it is 500,5, so 501 everywhere (a single rounding would say 500).
+		render(
+			AmountStep,
+			batchProps(batchSource(sampleBatch({ portions: 3, kcal: 1501.4, cookedWeightG: null })))
+		);
+		await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('501 kcal');
+		await expect.element(page.getByText('501 kcal per portion')).toBeVisible();
+	});
+
+	it('previews 1,5 portions as 750 kcal and 600 g', async () => {
+		render(AmountStep, batchProps());
+		await amountField().fill('1,5');
+		await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('750 kcal');
+		await expect.element(page.getByText('600 g')).toBeVisible();
+	});
+
+	it('keeps the quantity when switching to grams, and previews grams', async () => {
+		render(AmountStep, batchProps());
+		await amountField().fill('1,5');
+		await page.getByRole('radio', { name: 'g', exact: true }).click();
+		await expect.element(amountField()).toHaveValue('600');
+		await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('750 kcal');
+		await amountField().fill('200');
+		await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('250 kcal');
+	});
+
+	it('disables grams without a cooked weight and says why', async () => {
+		const p = batchProps(unweighed());
+		render(AmountStep, p);
+		const grams = page.getByRole('radio', { name: 'g', exact: true });
+		await expect.element(grams).toHaveAttribute('aria-disabled', 'true');
+		const hint = page.getByText('Add the cooked weight to log grams');
+		await expect.element(hint).toBeVisible();
+		// The reason is linked to the unit switch, so a screen reader announces it with the disabled unit.
+		await expect
+			.element(page.getByRole('radiogroup', { name: 'Unit' }))
+			.toHaveAccessibleDescription('Add the cooked weight to log grams');
+		await grams.click({ force: true });
+		await expect.element(page.getByRole('radio', { name: 'portion' })).toBeChecked();
+		await page.getByRole('button', { name: 'Log' }).click();
+		expect(p.onsubmit).toHaveBeenCalledWith({ amount: 1, unit: 'portion' });
+	});
+
+	it('does not offer the grams hint when the batch is weighed', async () => {
+		render(AmountStep, batchProps());
+		expect(page.getByText('Add the cooked weight to log grams').elements()).toHaveLength(0);
+		await expect
+			.element(page.getByRole('radiogroup', { name: 'Unit' }))
+			.not.toHaveAttribute('aria-describedby');
+	});
+
+	it('submits portions and grams', async () => {
+		const p = batchProps();
+		render(AmountStep, p);
+		await amountField().fill('1,5');
+		await userEvent.keyboard('{Enter}');
+		expect(p.onsubmit).toHaveBeenLastCalledWith({ amount: 1.5, unit: 'portion' });
+		await page.getByRole('radio', { name: 'g', exact: true }).click();
+		await amountField().fill('200');
+		await page.getByRole('button', { name: 'Log' }).click();
+		expect(p.onsubmit).toHaveBeenLastCalledWith({ amount: 200, unit: 'g' });
+	});
+
+	it.each(['', '   ', '0', '-1', 'abc'])(
+		'previews 0 and blocks the button for the input "%s", without throwing',
+		async (text) => {
+			const p = batchProps();
+			render(AmountStep, p);
+			await amountField().fill(text);
+			await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('0 kcal');
+			await userEvent.keyboard('{Enter}');
+			await page.getByRole('button', { name: 'Log' }).click({ force: true });
+			expect(p.onsubmit).not.toHaveBeenCalled();
+			await expect.element(page.getByRole('radio', { name: 'portion' })).toBeChecked();
+		}
+	);
+
+	it('flags more than 100 portions', async () => {
+		render(AmountStep, batchProps());
+		await amountField().fill('101');
+		await amountField().element().blur();
+		await expect.element(page.getByText('Too much for this unit')).toBeVisible();
+	});
+
+	describe('editing an entry', () => {
+		const portionEntry = {
+			kcal: 750,
+			protein: 45,
+			carbs: 75,
+			fat: 30,
+			fiber: null,
+			amount: 1.5,
+			unit: 'portion',
+			grams: 600,
+			label: 'Beef stew'
+		};
+
+		it('starts from the entry amount and rescales its own snapshot, not the batch', async () => {
+			// The batch has changed since: this entry still prices at 500 kcal per portion.
+			const p = batchProps(entryBatchSource(portionEntry, 100)!, {
+				mode: 'edit',
+				initial: { amount: 1.5, unit: 'portion' }
+			});
+			render(AmountStep, p);
+			await expect.element(amountField()).toHaveValue('1.5');
+			await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('750 kcal');
+			await amountField().fill('2');
+			await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('1000 kcal');
+			await page.getByRole('button', { name: 'Save' }).click();
+			expect(p.onsubmit).toHaveBeenCalledWith({ amount: 2, unit: 'portion' });
+		});
+
+		it('edits an entry without grams in portions only', async () => {
+			const entry = { ...portionEntry, amount: 2, grams: null };
+			render(
+				AmountStep,
+				batchProps(entryBatchSource(entry, 400)!, {
+					mode: 'edit',
+					initial: { amount: 2, unit: 'portion' }
+				})
+			);
+			await expect
+				.element(page.getByRole('radio', { name: 'g', exact: true }))
+				.toHaveAttribute('aria-disabled', 'true');
+			await expect.element(page.getByText(NO_ENTRY_WEIGHT_HINT)).toBeVisible();
+			await amountField().fill('1');
+			await expect.element(page.getByTestId('preview-kcal')).toHaveTextContent('375 kcal');
+		});
 	});
 });

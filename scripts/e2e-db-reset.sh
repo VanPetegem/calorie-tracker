@@ -33,3 +33,6 @@ if ! grep -q 'user_single_account' <<<"$trigger"; then
 	echo 'The user_single_account trigger is missing after migrations. Re-create it in the migration that rebuilt the user table.' >&2
 	exit 1
 fi
+
+# Batches the log e2e tests use. Also before any server holds the database.
+pnpm --silent wrangler d1 execute DB --local --persist-to .wrangler/e2e --file e2e/seed.sql >/dev/null

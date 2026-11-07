@@ -2,8 +2,111 @@
 
 Living record of decisions. Newest first. Each entry: date, decision, reason.
 
+## 2026-11-07
+
+- **The `BatchRow` stale state of the spec is dropped; it cannot be shown.** Spec section 9 listed "stale" next to
+  portions left and finished. Auto finish runs whenever active batches load (`activeBatches`), so an active batch past
+  the threshold is finished before any row renders, and a stale active row cannot exist. `BatchRow` has portions left
+  and finished only.
+- **The batch editor keeps line ids by never losing them, and by starting from the stored lines after every save that
+  changed them.** `BatchForm` edits `DraftIngredient`s that carry the stored line's `id`; `IngredientList` already
+  spreads the line on an amount edit and re-inserts the same object on Undo, so only a new line has no id. A save
+  gives new lines their ids on the server, which the form cannot know, so the batch page keys the form on the batch id
+  plus its line ids: a save that added or removed lines remounts the form from the reloaded batch, a save without
+  line changes, Finish and Reopen keep what is typed. The form is `inert` while a save runs, so no edit can slip in
+  between the save and the ids. After the first save of a new batch it moves to `/recipes/batches/[id]` (replace
+  state), where the key starts it from the stored lines.
+- **Serving lines are priced from `ingredient.servingG`, mapped into the editor's `food.servingG`.** `batchDraft` sets
+  `food.servingG` to the line's own serving weight (`BatchDetailIngredient.servingG`), the line's name and its own
+  values as `snapshot`; `food` there is only what `AmountStep` and the row need. A line whose food is gone uses its
+  own id as the food id, which the server accepts for a line that keeps its unit.
+- **A new batch page loads `draftFromRecipe` and the recipe.** `draftFromRecipe` names foods by id only, so
+  `batchDraftFromRecipe(input, recipe)` takes the fields from the draft and the lines (with their foods) from the
+  recipe. An unknown `?recipe=` is a 404. Without it the page starts a one off with today, one portion and no lines.
+  Cook batch is shown for a recipe that is not archived, from the stored recipe (not from unsaved edits).
+- **`WeightField` stores only the net weight, and reports a problem through a bindable `error`.** The container is not
+  saved with the batch, so a stored batch opens with no container and its net weight in "Cooked weight". Choosing a
+  container keeps a number the person typed and reads it as the weight on the scale. While the field still holds the
+  stored net weight (nothing typed yet), choosing a container empties the field and leaves `value` as it is, with a
+  hint, until the scale weight is typed; choosing None again puts the stored weight back. A wrong weight (not a number, at or below
+  the tare, over 20000 g) makes `value` null and sets `error`, which `BatchForm` uses to keep Save off with "Check the
+  cooked weight" (a null value alone would save the batch as unweighed). The picker is a native `select`, which is the
+  right control on iOS. `Input` gained `type="date"` for "Cooked on".
+- **Containers are created inline with `saveContainer` at once, and managed in Settings.** The new container exists
+  before the batch is saved. Settings lists them with edit (name and tare, `ContainerForm` in a sheet) and delete
+  (a confirm sheet); batches keep their net weight.
+- **Delete asks first, and finishing is a single tap.** Delete (batch) opens a confirm sheet; the button is off with
+  "Logged batches can be finished, not deleted" while the batch has live entries, and a refusal from the server (an
+  entry logged elsewhere in the meantime) shows the same message. Finish and Reopen act at once with a toast.
+- **The Finished section is a collapsed `details`, each row with Reopen.** Latest 20, as `finishedBatches` returns
+  them. The Recipes tab order is Active batches (with New batch), Recipes, Finished.
+- **Batch e2e tests build their data through the UI and finish what they log on.** `e2e/batches.e2e.ts` uses days
+  2020-07-10 to 2020-07-25 (slot, retry and project), unique names, and finishes each batch it logged on at the end,
+  so other files' add sheets are not affected (`e2e/seed.sql` is unchanged). Logging from the batch page's Log button
+  would log on today, so that test only checks the sheet opens at the amount step.
+
 ## 2026-11-06
 
+- **Logging a batch reuses `AmountStep` through a `batch` prop, and an entry edit prices from the entry's own
+  snapshot.** `AmountStep` takes either `food` or `batch` (a `BatchAmountSource` from `components/log/amount.ts`), not
+  the plan's `{ kind: 'batch' }` source object, so no food caller changed. `batchSource(batch)` builds the source for
+  logging (default 1 portion, preview by `batchEntrySnapshot`); `entryBatchSource(entry, portionG)` builds it for an
+  edit by treating the entry as a batch whose totals are its snapshot and whose weight is its grams. A portion entry
+  then rescales by amount over amount, and a switch to grams by grams over grams, exactly as `updateEntryAmount`
+  does; a gram entry reaches portions through `portionG`. `previewBatchAmount` turns the domain's `RangeError` into
+  null, and the step also checks the typed amount first, so an empty or zero field previews 0 kcal and never throws.
+  A unit that is off (grams without a cooked weight, grams on an entry without grams, portions on a gram entry whose
+  batch has lost its weight) stays visible and `aria-disabled` with the reason under the switch, which needed
+  `disabled` on `SegmentedControl` options (the arrow keys skip them; `/design` shows it).
+- **`DayData` carries `batches` and `batchPortionG`.** `suggestions(db, today, now)` returns the active batches too
+  (this is where auto finish now runs on Today, a day page and `loadSuggestions`). `batchPortionG` maps the batch id
+  of each batch entry on the day to the batch's current portion weight, finished batches included, null without a
+  cooked weight (`portionWeights` in `server/batches/repo.ts`); `DayView` hands it to `EditEntrySheet`, so the
+  grams to portions preview uses the weight the server converts with. Keyed by batch, not entry, because every entry
+  of a batch shares it.
+- **`addSheet.openBatch(batch)` sets `addSheet.batch`; the sheet's step is a writable `$derived` of it.** `show()`
+  clears it and the sheet's `reset` clears it on close, so a later plain open starts at the search. On pages without a
+  day the batch step waits for the fetched date (same loading and error state as Quick add) before it can log.
+- **e2e batches are seeded by SQL before the server starts.** `saveBatch` is not in the build until the client
+  imports it, and a second connection to the live database file would make D1 fail with SQLITE_BUSY, so
+  `e2e/seed.sql` (run by `scripts/e2e-db-reset.sh` before the server holds the file, as for the trigger check)
+  inserts one batch per test kind (`portions`, `grams`, `one off`, `search`), browser project and attempt (retry 0
+  and 1): 16 rows named `E2E <kind> <project> <retry>`. A test only ever touches its own batch, so it passes alone, in
+  any order and on a retry. `e2e/log-batches.e2e.ts` logs on past days of its own; `e2e/batches.e2e.ts` builds its
+  data through the UI.
+- **A batch line's serving weight is `grams / amount` of the stored line; no extra column.** `saveBatch`
+  (`src/lib/server/batches/repo.ts`) prices a kept serving line from the weight it was saved with, so a food's later
+  serving size change or loss never reaches it. A kept line in the same unit is accepted as it is (its food may have
+  changed); a unit switch is checked against the food as it is now, and a g or ml line switched to servings takes the
+  food's current serving size. `getBatch` returns each line's `servingG` from the same rule (and its `food`), so the
+  batch editor prices servings as the server will. A line id must belong to the batch being saved, with the same
+  food, once; anything else is `UnknownIngredientError` with the line's index, mapped to a result like the recipe line
+  errors (`src/lib/server/batches/result.ts`). A logged batch's delete is a `batch_logged` result, unknown batch,
+  recipe or container ids are a 404.
+- **Batch entries are edited through `editAmount`.** `EditAmountInput` takes every log unit; the repository accepts
+  only the food units for a food entry and only `portion` and `g` for a batch entry (400 otherwise, also when the
+  schema is skipped). The same unit rescales the entry's snapshot by the amount ratio; a unit switch needs the stored
+  grams (else 400 "This entry has no weight, so it can only change in portions") and rescales by grams. Grams to
+  portions reads the batch only for its current portion weight, as a food entry reads only the food's serving weight;
+  nutrition is never re-read. The log repository keeps its HTTP errors rather than a typed `UnitNotAvailableError`.
+- **Auto finish runs inside `activeBatches`.** Activity is the latest of `created_at`, `updated_at` and the latest live
+  entry's `logged_at`; `isStale` decides. Finish and reopen set `updated_at`, so a reopened batch gets 7 more days.
+  Logging a batch entry and editing its amount also set the batch's `updated_at` to now in the same D1 batch (the
+  entry's `logged_at` is on its own date, so a past date alone would not count); delete and restore do not, and
+  `finished_at` is never touched.
+- **`log_entries.batch_id` became a real reference by a table rebuild, with the pragma edited by hand.** drizzle-kit
+  rebuilt `log_entries` in `drizzle/0020_batches.sql` between `PRAGMA foreign_keys=OFF` and `=ON`. D1 applies a
+  migration as one transaction, where SQLite ignores `foreign_keys`, so the keys stay on; the migration uses
+  `PRAGMA defer_foreign_keys = on` instead, which checks them at commit. The rebuild is safe because no table or
+  trigger references `log_entries`, the copy names all 16 columns and every index is recreated.
+  `src/lib/server/db/migrations.spec.ts` applies the migrations up to 0019, writes food, quick and soft deleted
+  entries and a recipe, applies the rest and checks every row, column, index and trigger, plus
+  `PRAGMA foreign_key_check`. The fallback (a plain column checked in the repository) was not needed. Batches with
+  a live entry cannot be deleted (no cascade on `batch_id`); batch ingredients go with their batch.
+- **Food entries have their own unit list.** `LOG_UNITS` gained `portion` (limit `MAX_PORTIONS` in `fitsUnit`), but
+  `LogFoodInput` and the food amount step use `FOOD_LOG_UNITS` (`g`, `ml`, `serving`); `EditAmountInput` takes every
+  log unit and the repository enforces food versus batch units (`gramsFor` in `server/log/repo.ts` refuses a portion
+  for a food entry with a 400 even when a caller skips the schema).
 - **Recipe saves report a refused line as a result, not an HTTP error; a missing recipe is a 404.** The recipe
   repository throws typed errors with user facing messages (`UnknownFoodError`, `UnitNotAvailableError`, both with the
   ingredient's `index`, and `RecipeNotFoundError`); it stays free of HTTP. The remote layer

@@ -3,6 +3,7 @@ import { id } from '#lib/schemas/fields.ts';
 import {
 	EditAmountInput,
 	EditQuickInput,
+	LogBatchInput,
 	LogFoodInput,
 	QuickInput,
 	RestoreEntryInput
@@ -22,14 +23,20 @@ export const logFood = command(LogFoodInput, async (input) => {
 	return log.addFoodEntry(ctx.db, input, ctx);
 });
 
+/** Logs portions or grams of a batch, finished or not; the server snapshots the nutrition from the batch. */
+export const logBatch = command(LogBatchInput, async (input) => {
+	const ctx = await appContext();
+	return log.addBatchEntry(ctx.db, input, ctx);
+});
+
 export const logQuick = command(QuickInput, async (input) => {
 	const ctx = await appContext();
 	return log.addQuickEntry(ctx.db, input, ctx);
 });
 
 export const editAmount = command(EditAmountInput, async (input) => {
-	const { db } = await appContext();
-	return log.updateEntryAmount(db, input);
+	const { db, now } = await appContext();
+	return log.updateEntryAmount(db, input, now);
 });
 
 export const editQuick = command(EditQuickInput, async ({ id, ...input }) => {

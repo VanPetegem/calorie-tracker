@@ -84,8 +84,10 @@ prefilled where available.
   - per portion = batch totals / portions
   - per gram = batch totals / cooked weight
 - Batches show "7 of 10 portions left" (portions logged so far versus portion count) and appear at the
-  top of the add sheet until marked finished or fully logged. Logging more than the remaining portions
-  is allowed (the counter shows 0 left), since portion sizes are rarely exact.
+  top of the add sheet until finished. A batch stays active at 0 portions left; finishing is the user's call.
+  Auto finish: a batch with no activity (created, edited or logged) for 7 days is finished the next time active
+  batches are loaded, and can be reopened. Logging more than the remaining portions is allowed (the counter shows
+  0 left), since portion sizes are rarely exact.
 - A batch without a recipe is allowed ("one-off batch") for meals cooked once.
 
 ## 5. Data model (D1)
@@ -99,9 +101,9 @@ All ids are text (UUIDv7). Times are UTC ISO strings; `date` columns are the use
 | `foods` | id, source (`custom` / `blv` / `off`), barcode (unique, nullable), name, brand, nutrition_basis (`g` / `ml`), kcal, protein, carbs, fat, fiber (per 100 of the basis), serving_g, source_ref (unique with source), search_text, fetched_at, edited_at, archived_at, created_at, updated_at |
 | `recipes` | id, name, default_portions, notes, archived_at, created_at, updated_at |
 | `recipe_ingredients` | id, recipe_id, food_id, amount, unit (`g` / `ml` / `serving`, as entered), grams (gram equivalent), position |
-| `containers` | id, name, tare_g (saved pot/box weights) |
-| `batches` | id, recipe_id (nullable), name, cooked_on (date), portions, cooked_weight_g (nullable), kcal, protein, carbs, fat, fiber (totals), finished_at, created_at |
-| `batch_ingredients` | id, batch_id, food_id (nullable), name, grams, kcal, protein, carbs, fat, fiber (per 100 g snapshot) |
+| `containers` | id, name, tare_g (saved pot/box weights), created_at |
+| `batches` | id, recipe_id (nullable), name, cooked_on (date), portions, cooked_weight_g (nullable, net of the container), kcal, protein, carbs, fat, fiber (totals), finished_at, created_at, updated_at |
+| `batch_ingredients` | id, batch_id, food_id (nullable), name, amount, unit (`g` / `ml` / `serving`, as entered), grams (gram equivalent), kcal, protein, carbs, fat, fiber (per 100 g snapshot), position |
 | `log_entries` | id, date, logged_at, kind (`food` / `batch` / `quick`), food_id, batch_id, amount, unit (`g` / `ml` / `portion` / `serving`), grams (nullable gram equivalent), label, kcal, protein, carbs, fat, fiber (snapshot of this entry), deleted_at (soft delete for Undo) |
 | `weights` | date (pk), kg, created_at |
 | `settings` | single row: sex, birth_date, height_cm, activity_level, goal_rate_pct, protein_g_per_kg, fat_pct, energy_density_kcal_per_kg, timezone, theme. Phase 2 has only timezone, manual_target_kcal and manual_weight_kg; phase 4 adds the rest |

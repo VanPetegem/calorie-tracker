@@ -8,7 +8,7 @@
 	import { loadFood } from '../../../routes/(app)/foods.remote.ts';
 	import { editAmount } from '../../../routes/(app)/log.remote.ts';
 	import AmountStep from './AmountStep.svelte';
-	import type { AmountValue } from './amount.ts';
+	import { entryBatchSource, type AmountValue, type BatchAmountValue } from './amount.ts';
 	import FoodForm from './FoodForm.svelte';
 	import QuickAddForm from './QuickAddForm.svelte';
 
@@ -17,15 +17,19 @@
 	 * serving weight and basis and for "Edit food". The server rescales the stored snapshot from the new grams over
 	 * the old grams, and the preview does the same: its per 100 values come from the entry, never from the food. The
 	 * amount step's "Edit food" changes the food itself, which never touches this or any other logged entry.
-	 * A quick entry opens the quick add form instead.
+	 * A quick entry opens the quick add form instead. A batch entry opens the batch amount step (portions, and grams when
+	 * the entry has them), priced from the entry's own snapshot; no food is loaded. `batchPortionG` is the batch's portion
+	 * weight as it is now, which the server converts grams to portions with, so the preview of that switch matches.
 	 */
 	type Props = {
-		/** A food or quick entry. */
+		/** A food, batch or quick entry. */
 		entry: LogEntry | null;
+		/** The current portion weight of the entry's batch, null when unknown or unweighed. */
+		batchPortionG?: number | null;
 		open: boolean;
 	};
 
-	let { entry, open = $bindable(false) }: Props = $props();
+	let { entry, batchPortionG = null, open = $bindable(false) }: Props = $props();
 
 	let food = $state.raw<Food | null>(null);
 	let failed = $state(false);
@@ -61,7 +65,14 @@
 			: undefined
 	);
 
-	async function save(target: LogEntry, { amount, unit }: AmountValue) {
+	const batchSource = $derived(
+		entry?.kind === 'batch' ? entryBatchSource(entry, batchPortionG) : null
+	);
+	const batchInitial = $derived(
+		entry?.amount != null && entry.unit !== null ? { amount: entry.amount, unit: entry.unit } : null
+	);
+
+	async function save(target: LogEntry, { amount, unit }: AmountValue | BatchAmountValue) {
 		await editAmount({ id: target.id, amount, unit });
 		open = false;
 		toasts.show({ message: `Updated ${target.label ?? 'entry'}`, tone: 'success' });
@@ -91,6 +102,19 @@
 		{#key `${entry.id}:${openings}`}
 			<QuickAddForm {entry} date={entry.date} ondone={() => (open = false)} />
 		{/key}
+	{:else if entry?.kind === 'batch'}
+		{#if batchSource}
+			{#key `${entry.id}:${openings}`}
+				<AmountStep
+					batch={batchSource}
+					mode="edit"
+					initial={batchInitial}
+					onsubmit={(value: BatchAmountValue) => save(entry, value)}
+				/>
+			{/key}
+		{:else}
+			<p role="alert" class="text-base text-danger">This entry has no amount to change.</p>
+		{/if}
 	{:else if entry && food && editingFood}
 		<FoodForm
 			foodId={food.id}

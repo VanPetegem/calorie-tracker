@@ -1,6 +1,17 @@
 import * as v from 'valibot';
 import { MAX_QUICK_KCAL, MAX_QUICK_MACRO_G, MIN_QUICK_KCAL } from '../domain/constants.ts';
-import { amount, decimalIn, fitsUnit, id, isoDate, logUnit, orNull, text } from './fields.ts';
+import {
+	amount,
+	batchLogUnit,
+	decimalIn,
+	fitsUnit,
+	foodLogUnit,
+	id,
+	isoDate,
+	logUnit,
+	orNull,
+	text
+} from './fields.ts';
 
 const TOO_MUCH = 'Too much for this unit';
 
@@ -9,7 +20,7 @@ const TOO_MUCH = 'Too much for this unit';
  * settings timezone. Nutrition is never accepted from the client: the server snapshots it from the food.
  */
 export const LogFoodInput = v.pipe(
-	v.strictObject({ date: isoDate, foodId: id, amount, unit: logUnit }),
+	v.strictObject({ date: isoDate, foodId: id, amount, unit: foodLogUnit }),
 	v.forward(
 		v.check((input) => fitsUnit(input), TOO_MUCH),
 		['amount']
@@ -18,7 +29,24 @@ export const LogFoodInput = v.pipe(
 
 export type LogFoodInput = v.InferOutput<typeof LogFoodInput>;
 
-/** Changes the amount of a logged food entry; the server rescales its snapshot. */
+/**
+ * Logs an amount of a batch, in portions or (for a weighed batch) grams. The server snapshots the nutrition from the
+ * batch; finished batches can be logged too.
+ */
+export const LogBatchInput = v.pipe(
+	v.strictObject({ date: isoDate, batchId: id, amount, unit: batchLogUnit }),
+	v.forward(
+		v.check((input) => fitsUnit(input), TOO_MUCH),
+		['amount']
+	)
+);
+
+export type LogBatchInput = v.InferOutput<typeof LogBatchInput>;
+
+/**
+ * Changes the amount of a logged food or batch entry; the server rescales its snapshot. Any log unit passes here;
+ * the server takes only a food's units for a food entry and only portions or grams for a batch entry.
+ */
 export const EditAmountInput = v.pipe(
 	v.strictObject({ id, amount, unit: logUnit }),
 	v.forward(

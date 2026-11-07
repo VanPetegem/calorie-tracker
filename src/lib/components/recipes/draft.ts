@@ -1,6 +1,8 @@
 import { ingredientGrams, ingredientNutrients, totals } from '#lib/domain/batch.ts';
 import type { Nutrients, Per100 } from '#lib/domain/nutrition.ts';
 import type { IngredientUnit } from '#lib/schemas/fields.ts';
+import type { BatchInput } from '#lib/schemas/batch.ts';
+import type { BatchDetail } from '#lib/server/batches/repo.ts';
 import type { Food } from '#lib/server/db/schema.ts';
 import type { RecipeDetail } from '#lib/server/recipes/repo.ts';
 
@@ -89,5 +91,71 @@ export function recipeDraft(recipe: RecipeDetail): RecipeDraft {
 				grams
 			};
 		})
+	};
+}
+
+/** A batch as the editor holds it. Without an id it is a new batch. */
+export type BatchDraft = {
+	id?: string;
+	recipeId: string | null;
+	name: string;
+	cookedOn: string;
+	portions: number;
+	/** The net weight, null until the batch is weighed. */
+	cookedWeightG: number | null;
+	ingredients: DraftIngredient[];
+};
+
+/**
+ * The editor's starting point for a stored batch. Each line keeps its `id` (so a save knows it is an existing line
+ * and keeps its snapshot), its own values per 100 as `snapshot`, its own name, and the serving weight the server
+ * prices servings with (`servingG`), not the food's, so the editor's numbers equal the server's. A line whose food is
+ * gone borrows its own id as the food id, which the server accepts for a line that keeps its unit.
+ */
+export function batchDraft(batch: BatchDetail): BatchDraft {
+	return {
+		id: batch.id,
+		recipeId: batch.recipeId,
+		name: batch.name,
+		cookedOn: batch.cookedOn,
+		portions: batch.portions,
+		cookedWeightG: batch.cookedWeightG,
+		ingredients: batch.ingredients.map((line) => {
+			const { kcal, protein, carbs, fat, fiber } = line;
+			return {
+				key: newKey(),
+				id: line.id,
+				food: {
+					id: line.foodId ?? line.id,
+					name: line.name,
+					nutritionBasis: line.food?.nutritionBasis ?? (line.unit === 'ml' ? 'ml' : 'g'),
+					kcal,
+					protein,
+					carbs,
+					fat,
+					fiber,
+					servingG: line.servingG
+				},
+				amount: line.amount,
+				unit: line.unit,
+				grams: line.grams,
+				snapshot: { kcal, protein, carbs, fat, fiber }
+			};
+		})
+	};
+}
+
+/**
+ * A new batch prefilled from a recipe: the fields come from `draftFromRecipe`'s input, the lines (with their foods,
+ * which the input only names) from the recipe. The lines have no id and no snapshot: the server snapshots them.
+ */
+export function batchDraftFromRecipe(input: BatchInput, recipe: RecipeDetail): BatchDraft {
+	return {
+		recipeId: input.recipeId,
+		name: input.name,
+		cookedOn: input.cookedOn,
+		portions: input.portions,
+		cookedWeightG: input.cookedWeightG,
+		ingredients: recipeDraft(recipe).ingredients
 	};
 }

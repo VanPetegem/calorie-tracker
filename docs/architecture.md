@@ -129,8 +129,8 @@ grows past 80 KB. Only foods with kcal, protein, carbs and fat in range are impo
 ## Recipes
 
 Recipes are templates: ingredients name library foods, and nutrition is computed from the current foods whenever a
-recipe is read. Editing a food changes recipe totals and future batches, never a logged entry. Batches (phase 3b) and
-log entries are the snapshots.
+recipe is read. Editing a food changes recipe totals and future batches, never a logged entry. Batches and log
+entries are the snapshots.
 
 ```
 /recipes, /recipes/[id]  page load (+page.server.ts) -> listRecipes / getRecipe (src/lib/server/recipes/repo.ts)
@@ -152,31 +152,67 @@ RecipeForm               -> saveRecipe / archiveRecipe / restoreRecipe (recipes.
   refused line into `{ ok: false, reason, message, index }` for the form to mark and a missing recipe into a 404.
 - Recipes are archived, never deleted (batches reference them); `archivedAt` hides them from the list, and Undo
   restores. The editor guards unsaved changes with `UnsavedGuard` (`src/lib/stores/unsaved.svelte.ts`).
-- The ingredient list (`IngredientList`, shared with batches in 3b) and its add sheet reuse `FoodSearch` and
+- The ingredient list (`IngredientList`, shared with batches) and its add sheet reuse `FoodSearch` and
   `AmountStep`; `/design` shows each part.
+
+## Batches
+
+A batch is one cooking session, from a recipe or one off. Its ingredients are snapshots: `batch_ingredients` keeps
+the food's values per 100 at the time, and the batch totals are the sum of them. Editing a food or a recipe never
+changes a batch, and editing a batch never changes a log entry (entries hold their own snapshot).
+
+```
+/recipes                 page load -> activeBatches (auto finish), listRecipes, finishedBatches
+/recipes/batches/new     page load -> listContainers, and with ?recipe=<id> draftFromRecipe + getRecipe (404 if unknown)
+/recipes/batches/[id]    page load -> getBatch, listContainers (404 if unknown)
+BatchForm                -> saveBatch / finishBatch / reopenBatch / deleteBatch / saveContainer (batches.remote.ts,
+                            shared schema in src/lib/schemas/batch.ts) -> saveBatchResult -> repo -> D1
+                         -> await invalidateAll() -> the page loads run again
+```
+
+- A save sends `{ id?, foodId, amount, unit }` per line. A line with an id is an existing line of that batch: it keeps
+  its per 100 snapshot and takes the new amount and unit; a line without one is snapshotted from its food at save
+  time; lines left out are removed. `batchDraft` gives the editor each line's id, its own name and values
+  (`snapshot`) and its serving weight (`grams / amount` of a serving line), so `IngredientList` prices the line as
+  the server will and keeps the id through reorder, amount edits and remove with Undo.
+- The cooked weight is the net weight. `WeightField` takes a container (none or a saved one) and the weight on the
+  scale and shows the net (`netWeight`); the batch stores only the net, so deleting or changing a container never
+  changes a batch. A weight at or below the tare, or over the limit, keeps Save off. Containers are made inline
+  (`ContainerForm`, saved at once by `saveContainer`) or renamed, re-tared and deleted in Settings.
+- The batch page header shows portions left (clamped at 0), per portion and, with a cooked weight, per 100 g. Actions:
+  Log (`addSheet.openBatch`, logs on today from a page without a day), Finish or Reopen, and Delete, which is off with
+  the reason while the batch has live log entries (the repository refuses it too).
+- Batches stay active until finished. `activeBatches` finishes those without activity for 7 days (created, edited,
+  or a live entry logged) in the same request; Reopen counts as activity. It runs wherever active batches load: the
+  Recipes tab, Today and the day pages, and `loadSuggestions`. The finishing UPDATE itself requires `created_at`,
+  `updated_at` and the latest live entry to be before the cutoff, so activity landing after the read keeps a batch
+  active. The Recipes tab lists active batches, the
+  recipes, and a collapsed Finished section (latest 20) with Reopen.
+- `BatchForm` guards unsaved changes like `RecipeForm`. It is inert while a save runs, and the batch page remounts it
+  when a save changed the lines' ids, so the form always starts from the stored lines.
 
 ## Directory map
 
-| Path                           | Contents                                                                                                                    |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| `src/hooks.server.ts`          | Request guard (rate limit, session, access)                                                                                 |
-| `src/routes/(app)`             | Signed in pages inside the app shell (tab bar, sidebar)                                                                     |
-| `src/routes/(auth)`            | `/login` and `/setup` without the shell                                                                                     |
-| `src/lib/server`               | Better Auth setup, guard rules, rate limits, Drizzle schema, `off/` client, `foods/`, `log/`, `recipes/`, `settings/` repos |
-| `src/lib/schemas`              | Valibot schemas shared by forms and remote commands                                                                         |
-| `src/lib/domain`               | Pure domain math: nutrition, recipes (`batch.ts`), targets, dates, search text, barcodes, limits                            |
-| `src/lib/scanner`              | Barcode detector factory (native API or lazy zxing-wasm ponyfill)                                                           |
-| `src/lib/components`           | `shell/` (navigation), `ui/` (design system), `log/` (add sheet, forms, day view), `recipes/` (editor, ingredients)         |
-| `src/lib/stores`               | Shared client state (add sheet, toasts, unsaved changes guard)                                                              |
-| `src/routes/(app)/*.remote.ts` | Remote commands and queries: `foods`, `log`, `recipes/recipes`, `settings/target`                                           |
-| `scripts/import-blv.ts`        | Generates the BLV foods migration                                                                                           |
-| `src/service-worker`           | Offline app shell                                                                                                           |
-| `drizzle/`                     | Generated SQL migrations, applied with wrangler                                                                             |
-| `e2e/`                         | Playwright tests (Chromium desktop, WebKit iPhone)                                                                          |
-| `scripts/e2e-db-reset.sh`      | Fresh migrated local D1 and a `BETTER_AUTH_SECRET` for e2e                                                                  |
-| `e2e/off-stub.mjs`             | Local Open Food Facts stand in (port 4174) serving recorded fixtures                                                        |
-| `wrangler.jsonc`               | Worker config: D1, rate limit bindings, custom domain, production vars                                                      |
-| `worker-configuration.d.ts`    | Generated by `pnpm gen`; `pnpm check` and `pnpm build` fail when it is stale                                                |
+| Path                           | Contents                                                                                                                                |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/hooks.server.ts`          | Request guard (rate limit, session, access)                                                                                             |
+| `src/routes/(app)`             | Signed in pages inside the app shell (tab bar, sidebar)                                                                                 |
+| `src/routes/(auth)`            | `/login` and `/setup` without the shell                                                                                                 |
+| `src/lib/server`               | Better Auth setup, guard rules, rate limits, Drizzle schema, `off/` client, `foods/`, `log/`, `recipes/`, `batches/`, `settings/` repos |
+| `src/lib/schemas`              | Valibot schemas shared by forms and remote commands                                                                                     |
+| `src/lib/domain`               | Pure domain math: nutrition, recipes (`batch.ts`), targets, dates, search text, barcodes, limits                                        |
+| `src/lib/scanner`              | Barcode detector factory (native API or lazy zxing-wasm ponyfill)                                                                       |
+| `src/lib/components`           | `shell/` (navigation), `ui/` (design system), `log/` (add sheet, forms, day view), `recipes/` (editors, ingredients, batches)           |
+| `src/lib/stores`               | Shared client state (add sheet, toasts, unsaved changes guard)                                                                          |
+| `src/routes/(app)/*.remote.ts` | Remote commands and queries: `foods`, `log`, `recipes/recipes`, `recipes/batches`, `settings/target`                                    |
+| `scripts/import-blv.ts`        | Generates the BLV foods migration                                                                                                       |
+| `src/service-worker`           | Offline app shell                                                                                                                       |
+| `drizzle/`                     | Generated SQL migrations, applied with wrangler                                                                                         |
+| `e2e/`                         | Playwright tests (Chromium desktop, WebKit iPhone)                                                                                      |
+| `scripts/e2e-db-reset.sh`      | Fresh migrated local D1 (plus the batches of `e2e/seed.sql`) and a `BETTER_AUTH_SECRET` for e2e                                         |
+| `e2e/off-stub.mjs`             | Local Open Food Facts stand in (port 4174) serving recorded fixtures                                                                    |
+| `wrangler.jsonc`               | Worker config: D1, rate limit bindings, custom domain, production vars                                                                  |
+| `worker-configuration.d.ts`    | Generated by `pnpm gen`; `pnpm check` and `pnpm build` fail when it is stale                                                            |
 
 ## Run locally
 
@@ -208,6 +244,13 @@ whole gate.
 3. `pnpm db:migrate:local` applies it to the local database.
 4. On merge to `main`, CI builds, runs `pnpm db:migrate:remote`, then deploys. Migrations must stay compatible with
    the previous Worker version, because the migration runs before the new code ships.
+
+D1 applies each migration file as one transaction with foreign keys on, and SQLite ignores `PRAGMA foreign_keys`
+inside a transaction. When drizzle-kit rebuilds a table it writes `PRAGMA foreign_keys=OFF` and `=ON`; replace them by
+hand with `PRAGMA defer_foreign_keys = on` before the rebuild (see `drizzle/0020_batches.sql`), check that the copy
+names every column and every index is recreated, and extend `src/lib/server/db/migrations.spec.ts`, which applies the
+migrations to a database that already holds data. The test helper (`src/lib/server/test/d1.ts`) applies a file the
+way `wrangler d1 migrations apply` does: its statements in one D1 `batch`.
 
 `drizzle/0001_single_account.sql` is hand written: a trigger on `user` that aborts a second insert (the database
 level backstop for single account sign up). SQLite drops a table's triggers when the table is rebuilt, which

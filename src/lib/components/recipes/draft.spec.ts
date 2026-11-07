@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { totals } from '#lib/domain/batch.ts';
+import type { BatchDetail } from '#lib/server/batches/repo.ts';
 import type { RecipeDetail } from '#lib/server/recipes/repo.ts';
 import {
+	batchDraft,
+	batchDraftFromRecipe,
 	draftGrams,
 	draftNutrients,
 	draftTotals,
@@ -123,5 +126,106 @@ describe('recipeDraft', () => {
 		two.ingredients.push({ ...two.ingredients[0]!, id: 'i2', position: 1 });
 		const keys = recipeDraft(two).ingredients.map((i) => i.key);
 		expect(new Set(keys).size).toBe(2);
+	});
+});
+
+describe('batchDraft', () => {
+	const line = (overrides: Record<string, unknown>) => ({
+		id: 'l1',
+		batchId: 'b1',
+		foodId: oats.id,
+		name: 'Rolled oats',
+		amount: 2,
+		unit: 'serving',
+		grams: 60,
+		kcal: 350,
+		protein: 13,
+		carbs: 60,
+		fat: 7,
+		fiber: 10,
+		position: 0,
+		// The food as it is now: its serving weight changed from 30 g to 40 g after the batch was saved.
+		food: { ...oats, brand: null, kcal: 372 },
+		servingG: 30,
+		...overrides
+	});
+	const detail = (lines: Record<string, unknown>[]) =>
+		({
+			id: 'b1',
+			recipeId: 'r1',
+			name: 'Porridge',
+			cookedOn: '2026-11-05',
+			portions: 3,
+			cookedWeightG: 900,
+			ingredients: lines
+		}) as unknown as BatchDetail;
+
+	it('carries the fields and every line with its id and its own snapshot', () => {
+		const draft = batchDraft(detail([line({})]));
+		expect(draft).toMatchObject({
+			id: 'b1',
+			recipeId: 'r1',
+			name: 'Porridge',
+			cookedOn: '2026-11-05',
+			portions: 3,
+			cookedWeightG: 900
+		});
+		expect(draft.ingredients[0]).toMatchObject({
+			id: 'l1',
+			amount: 2,
+			unit: 'serving',
+			grams: 60,
+			snapshot: { kcal: 350, protein: 13, carbs: 60, fat: 7, fiber: 10 }
+		});
+	});
+
+	it('prices a serving from the line serving weight, never the food one', () => {
+		const [ingredient] = batchDraft(detail([line({})])).ingredients;
+		expect(ingredient!.food.servingG).toBe(30);
+		// 2 servings of 30 g at 350 kcal per 100 g, not 2 of the food's 40 g at 372.
+		expect(draftNutrients(ingredient!).kcal).toBe(210);
+	});
+
+	it('keeps the line name and a line whose food is gone', () => {
+		const [ingredient] = batchDraft(
+			detail([line({ foodId: null, food: null, name: 'Old oats', servingG: 30 })])
+		).ingredients;
+		expect(ingredient!.food.name).toBe('Old oats');
+		expect(ingredient!.food.id).toBe('l1');
+	});
+});
+
+describe('batchDraftFromRecipe', () => {
+	it('prefills the batch from the draft and takes the lines with their foods from the recipe', () => {
+		const recipe = {
+			id: 'r1',
+			ingredients: [
+				{ foodId: food.id, amount: 2, unit: 'serving', grams: 30, food: { ...food, brand: null } }
+			]
+		} as unknown as RecipeDetail;
+		const draft = batchDraftFromRecipe(
+			{
+				recipeId: 'r1',
+				name: 'Dressing',
+				cookedOn: '2026-11-06',
+				portions: 4,
+				cookedWeightG: null,
+				ingredients: [{ foodId: food.id, amount: 2, unit: 'serving' }]
+			},
+			recipe
+		);
+		expect(draft).toMatchObject({
+			recipeId: 'r1',
+			name: 'Dressing',
+			cookedOn: '2026-11-06',
+			portions: 4,
+			cookedWeightG: null
+		});
+		expect(draft.id).toBeUndefined();
+		expect(draft.ingredients).toHaveLength(1);
+		// New lines have no id: the server snapshots them.
+		expect(draft.ingredients[0]!.id).toBeUndefined();
+		expect(draft.ingredients[0]!.snapshot).toBeUndefined();
+		expect(draft.ingredients[0]!.food).toEqual(food);
 	});
 });

@@ -3,15 +3,16 @@
 	import { invalidateAll } from '$app/navigation';
 	import type { Unit } from '#lib/domain/nutrition.ts';
 	import type { FoodInput } from '#lib/schemas/food.ts';
+	import type { BatchSummary } from '#lib/server/batches/repo.ts';
 	import type { Food } from '#lib/server/db/schema.ts';
 	import type { RecentFood } from '#lib/server/foods/repo.ts';
 	import { Button, Sheet, Skeleton } from '#lib/components/ui/index.ts';
 	import { addSheet } from '#lib/stores/add-sheet.svelte.ts';
 	import { toasts } from '#lib/stores/toasts.svelte.ts';
 	import { loadSuggestions } from '../../../routes/(app)/foods.remote.ts';
-	import { logFood } from '../../../routes/(app)/log.remote.ts';
+	import { logBatch, logFood } from '../../../routes/(app)/log.remote.ts';
 	import AmountStep from './AmountStep.svelte';
-	import type { AmountValue } from './amount.ts';
+	import { batchSource, type AmountValue, type BatchAmountValue } from './amount.ts';
 	import FoodForm from './FoodForm.svelte';
 	import FoodSearch from './FoodSearch.svelte';
 	import QuickAddForm from './QuickAddForm.svelte';
@@ -24,11 +25,18 @@
 	 * sidebar and the ⌘K shortcut set. Quick add, New food and Scan are steps of their own; a new food continues to
 	 * its amount step so it can be logged at once, and the amount step's "Edit food" opens the food form for that food.
 	 * A scanned code goes straight to the amount step when the food is known, else to the new food form with the
-	 * barcode (and what Open Food Facts knew) filled in. The sheet logs on `day.date` (the day being viewed). Pages that do not load a day (Weight,
-	 * Settings) pass `day: null`, and the sheet fetches today and the suggestions itself when it opens.
+	 * barcode (and what Open Food Facts knew) filled in. Active batches sit above the recents; picking one opens its
+	 * amount step (portions, or grams for a weighed batch), and `addSheet.openBatch` opens the sheet at that step.
+	 * The sheet logs on `day.date` (the day being viewed). Pages that do not load a day (Weight, Settings) pass
+	 * `day: null`, and the sheet fetches today and the suggestions itself when it opens.
 	 */
 	type Props = {
-		day: { date: string; recents: RecentFood[]; frequents: RecentFood[] } | null;
+		day: {
+			date: string;
+			recents: RecentFood[];
+			frequents: RecentFood[];
+			batches: BatchSummary[];
+		} | null;
 	};
 
 	let { day }: Props = $props();
@@ -37,15 +45,25 @@
 	type Step =
 		| { kind: 'search' }
 		| { kind: 'amount'; food: Food; last?: Last }
+		| { kind: 'batch'; batch: BatchSummary }
 		| { kind: 'quick' }
 		| { kind: 'new'; initial?: Partial<FoodInput> }
 		| { kind: 'scan' }
 		| { kind: 'edit'; food: Food; last?: Last };
-	let step = $state.raw<Step>({ kind: 'search' });
+	// A writable derived: `addSheet.openBatch` sets `addSheet.batch`, which starts the step at that batch; moving on
+	// assigns the step as usual, and closing clears the request again (see `reset`).
+	let step = $derived.by<Step>(() =>
+		addSheet.batch ? { kind: 'batch', batch: addSheet.batch } : { kind: 'search' }
+	);
 	// Bumping it mounts a fresh search (empty field) the next time the sheet opens.
 	let searchKey = $state(0);
 
-	type Fetched = { today: string; recents: RecentFood[]; frequents: RecentFood[] };
+	type Fetched = {
+		today: string;
+		recents: RecentFood[];
+		frequents: RecentFood[];
+		batches: BatchSummary[];
+	};
 	let fetched = $state.raw<Fetched | null>(null);
 	let fetchFailed = $state(false);
 	let latestRequest = 0;
@@ -72,11 +90,14 @@
 	const date = $derived(day ? day.date : (fetched?.today ?? null));
 	const recents = $derived(day?.recents ?? fetched?.recents ?? []);
 	const frequents = $derived(day?.frequents ?? fetched?.frequents ?? []);
+	const batches = $derived(day?.batches ?? fetched?.batches ?? []);
 
 	function title(current: Step): string {
 		switch (current.kind) {
 			case 'amount':
 				return current.food.name;
+			case 'batch':
+				return current.batch.name;
 			case 'quick':
 				return 'Quick add';
 			case 'new':
@@ -93,24 +114,32 @@
 	const toSearch = () => (step = { kind: 'search' });
 
 	function reset() {
+		addSheet.batch = null;
 		step = { kind: 'search' };
 		searchKey++;
 	}
 
-	async function log(food: Food, { amount, unit }: AmountValue) {
-		if (date === null) throw new Error('No date to log on');
-		await logFood({ date, foodId: food.id, amount, unit });
+	/** The entry is saved: close, say so, and refresh. A failed refresh only means the page catches up on its next load. */
+	async function done(name: string) {
 		addSheet.open = false;
-		toasts.show({
-			message: `Logged ${food.name}`,
-			tone: 'success'
-		});
-		// The entry is saved: a failed refresh only means the page catches up on its next load.
+		toasts.show({ message: `Logged ${name}`, tone: 'success' });
 		try {
 			await invalidateAll();
 		} catch {
 			// ignored on purpose
 		}
+	}
+
+	async function log(food: Food, { amount, unit }: AmountValue) {
+		if (date === null) throw new Error('No date to log on');
+		await logFood({ date, foodId: food.id, amount, unit });
+		await done(food.name);
+	}
+
+	async function logBatchAmount(batch: BatchSummary, { amount, unit }: BatchAmountValue) {
+		if (date === null) throw new Error('No date to log on');
+		await logBatch({ date, batchId: batch.id, amount, unit });
+		await done(batch.name);
 	}
 </script>
 
@@ -125,9 +154,11 @@
 			<FoodSearch
 				{recents}
 				{frequents}
+				{batches}
 				active={addSheet.open && step.kind === 'search'}
 				onpick={(food, last) => (step = { kind: 'amount', food, last })}
 				onquick={() => (step = { kind: 'quick' })}
+				onbatch={(batch) => (step = { kind: 'batch', batch })}
 				onnew={() => (step = { kind: 'new' })}
 				onscan={() => (step = { kind: 'scan' })}
 			/>
@@ -147,21 +178,21 @@
 		{#if date !== null}
 			<QuickAddForm {date} ondone={() => (addSheet.open = false)} oncancel={toSearch} />
 		{:else}
-			<!-- Pages without a day (Weight, Settings) fetch today when the sheet opens; the form needs it. -->
-			<div class="flex flex-col gap-4">
-				{#if fetchFailed}
-					<p role="alert" class="text-base text-danger">
-						Could not load today's date. Go back and try again.
-					</p>
-				{:else}
-					<div class="flex flex-col gap-3" aria-busy="true">
-						<span class="sr-only">Loading</span>
-						<Skeleton height="2.75rem" />
-						<Skeleton height="2.75rem" />
-					</div>
-				{/if}
-				<Button variant="secondary" onclick={toSearch}>Back</Button>
-			</div>
+			{@render awaitingDate()}
+		{/if}
+	{:else if step.kind === 'batch'}
+		{@const { batch } = step}
+		{#if date !== null}
+			{#key batch.id}
+				<AmountStep
+					batch={batchSource(batch)}
+					mode="add"
+					onback={toSearch}
+					onsubmit={(value: BatchAmountValue) => logBatchAmount(batch, value)}
+				/>
+			{/key}
+		{:else}
+			{@render awaitingDate()}
 		{/if}
 	{:else if step.kind === 'new'}
 		<FoodForm
@@ -186,3 +217,21 @@
 		/>
 	{/if}
 </Sheet>
+
+{#snippet awaitingDate()}
+	<!-- Pages without a day (Weight, Settings, a batch page) fetch today when the sheet opens; the step needs it. -->
+	<div class="flex flex-col gap-4">
+		{#if fetchFailed}
+			<p role="alert" class="text-base text-danger">
+				Could not load today's date. Go back and try again.
+			</p>
+		{:else}
+			<div class="flex flex-col gap-3" aria-busy="true">
+				<span class="sr-only">Loading</span>
+				<Skeleton height="2.75rem" />
+				<Skeleton height="2.75rem" />
+			</div>
+		{/if}
+		<Button variant="secondary" onclick={toSearch}>Back</Button>
+	</div>
+{/snippet}

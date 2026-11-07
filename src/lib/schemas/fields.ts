@@ -1,6 +1,6 @@
 import * as v from 'valibot';
 import { isCalendarDate } from '../domain/dates.ts';
-import { MAX_AMOUNT_GRAMS_OR_ML, MAX_AMOUNT_SERVINGS } from '../domain/constants.ts';
+import { MAX_AMOUNT_GRAMS_OR_ML, MAX_AMOUNT_SERVINGS, MAX_PORTIONS } from '../domain/constants.ts';
 import type { Unit } from '../domain/nutrition.ts';
 import { parseDecimal } from '../utils/decimal.ts';
 
@@ -71,11 +71,23 @@ export const isoDate = v.pipe(v.string(), v.check(isCalendarDate, 'Enter a date 
 
 export const id = v.pipe(v.string(), v.uuid('Unknown id'));
 
-/** Units a log entry can be entered in. Portions arrive with batches in phase 3. */
-export const LOG_UNITS = ['g', 'ml', 'serving'] as const satisfies readonly Unit[];
+/** Units a food entry can be entered in. A food is never logged in portions; only batches are. */
+export const FOOD_LOG_UNITS = ['g', 'ml', 'serving'] as const satisfies readonly Unit[];
+export type FoodLogUnit = (typeof FOOD_LOG_UNITS)[number];
+
+export const foodLogUnit = v.picklist(FOOD_LOG_UNITS, 'Choose a unit');
+
+/** Units any log entry can be in: a food's, plus portions of a batch. */
+export const LOG_UNITS = [...FOOD_LOG_UNITS, 'portion'] as const satisfies readonly Unit[];
 export type LogUnit = (typeof LOG_UNITS)[number];
 
 export const logUnit = v.picklist(LOG_UNITS, 'Choose a unit');
+
+/** Units a batch entry can be in: portions, or grams of a weighed batch. */
+export const BATCH_LOG_UNITS = ['portion', 'g'] as const satisfies readonly LogUnit[];
+export type BatchLogUnit = (typeof BATCH_LOG_UNITS)[number];
+
+export const batchLogUnit = v.picklist(BATCH_LOG_UNITS, 'Choose a unit');
 
 /**
  * Units a recipe or batch ingredient can be entered in: an ingredient is raw food, never a portion. Its own list, so
@@ -89,6 +101,13 @@ export const ingredientUnit = v.picklist(INGREDIENT_UNITS, 'Choose a unit');
 /** Any amount greater than zero; `fitsUnit` then applies the limit of the chosen unit. */
 export const amount = positiveUpTo(Math.max(MAX_AMOUNT_GRAMS_OR_ML, MAX_AMOUNT_SERVINGS));
 
+const UNIT_LIMITS: Record<LogUnit | IngredientUnit, number> = {
+	g: MAX_AMOUNT_GRAMS_OR_ML,
+	ml: MAX_AMOUNT_GRAMS_OR_ML,
+	serving: MAX_AMOUNT_SERVINGS,
+	portion: MAX_PORTIONS
+};
+
 export function fitsUnit(input: { amount: number; unit: LogUnit | IngredientUnit }): boolean {
-	return input.amount <= (input.unit === 'serving' ? MAX_AMOUNT_SERVINGS : MAX_AMOUNT_GRAMS_OR_ML);
+	return input.amount <= UNIT_LIMITS[input.unit];
 }

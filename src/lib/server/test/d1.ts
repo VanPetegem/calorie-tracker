@@ -6,11 +6,34 @@ import { getDb, type Db } from '../db/index.ts';
 const MIGRATIONS_DIR = new URL('../../../../drizzle/', import.meta.url);
 const CONFIG_PATH = fileURLToPath(new URL('wrangler.test.jsonc', import.meta.url));
 
+export type TestDb = {
+	db: Db;
+	/** The raw binding, for SQL that must not go through the current Drizzle schema. */
+	d1: D1Database;
+	/** Applies the migrations left out by `through`. */
+	migrateRest(): Promise<void>;
+	dispose(): Promise<void>;
+};
+
+/**
+ * Applies one migration file the way `wrangler d1 migrations apply` does: its statements in one `batch`, which D1
+ * runs as a single transaction with foreign keys enforced.
+ */
+async function applyMigration(d1: D1Database, file: string): Promise<void> {
+	const sql = await readFile(new URL(file, MIGRATIONS_DIR), 'utf8');
+	const statements = sql
+		.split('--> statement-breakpoint')
+		.map((statement) => statement.trim())
+		.filter(Boolean);
+	await d1.batch(statements.map((statement) => d1.prepare(statement)));
+}
+
 /**
  * A fresh in memory D1 database (Miniflare, through Wrangler's platform proxy) with every migration in `drizzle/`
- * applied in order, for server tests. Call `dispose` when done; it stops the local workerd process.
+ * applied in order, for server tests. `through` (a migration number such as `'0019'`) stops after that migration;
+ * `migrateRest` applies the others. Call `dispose` when done; it stops the local workerd process.
  */
-export async function createTestDb(): Promise<{ db: Db; dispose(): Promise<void> }> {
+export async function createTestDb(options: { through?: string } = {}): Promise<TestDb> {
 	const proxy = await getPlatformProxy<{ DB: D1Database }>({
 		configPath: CONFIG_PATH,
 		envFiles: [],
@@ -20,15 +43,23 @@ export async function createTestDb(): Promise<{ db: Db; dispose(): Promise<void>
 	try {
 		const d1 = proxy.env.DB;
 		const files = (await readdir(MIGRATIONS_DIR)).filter((name) => name.endsWith('.sql')).sort();
-		for (const file of files) {
-			const sql = await readFile(new URL(file, MIGRATIONS_DIR), 'utf8');
-			const statements = sql
-				.split('--> statement-breakpoint')
-				.map((statement) => statement.trim())
-				.filter(Boolean);
-			await d1.batch(statements.map((statement) => d1.prepare(statement)));
-		}
-		return { db: getDb(d1), dispose: proxy.dispose };
+		const { through } = options;
+		const split =
+			through === undefined
+				? files.length
+				: files.findIndex((file) => file.startsWith(`${through}_`)) + 1;
+		if (split === 0) throw new Error(`No migration ${through}`);
+		for (const file of files.slice(0, split)) await applyMigration(d1, file);
+		let rest = files.slice(split);
+		return {
+			db: getDb(d1),
+			d1,
+			async migrateRest() {
+				for (const file of rest) await applyMigration(d1, file);
+				rest = [];
+			},
+			dispose: proxy.dispose
+		};
 	} catch (error) {
 		await proxy.dispose();
 		throw error;

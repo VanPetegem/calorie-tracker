@@ -26,8 +26,12 @@ describe('toGrams', () => {
 		expect(() => toGrams(1, 'serving', null)).toThrow(RangeError);
 	});
 
-	it('throws for portions, which phase 3 handles', () => {
-		expect(() => toGrams(1, 'portion', 40)).toThrow(RangeError);
+	it('multiplies portions by the portion weight', () => {
+		expect(toGrams(1.5, 'portion', 400)).toBe(600);
+	});
+
+	it('throws for a portion without a portion weight', () => {
+		expect(() => toGrams(1, 'portion', null)).toThrow(RangeError);
 	});
 });
 

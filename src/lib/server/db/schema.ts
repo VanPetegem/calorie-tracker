@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+	type AnySQLiteColumn,
 	check,
 	index,
 	integer,
@@ -62,8 +63,8 @@ export const logEntries = sqliteTable(
 		loggedAt: text('logged_at').notNull(),
 		kind: text('kind', { enum: ['food', 'batch', 'quick'] }).notNull(),
 		foodId: text('food_id').references(() => foods.id),
-		/** Phase 3 adds the `batches` table and turns this into a reference. */
-		batchId: text('batch_id'),
+		/** No cascade: a batch with live entries cannot be deleted. */
+		batchId: text('batch_id').references((): AnySQLiteColumn => batches.id),
 		amount: real('amount'),
 		unit: text('unit', { enum: ['g', 'ml', 'portion', 'serving'] }),
 		/** Gram equivalent of `amount` for food entries, so an edit that switches unit still scales correctly. */
@@ -79,7 +80,8 @@ export const logEntries = sqliteTable(
 	},
 	(table) => [
 		index('log_entries_date_idx').on(table.date),
-		index('log_entries_food_id_logged_at_idx').on(table.foodId, table.loggedAt)
+		index('log_entries_food_id_logged_at_idx').on(table.foodId, table.loggedAt),
+		index('log_entries_batch_id_idx').on(table.batchId)
 	]
 );
 
@@ -119,7 +121,85 @@ export const recipeIngredients = sqliteTable(
 		grams: real('grams').notNull(),
 		position: integer('position').notNull()
 	},
-	(table) => [index('recipe_ingredients_recipe_id_position_idx').on(table.recipeId, table.position)]
+	(table) => [
+		index('recipe_ingredients_recipe_id_position_idx').on(table.recipeId, table.position),
+		index('recipe_ingredients_food_id_idx').on(table.foodId)
+	]
+);
+
+/** A container the user weighs batches in. Hard deleted: batches store the net weight, not the container. */
+export const containers = sqliteTable(
+	'containers',
+	{
+		id: text('id').primaryKey(),
+		name: text('name').notNull(),
+		tareG: real('tare_g').notNull(),
+		createdAt: text('created_at').notNull().default(nowIso)
+	},
+	(table) => [check('containers_tare_positive', sql`${table.tareG} > 0`)]
+);
+
+/**
+ * A cooked batch, from a recipe or one off. Its totals are the sum of its ingredients' snapshots, so editing a food
+ * or the recipe never changes it.
+ */
+export const batches = sqliteTable(
+	'batches',
+	{
+		id: text('id').primaryKey(),
+		/** No cascade: recipes are archived, not deleted. Null for a one off batch. */
+		recipeId: text('recipe_id').references(() => recipes.id),
+		name: text('name').notNull(),
+		/** Local calendar date (`YYYY-MM-DD`) the batch was cooked. */
+		cookedOn: text('cooked_on').notNull(),
+		portions: real('portions').notNull(),
+		/** Net weight of the whole batch; null until it is weighed. */
+		cookedWeightG: real('cooked_weight_g'),
+		kcal: real('kcal').notNull(),
+		protein: real('protein').notNull(),
+		carbs: real('carbs').notNull(),
+		fat: real('fat').notNull(),
+		fiber: real('fiber'),
+		finishedAt: text('finished_at'),
+		createdAt: text('created_at').notNull().default(nowIso),
+		updatedAt: text('updated_at')
+			.notNull()
+			.default(nowIso)
+			.$onUpdate(() => new Date().toISOString())
+	},
+	(table) => [
+		index('batches_finished_at_idx').on(table.finishedAt),
+		check('batches_portions_positive', sql`${table.portions} > 0`),
+		check(
+			'batches_cooked_weight_positive',
+			sql`${table.cookedWeightG} IS NULL OR ${table.cookedWeightG} > 0`
+		)
+	]
+);
+
+/** One line of a batch, with the food's values per 100 snapshotted when it was added. */
+export const batchIngredients = sqliteTable(
+	'batch_ingredients',
+	{
+		id: text('id').primaryKey(),
+		batchId: text('batch_id')
+			.notNull()
+			.references(() => batches.id, { onDelete: 'cascade' }),
+		/** The food it was snapshotted from; the line keeps its own name and values. */
+		foodId: text('food_id').references(() => foods.id),
+		name: text('name').notNull(),
+		amount: real('amount').notNull(),
+		unit: text('unit', { enum: ['g', 'ml', 'serving'] }).notNull(),
+		grams: real('grams').notNull(),
+		/** Per 100 g (or ml) of the food at the time, not the line's own nutrition. */
+		kcal: real('kcal').notNull(),
+		protein: real('protein').notNull(),
+		carbs: real('carbs').notNull(),
+		fat: real('fat').notNull(),
+		fiber: real('fiber'),
+		position: integer('position').notNull()
+	},
+	(table) => [index('batch_ingredients_batch_id_position_idx').on(table.batchId, table.position)]
 );
 
 /** A single row (id 1). Phase 4 adds the remaining settings columns. */
@@ -144,3 +224,6 @@ export type Food = typeof foods.$inferSelect;
 export type LogEntry = typeof logEntries.$inferSelect;
 export type Recipe = typeof recipes.$inferSelect;
 export type RecipeIngredient = typeof recipeIngredients.$inferSelect;
+export type Container = typeof containers.$inferSelect;
+export type Batch = typeof batches.$inferSelect;
+export type BatchIngredient = typeof batchIngredients.$inferSelect;

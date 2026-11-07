@@ -29,14 +29,22 @@
 	 *
 	 * `per100` says which values per 100 an ingredient's nutrition comes from: its food by default, a stored snapshot
 	 * for a batch. `errors` maps an ingredient's `key` to the reason the server refused that line; the row is marked.
+	 * `locked` is set while the editor is saving: pending Undo toasts are dismissed then, because a save that remounts
+	 * the editor from the stored lines would silently drop what Undo puts back.
 	 */
 	type Props = {
 		ingredients: DraftIngredient[];
 		per100?: Per100Of;
 		errors?: Record<string, string>;
+		locked?: boolean;
 	};
 
-	let { ingredients = $bindable(), per100 = foodPer100, errors = {} }: Props = $props();
+	let {
+		ingredients = $bindable(),
+		per100 = foodPer100,
+		errors = {},
+		locked = false
+	}: Props = $props();
 
 	const full = $derived(ingredients.length >= MAX_INGREDIENTS);
 	const totalKcal = $derived(Math.round(draftTotals(ingredients, per100).kcal));
@@ -123,8 +131,12 @@
 
 	// An Undo toast must not outlive the list: Undo would write to a list that is gone.
 	const dismissers: (() => void)[] = [];
-	$effect(() => () => {
-		for (const dismiss of dismissers) dismiss();
+	function dismissUndos() {
+		for (const dismiss of dismissers.splice(0)) dismiss();
+	}
+	$effect(() => dismissUndos);
+	$effect(() => {
+		if (locked) dismissUndos();
 	});
 
 	function remove() {
