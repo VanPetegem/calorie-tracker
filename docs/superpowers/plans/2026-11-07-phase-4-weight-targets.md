@@ -37,9 +37,10 @@
 | 6 | 4b | Settings rebuild, `weekly_targets`, migration check, Valibot schemas | opus | high |
 | 7 | 4b | Targets repository, lazy week rows, recompute, day loader switch | opus | high |
 | 8 | 4b | Onboarding redirect, page, profile form, e2e setup | sonnet | high |
-| 9 | 4b | Settings sections, Weight target card and goal slope, e2e, docs; final 4b review | sonnet | high |
+| 9 | 4b | Settings sections, Weight target card and goal slope, e2e, docs | sonnet | high |
+| 10 | 4b | Offline tab switches (`__data.json` network first), weight history paging; final 4b review | sonnet | high |
 
-Per task review: sonnet high (sonnet xhigh for Tasks 2, 6, 7). Final branch review after Task 4 and after Task 9: opus, xhigh. Branches: `phase-4a-weight`, then `phase-4b-targets` from `main` after 4a merges.
+Per task review: sonnet high (sonnet xhigh for Tasks 2, 6, 7). Final branch review after Task 4 and after Task 10: opus, xhigh. Branches: `phase-4a-weight`, then `phase-4b-targets` from `main` after 4a merges.
 
 ## File Structure
 
@@ -244,4 +245,20 @@ e2e/weight.e2e.ts (4a), e2e/targets.e2e.ts and onboarding in e2e/auth.setup.ts (
 - [ ] **Step 3: Implement** and update the docs.
 - [ ] **Step 4: Run** the full gate.
 - [ ] **Step 5: Commit** `feat(targets): settings, targets history, goal slope`.
+
+### Task 10: Offline tab switches and weight history paging
+
+Both are follow ups from the 4a branch review (PR #11), deferred out of 4a.
+
+**Files:**
+- Modify: `src/service-worker/index.ts` (and its spec), `src/routes/(app)/weight/+page.svelte`, `src/lib/domain/constants.ts`, `e2e/pwa.e2e.ts`, `e2e/weight.e2e.ts`, `docs/architecture.md`, `docs/decisions.md`
+
+**Interfaces:**
+- Behaviour, offline: a client side navigation fetches `<path>/__data.json`, which the worker passes through today, so switching tabs offline shows the bare SvelteKit error page (Weight, Recipes, Settings, any page with a server load). The worker handles same origin GET `__data.json` requests network first, like navigations, and stores successful responses in the same cache; offline it serves the cached copy, or, with none, a response that makes the client fall back to a full navigation (which then gets the cached page or the offline page). The `x-sveltekit-invalidated` query must not split the cache key in a way that never matches; decide and record how. Whatever clears cached navigations (sign out, cache version bump) clears these too.
+- Behaviour, history: the weight history shows the newest `WEIGHT_HISTORY_PAGE` (30) weigh-ins and a "Show more" button (44 px) that adds the next 30, client side over the loaded series; the chart and its "All" table are unchanged. Edit, delete and Undo keep working on rows past the first page, and a refresh after a write keeps the number of shown rows.
+- [ ] **Step 1: Write failing tests**: worker spec: a `__data.json` GET is stored on success and served from the cache when the network fails, and falls back as described with no cache; e2e (chromium, `pwa.e2e.ts`): open `/`, visit Weight once online, go offline, switch tabs to Weight and back to Today without an error page. Page spec: 31 weigh-ins show 30 rows and "Show more", which shows the 31st; deleting a row past the first page keeps the expanded list.
+- [ ] **Step 2: Run**; fail.
+- [ ] **Step 3: Implement** and update the docs.
+- [ ] **Step 4: Run** the full gate.
+- [ ] **Step 5: Commit** `fix(pwa): offline tab switches; feat(weight): history paging`.
 - [ ] **Step 6: Final 4b branch review** (opus, xhigh), fix findings, open the PR.
