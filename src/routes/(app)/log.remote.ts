@@ -35,8 +35,8 @@ export const logQuick = command(QuickInput, async (input) => {
 });
 
 export const editAmount = command(EditAmountInput, async (input) => {
-	const { db } = await appContext();
-	return log.updateEntryAmount(db, input);
+	const { db, now } = await appContext();
+	return log.updateEntryAmount(db, input, now);
 });
 
 export const editQuick = command(EditQuickInput, async ({ id, ...input }) => {

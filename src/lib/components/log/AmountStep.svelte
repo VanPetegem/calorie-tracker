@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isHttpError } from '@sveltejs/kit';
 	import { untrack } from 'svelte';
 	import {
 		MAX_AMOUNT_GRAMS_OR_ML,
@@ -91,7 +92,8 @@
 	let text = $state(format(start.amount));
 	let touched = $state(false);
 	let busy = $state(false);
-	let failed = $state(false);
+	// Why the last submit failed: the server's reason for a 400, else a generic retry message.
+	let failure = $state<string | null>(null);
 
 	const unitChoices = $derived(
 		props.batch
@@ -186,7 +188,7 @@
 		touched = true;
 		if (error !== undefined || amount === null || busy) return;
 		busy = true;
-		failed = false;
+		failure = null;
 		try {
 			// The props pair `onsubmit` with `batch`: a batch step submits a batch unit, a food step a food unit.
 			const send = props.onsubmit as (value: {
@@ -194,8 +196,8 @@
 				unit: StepUnit;
 			}) => void | Promise<void>;
 			await send({ amount, unit });
-		} catch {
-			failed = true;
+		} catch (cause) {
+			failure = isHttpError(cause, 400) ? cause.body.message : 'Could not save. Try again.';
 		} finally {
 			busy = false;
 		}
@@ -267,8 +269,8 @@
 		</div>
 	</Card>
 
-	{#if failed}
-		<p role="alert" class="text-sm text-danger">Could not save. Try again.</p>
+	{#if failure !== null}
+		<p role="alert" class="text-sm text-danger">{failure}</p>
 	{/if}
 
 	<div class="flex gap-2">

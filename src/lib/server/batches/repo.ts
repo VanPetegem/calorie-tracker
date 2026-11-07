@@ -448,10 +448,10 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 /** Marks a batch finished. Finishing a finished or unknown batch does nothing. */
-export async function finishBatch(db: Db, id: string): Promise<void> {
+export async function finishBatch(db: Db, id: string, now: Date = new Date()): Promise<void> {
 	await db
 		.update(batches)
-		.set({ finishedAt: new Date().toISOString() })
+		.set({ finishedAt: now.toISOString() })
 		.where(and(eq(batches.id, id), isNull(batches.finishedAt)));
 }
 

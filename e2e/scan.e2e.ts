@@ -84,6 +84,16 @@ async function mockCamera(page: Page, camera: Camera) {
 			delete (globalThis as unknown as Record<string, unknown>).BarcodeDetector;
 			return;
 		}
+		// The mocked detector ignores the frame, so the video only has to look ready. Linux WebKit (CI) stops
+		// delivering canvas capture frames once earlier tests have run in the same browser, which left the scanner
+		// waiting for a first frame that never came.
+		const readyState = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'readyState')!;
+		Object.defineProperty(HTMLMediaElement.prototype, 'readyState', {
+			configurable: true,
+			get(this: HTMLMediaElement) {
+				return this.srcObject ? HTMLMediaElement.HAVE_ENOUGH_DATA : readyState.get!.call(this);
+			}
+		});
 		(globalThis as unknown as Record<string, unknown>).BarcodeDetector = class {
 			static async getSupportedFormats() {
 				return ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'qr_code'];
@@ -168,13 +178,8 @@ test('an unknown barcode opens the food form with the barcode, and the next look
 	await expect(sheet).toBeHidden();
 	await expect(page.getByRole('button', { name: new RegExp(`^${name}`) })).toBeVisible();
 
-	// The same code now finds the custom food in the library. Typed, not scanned: Linux WebKit (CI) often delivers
-	// no frames from a second canvas capture stream in the same page, even after a reload. The camera path to a
-	// library hit is covered by the Nutella scan.
-	await gotoHydrated(page, `/day/${scanDate(testInfo.project.name)}`);
+	// Scanning the same code again now finds the custom food in the library.
 	const again = await openScanner(page);
-	await again.getByLabel('Barcode number').fill(barcode);
-	await again.getByRole('button', { name: 'Look up' }).click();
 	await expect(again.getByRole('heading', { name })).toBeVisible();
 	// The amount step starts from the amount logged last for this food.
 	await expect(again.getByLabel('Amount')).toHaveValue('100');

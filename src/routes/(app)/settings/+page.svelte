@@ -106,6 +106,8 @@
 	// content does not vanish during the exit transition.
 	let editing = $state<Container | null>(null);
 	let editOpen = $state(false);
+	// Bumped on every Edit tap so the form remounts from the stored values, not what was typed before Cancel.
+	let editOpenings = $state(0);
 	let removing = $state<Container | null>(null);
 	let removeOpen = $state(false);
 	let deleting = $state(false);
@@ -255,6 +257,7 @@
 									icon={Pencil}
 									onclick={() => {
 										editing = container;
+										editOpenings++;
 										editOpen = true;
 									}}
 								/>
@@ -322,7 +325,7 @@
 
 <Sheet bind:open={editOpen} title="Edit container" description={editing?.name}>
 	{#if editing}
-		{#key editing.id}
+		{#key `${editing.id}:${editOpenings}`}
 			<ContainerForm
 				container={editing}
 				onsave={saveEdit}

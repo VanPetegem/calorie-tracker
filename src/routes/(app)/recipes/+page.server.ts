@@ -6,10 +6,8 @@ import type { PageServerLoad } from './$types';
 /** Active batches (this is where auto finish runs), recipes, and the latest finished batches. */
 export const load: PageServerLoad = async () => {
 	const { db, now } = await appContext();
+	// Active first: auto finish runs there and decides which batches the finished list holds.
 	const batches = await activeBatches(db, now);
-	return {
-		batches,
-		recipes: await listRecipes(db),
-		finished: await finishedBatches(db)
-	};
+	const [recipes, finished] = await Promise.all([listRecipes(db), finishedBatches(db)]);
+	return { batches, recipes, finished };
 };

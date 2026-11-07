@@ -1,3 +1,4 @@
+import { error } from '@sveltejs/kit';
 import { describe, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
@@ -119,6 +120,15 @@ describe('AmountStep', () => {
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Could not save');
 		await page.getByRole('button', { name: 'Log' }).click();
 		expect(onsubmit).toHaveBeenCalledTimes(2);
+	});
+
+	it('shows the reason the server rejected the amount with', async () => {
+		const onsubmit = vi.fn(async () => error(400, 'Add the cooked weight to log grams'));
+		render(AmountStep, props(oats, { onsubmit }));
+		await page.getByRole('button', { name: 'Log' }).click();
+		await expect
+			.element(page.getByRole('alert'))
+			.toHaveTextContent('Add the cooked weight to log grams');
 	});
 
 	it('offers Edit food only when asked to', async () => {

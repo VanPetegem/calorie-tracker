@@ -31,8 +31,8 @@ export const saveBatch = command(BatchInput, async (input): Promise<SaveBatchRes
 
 /** Marks a batch finished; it leaves the add sheet. */
 export const finishBatch = command(BatchIdInput, async ({ id }) => {
-	const { db } = await appContext();
-	await finish(db, id);
+	const { db, now } = await appContext();
+	await finish(db, id, now);
 });
 
 /** Makes a finished batch active again. */
