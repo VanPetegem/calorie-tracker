@@ -10,7 +10,7 @@
 	 * Not `showModal()`: Brave and Firefox on iOS place top layer content below the visible screen, so only the
 	 * sheet's title showed. The dialog opens with `show()` inside a fixed layer moved to the end of the body, and
 	 * the parts of a modal are added by hand: a scrim instead of `::backdrop`, and `sheet-stack.ts` for the rest
-	 * (newest sheet on top, the page behind `inert`, Escape and the Android back gesture close the top sheet).
+	 * (newest sheet on top, the page behind `inert`, Escape closes the top sheet).
 	 *
 	 * Focus: the element focused when the sheet opens is remembered and focused again after it closes, if it is still
 	 * in the page. Safari does not focus a button on click or tap, so after a touch open there is no opener to
@@ -64,9 +64,10 @@
 
 	function show(el: HTMLDialogElement, current: HTMLElement) {
 		closing = false;
+		// Read before pushLayer: making the page inert can blur the focused trigger.
+		const active = document.activeElement;
 		pushLayer(current, () => (open = false), !el.open);
 		if (el.open) return;
-		const active = document.activeElement;
 		opener = active instanceof HTMLElement && active !== document.body ? active : null;
 		el.show();
 	}
@@ -74,7 +75,8 @@
 	async function hide(el: HTMLDialogElement, current: HTMLElement) {
 		if (!el.open || closing) return;
 		closing = true;
-		// The sheet below (or the page) takes input again while this one animates out.
+		// The sheet below (or the page) takes input again while this one animates out: the closing layer is taken off
+		// the stack and lets taps through (`data-closing` on the layer).
 		popLayer(current);
 		await tick();
 		const animations = current.getAnimations({ subtree: true });
@@ -109,7 +111,7 @@
 	}
 </script>
 
-<div class="layer" bind:this={layer} {@attach portal}>
+<div class="layer" data-closing={closing || undefined} bind:this={layer} {@attach portal}>
 	<!--
 		The scrim closes on a tap. Keyboard users close with Escape or the close button, which makes this pointer
 		handler an enhancement.
@@ -175,6 +177,11 @@
 		position: fixed;
 		inset: 0;
 		z-index: 60;
+	}
+
+	/* A closing layer lets taps through to what is below it. */
+	.layer[data-closing] {
+		pointer-events: none;
 	}
 
 	/* A closed layer must not cover the page. */

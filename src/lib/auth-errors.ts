@@ -25,20 +25,20 @@ export function addPasskeyError(error: AuthClientError): { message: string; sign
 	return { message: 'The passkey was not saved. Try again.', signInAgain: false };
 }
 
+/** A dismissed or aborted ceremony is ordinary; anything else is named so a failing browser can be diagnosed. */
+const ORDINARY_SIGN_IN_FAILURES = new Set([
+	'AUTH_CANCELLED',
+	'ERROR_CEREMONY_ABORTED',
+	'NotAllowedError',
+	'AbortError'
+]);
+
 /** What to tell the user when signing in with a passkey failed. */
 export function signInPasskeyError(error: AuthClientError): string {
 	if (error.status === 429) return TOO_MANY;
 	if (error.code === 'NOT_SUPPORTED') {
 		return "This browser can't use passkeys. Sign in with your email and password.";
 	}
-	// A dismissed or aborted ceremony is ordinary; anything else is named so a failing browser can be diagnosed.
-	const ordinary = [
-		undefined,
-		'AUTH_CANCELLED',
-		'ERROR_CEREMONY_ABORTED',
-		'NotAllowedError',
-		'AbortError'
-	];
-	const detail = ordinary.includes(error.code) ? '' : ` (${error.code})`;
+	const detail = error.code && !ORDINARY_SIGN_IN_FAILURES.has(error.code) ? ` (${error.code})` : '';
 	return `No passkey was used${detail}. Try again, or sign in with your email and password.`;
 }

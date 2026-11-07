@@ -10,7 +10,12 @@ vi.mock('@simplewebauthn/browser', () => ({
 	browserSupportsWebAuthn,
 	WebAuthnAbortService: { cancelCeremony: vi.fn() },
 	WebAuthnError: class extends Error {
-		code = 'ERROR_CEREMONY_ABORTED';
+		code: string;
+		constructor({ code, name }: { code: string; name: string }) {
+			super(code);
+			this.code = code;
+			this.name = name;
+		}
 	}
 }));
 
@@ -92,6 +97,27 @@ describe('createPasskeySignIn', () => {
 			reason: 'cancelled',
 			error: { code: 'SecurityError', status: 400 }
 		});
+	});
+
+	it('keeps the library code of a WebAuthnError it identified', async () => {
+		const { WebAuthnError } = await import('@simplewebauthn/browser');
+		const passkey = createPasskeySignIn();
+		startAuthentication.mockRejectedValue(
+			new WebAuthnError({ code: 'ERROR_INVALID_RP_ID', name: 'SecurityError' } as never)
+		);
+		expect(await passkey.signIn()).toMatchObject({ error: { code: 'ERROR_INVALID_RP_ID' } });
+	});
+
+	it('reports the browser error name of a WebAuthnError the library passed through', async () => {
+		const { WebAuthnError } = await import('@simplewebauthn/browser');
+		const passkey = createPasskeySignIn();
+		startAuthentication.mockRejectedValue(
+			new WebAuthnError({
+				code: 'ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY',
+				name: 'NotAllowedError'
+			} as never)
+		);
+		expect(await passkey.signIn()).toMatchObject({ error: { code: 'NotAllowedError' } });
 	});
 
 	it('says a browser without WebAuthn is not supported, without starting a ceremony', async () => {

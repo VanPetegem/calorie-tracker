@@ -77,9 +77,10 @@ export function createPasskeySignIn(now = () => Date.now()) {
 			assertion = await startAuthentication({ optionsJSON: data, useBrowserAutofill: autofill });
 		} catch (cause) {
 			// Leave the options for the ceremony that aborted this one (the button aborts the autofill).
-			// A plain browser error keeps its name (SecurityError, NotSupportedError), so the message can show it.
+			// A browser error keeps its name (NotAllowedError, SecurityError), so the message can show it. The library
+			// passes NotAllowedError through under a generic code, with the browser's name on the error itself.
 			const code =
-				cause instanceof WebAuthnError
+				cause instanceof WebAuthnError && cause.code !== 'ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY'
 					? cause.code
 					: cause instanceof Error && cause.name !== 'Error'
 						? cause.name

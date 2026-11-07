@@ -210,6 +210,48 @@ describe('Sheet', () => {
 		await expect.poll(() => dialogEl().open, { timeout: 3000 }).toBe(false);
 	});
 
+	it('lets taps through to the page while it animates out', async () => {
+		render(SheetTestHarness);
+		await openSheet();
+		const layer = dialogEl().parentElement!;
+		await userEvent.keyboard('{Escape}');
+		expect(getComputedStyle(layer).pointerEvents).toBe('none');
+		await expect.poll(() => dialogEl().open, { timeout: 3000 }).toBe(false);
+	});
+
+	it('keeps the page inert without a gap when a node is added to the body', async () => {
+		render(SheetTestHarness);
+		await openSheet();
+		const trigger = page.getByRole('button', { name: 'Open sheet', includeHidden: true }).element();
+		const pageRoot = trigger.closest('[inert]')!;
+		const records: MutationRecord[] = [];
+		const changes = new MutationObserver((list) => records.push(...list));
+		changes.observe(pageRoot, { attributes: true, attributeFilter: ['inert'] });
+		const late = document.body.appendChild(document.createElement('div'));
+		await expect.poll(() => late.inert).toBe(true);
+		records.push(...changes.takeRecords());
+		expect(records).toHaveLength(0);
+		changes.disconnect();
+		late.remove();
+	});
+
+	it('draws a sheet reopened during its exit above a sheet opened meanwhile', async () => {
+		render(SheetTestHarness, { secondFirst: true });
+		await openSheet();
+		const first = dialogEl().parentElement!;
+		await userEvent.keyboard('{Escape}');
+		const second = page
+			.getByRole('dialog', { name: 'Second sheet', includeHidden: true })
+			.element();
+		// Simulates the race: the second sheet takes the top, then the first is pushed back without moving.
+		const { pushLayer, popLayer } = await import('./sheet-stack.ts');
+		pushLayer(second.parentElement!, () => {}, true);
+		pushLayer(first, () => {}, false);
+		expect(Number(first.style.zIndex)).toBeGreaterThan(Number(second.parentElement!.style.zIndex));
+		popLayer(first);
+		popLayer(second.parentElement!);
+	});
+
 	it('does not cover the page while closed', async () => {
 		render(SheetTestHarness);
 		expect(getComputedStyle(dialogEl().parentElement!).display).toBe('none');
