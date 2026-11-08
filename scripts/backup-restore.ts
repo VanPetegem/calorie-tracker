@@ -9,21 +9,23 @@
  * Run with `node --experimental-strip-types`.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { restoreStatements } from '../src/lib/server/backup/restore.ts';
+import { dirname, resolve } from 'node:path';
+import { latestMigrationFile, restoreStatements } from '../src/lib/server/backup/restore.ts';
 
 const [input, output] = process.argv.slice(2);
 try {
 	if (!input || !output) {
 		throw new Error('Usage: pnpm backup:restore <backup.json> <restore.sql>');
 	}
-	const journal = JSON.parse(
+	if (resolve(input) === resolve(output))
+		throw new Error('The output must not overwrite the backup file');
+	const journal: unknown = JSON.parse(
 		readFileSync(new URL('../drizzle/meta/_journal.json', import.meta.url), 'utf8')
-	) as { entries: { tag: string }[] };
-	const latest = journal.entries.at(-1)?.tag;
-	if (!latest) throw new Error('drizzle/meta/_journal.json has no migrations');
-	// d1_migrations stores the file name, so the backup's tag is `<journal tag>.sql`.
-	const statements = restoreStatements(JSON.parse(readFileSync(input, 'utf8')), `${latest}.sql`);
+	);
+	const statements = restoreStatements(
+		JSON.parse(readFileSync(input, 'utf8')),
+		latestMigrationFile(journal)
+	);
 	mkdirSync(dirname(output), { recursive: true });
 	writeFileSync(output, `${statements.join(';\n')};\n`);
 	console.log(`Wrote ${statements.length} statements to ${output}`);

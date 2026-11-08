@@ -62,3 +62,15 @@ export function restoreStatements(file: unknown, migration: string): string[] {
 	}
 	return statements;
 }
+
+/**
+ * The `migration` a restore needs: the newest tag of `drizzle/meta/_journal.json` (passed parsed) as `d1_migrations`
+ * stores it, with `.sql`.
+ */
+export function latestMigrationFile(journal: unknown): string {
+	const entries = (journal as { entries?: { tag?: unknown }[] } | null)?.entries;
+	const tag = Array.isArray(entries) ? entries.at(-1)?.tag : undefined;
+	if (typeof tag !== 'string' || tag === '')
+		throw new Error('drizzle/meta/_journal.json has no migrations');
+	return `${tag}.sql`;
+}

@@ -1,9 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { seedBackupRows, TRICKY_NAME, TRICKY_REAL } from '../test/backup-seed.ts';
 import { createTestDb } from '../test/d1.ts';
 import { readBackup } from './export.ts';
 import { BACKUP_TABLES, BACKUP_VERSION, type BackupFile } from './format.ts';
-import { restoreStatements } from './restore.ts';
+import { latestMigrationFile, restoreStatements } from './restore.ts';
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>;
 
@@ -100,5 +101,28 @@ describe('restoreStatements', () => {
 	it('refuses anything that is not a backup object', () => {
 		expect(() => restoreStatements(null, LATEST_MIGRATION)).toThrow('expected a JSON object');
 		expect(() => restoreStatements([], LATEST_MIGRATION)).toThrow('expected a JSON object');
+	});
+});
+
+describe('latestMigrationFile', () => {
+	// Created in a hook (30 s timeout): migrating a fresh D1 can exceed the 5 s test timeout under a full run.
+	let testDb: TestDb;
+	beforeAll(async () => {
+		testDb = await createTestDb();
+	});
+	afterAll(async () => {
+		await testDb.dispose();
+	});
+
+	it('names the migration an export of a fully migrated database records', async () => {
+		const journal: unknown = JSON.parse(
+			readFileSync(new URL('../../../../drizzle/meta/_journal.json', import.meta.url), 'utf8')
+		);
+		const { migration } = await readBackup(testDb.d1, NOW);
+		expect(latestMigrationFile(journal)).toBe(migration);
+	});
+
+	it('refuses a journal without migrations', () => {
+		expect(() => latestMigrationFile({ entries: [] })).toThrow('has no migrations');
 	});
 });

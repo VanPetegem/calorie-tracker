@@ -299,12 +299,14 @@ The auth tables are untouched, so the passkey keeps working. Check out the commi
 commit whose newest migration is the same.
 
 ```sh
-# 1. The target must be at the backup's migration; both must print the same name.
-pnpm wrangler d1 execute DB --remote --command "SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1"
-# 2. Note the Time Travel bookmark: a remote file import may not roll back on an error halfway through.
-pnpm wrangler d1 time-travel info DB
-# 3. Download, build the SQL (it refuses another `version` or `migration`), run it.
+# 1. Download the backup.
 pnpm wrangler r2 object get kcal-backups/backups/2026-11-09.json --remote --file .backups/backup.json
+# 2. The target must be at the backup's migration; both commands must print the same name.
+grep -o '"migration":"[^"]*"' .backups/backup.json
+pnpm wrangler d1 execute DB --remote --command "SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1"
+# 3. Note the Time Travel bookmark: a remote file import may not roll back on an error halfway through.
+pnpm wrangler d1 time-travel info DB
+# 4. Build the SQL (it refuses another `version` or `migration`) and run it.
 pnpm backup:restore .backups/backup.json .backups/restore.sql
 pnpm wrangler d1 execute DB --remote --file .backups/restore.sql
 ```
