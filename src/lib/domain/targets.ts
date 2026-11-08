@@ -99,10 +99,11 @@ export function targetKcal(
 /**
  * The target row of the week starting `weekStart`. Everything comes from the days before that Monday: the trend and
  * rate on the Sunday before, and the adaptive window ending there, so weigh-ins and intakes from the week itself never
- * change the row. Pass `trendSeries(weighIns, addDays(weekStart, -1))` built from the weigh-ins dated before
- * `weekStart`. When there are none (the first week, where the onboarding weigh-in is today), pass the single earliest
- * weigh-in ever instead (`rowWeighIns` in the targets repository does both): its kg stands in for the trend and the
- * rate is null, and later weigh-ins of the week cannot change the row.
+ * change the row. Pass `trendSeries(weighIns, addDays(weekStart, -1))` over all weigh-ins: points dated after that
+ * Sunday stay out of the seed, the trend on the Sunday, the rate and the window. When no weigh-in is dated before
+ * the week (the first week, where the onboarding weigh-in is today), the trend on the Sunday is null and the kg of
+ * the earliest weigh-in stands in for the trend (`series[0]`), with a null rate; later weigh-ins of the week cannot
+ * change it.
  * `previousUsed` is the TDEE used of the latest earlier row, null for the first. Age is taken on `weekStart`.
  * Throws a RangeError for an empty series.
  */

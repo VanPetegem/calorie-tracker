@@ -4,12 +4,14 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-08
 
-- **A week row with no weigh-in before its week is built from the single earliest weigh-in ever.** `currentTarget`
-  builds the row from weigh-ins dated before `weekStart` (`rowWeighIns` in `server/targets/repo.ts`). In the user's
-  first week the onboarding weigh-in is today, so there are none; the row then uses only the earliest weigh-in as the
-  series (its kg is the trend, the rate is null). This overrides the plan's before-only rule, which left an empty
-  series and a `weekTarget` RangeError, and keeps the row the same however many weigh-ins the week gains. Tested: a
-  first-week row stays the same after a later weigh-in, also when recomputed.
+- **A week row with no weigh-in before its week uses the earliest weigh-in's kg as the trend.** `currentTarget` passes
+  all weigh-ins to `trendSeries(weighIns, sunday)`, where `seedUntil` keeps weigh-ins after the Sunday out of the seed,
+  and `weekTarget` reads only the trend on that Sunday (`trendOn`) and the adaptive window before the week, so in-week
+  weigh-ins never change the row. In the user's first week the onboarding weigh-in is today, so nothing is dated
+  before the week: `trendOn` is null and `weekTarget` falls back to `series[0].kg`, the kg of the earliest weigh-in
+  (not its trend), with a null rate. This differs from the plan's before-only rule, which left an empty series and a
+  `weekTarget` RangeError, and needs no separate weigh-in filter (a first draft had a `rowWeighIns` helper; review
+  showed it redundant). Tested: a first-week row stays the same after a later weigh-in, also when recomputed.
 - **Weekly target rows (Task 7).** `currentTarget` inserts with `ON CONFLICT DO NOTHING` and reads back, so two loads
   of a new week leave one row. `recomputeCurrentWeek` (settings patch plus this week's row) and `saveOnboarding`
   (profile, goal rate, today's weigh-in, row) each run in one `db.batch`; a test with a failing trigger on
@@ -18,6 +20,11 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
   all `currentTarget` throws `NoWeighInError` (separate from `ProfileIncompleteError`) and `targetFor` falls back to
   the stored rows, so deleting every weigh-in does not break Today. `loadDay` returns `target: null` while the profile
   is incomplete instead of throwing; Task 8's redirect keeps those pages away.
+- **`recomputeCurrentWeek` and `saveOnboarding` re-read the settings row inside the function** instead of merging the
+  patch into `ctx.settings`, which was read at the start of the request. This narrows the race of two overlapping
+  settings saves rather than closing it: the read and the batch are separate statements, so a save landing between
+  them is still lost from the row (the settings themselves stay right, as each patch writes only its own fields).
+  Closing it needs the row computed in one statement with the write; not worth it for one user.
 - **Migration 0022 (`0022_targets.sql`) rebuilds `settings` and creates `weekly_targets`; the migration check passes.**
   Dropping `settings_manual_target_pair` forces a rebuild. drizzle-kit's rebuild was hand edited twice: `PRAGMA
 foreign_keys=OFF/ON` became `PRAGMA defer_foreign_keys = on` as in 0020, and its copy `INSERT ... SELECT "id",

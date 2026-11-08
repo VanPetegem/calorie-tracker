@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { saveBatch, finishBatch } from '../batches/repo.ts';
+import { weeklyTargets } from '../db/schema.ts';
 import type { AppContext } from '../context.ts';
 import { createFood } from '../foods/repo.ts';
 import { getSettings, settingsWrite } from '../settings/repo.ts';
@@ -113,5 +114,34 @@ describe('day data', () => {
 			carbsG: row.carbsG,
 			carbsFloored: row.carbsFloored
 		});
+	});
+
+	it('shows the target of a past date’s own week, not this week’s', async () => {
+		await test.db.insert(weeklyTargets).values({
+			weekStart: '2026-10-26',
+			tdeeFormula: 2600,
+			tdeeAdaptive: null,
+			tdeeUsed: 2600,
+			targetKcal: 2505,
+			proteinG: 130,
+			carbsG: 400,
+			fatG: 80,
+			carbsFloored: false,
+			trendKg: 72,
+			rateKgPerWeek: null,
+			validDays: 0,
+			weighIns: 0
+		});
+		const context = {
+			...ctx,
+			db: test.db,
+			settings: await getSettings(test.db)
+		} as AppContext;
+
+		const past = (await loadDay(context, '2026-10-28')).target;
+		const current = (await loadDay(context, '2026-11-04')).target;
+
+		expect(past?.kcal).toBe(2505);
+		expect(current?.kcal).not.toBe(2505);
 	});
 });

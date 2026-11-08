@@ -289,7 +289,7 @@ test('Ctrl+K opens the add sheet on desktop', async ({ page }) => {
 	await expect(page.getByRole('searchbox', { name: 'Search foods' })).toBeFocused();
 });
 
-// Custom foods, quick add and the temporary target.
+// Custom foods and quick add.
 
 test('a custom food can be created from the add sheet and logged', async ({ page }, testInfo) => {
 	const date = foodDate(testInfo.project.name);

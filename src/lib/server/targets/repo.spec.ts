@@ -183,7 +183,8 @@ describe('targets repository', () => {
 	it('replaces only this week on a settings change and saves the setting with it', async () => {
 		await withProfile();
 		await saveWeight(test.db, { date: '2026-10-20', kg: 72 });
-		await currentTarget(await ctx('2026-10-28'));
+		const lastWeekRow = storedRow(LAST_WEEK, { tdeeUsed: 2500 });
+		await test.db.insert(weeklyTargets).values(lastWeekRow);
 		const lastWeek = await test.d1
 			.prepare('SELECT * FROM weekly_targets WHERE week_start = ?')
 			.bind(LAST_WEEK)
@@ -191,15 +192,53 @@ describe('targets repository', () => {
 		const before = await currentTarget(await ctx(WED));
 
 		const after = await recomputeCurrentWeek(await ctx(WED), { goalRatePct: 0.5 });
+		const again = await recomputeCurrentWeek(await ctx(WED), { goalRatePct: 0.5 });
 
 		expect(after.targetKcal).toBeGreaterThan(before.targetKcal);
-		expect((await rows()).find((row) => row.weekStart === MON)).toEqual(after);
+		// Always smoothed from last week's row, never from the row being replaced.
+		expect(after.tdeeAdaptive).toBeNull();
+		expect(after.tdeeUsed).toBeCloseTo(smoothTdee(after.tdeeFormula, lastWeekRow.tdeeUsed), 9);
+		expect(again.tdeeUsed).toBe(after.tdeeUsed);
+		expect((await rows()).find((row) => row.weekStart === MON)).toEqual(again);
 		expect((await getSettings(test.db)).goalRatePct).toBe(0.5);
 		const lastWeekAfter = await test.d1
 			.prepare('SELECT * FROM weekly_targets WHERE week_start = ?')
 			.bind(LAST_WEEK)
 			.all();
 		expect(lastWeekAfter.results).toEqual(lastWeek.results);
+	});
+
+	it('stamps the clock as computed_at when a row is replaced', async () => {
+		await withProfile();
+		await saveWeight(test.db, { date: '2026-10-30', kg: 72 });
+		const created = await currentTarget(await ctx(WED));
+		const recomputeAt = new Date('2026-11-04T12:00:00.000Z');
+		const onboardAt = new Date('2026-11-04T13:00:00.000Z');
+
+		const recomputed = await recomputeCurrentWeek(
+			{ ...(await ctx(WED)), now: recomputeAt },
+			{ goalRatePct: 0.5 }
+		);
+		const onboarded = await saveOnboarding(
+			{ ...(await ctx(WED)), now: onboardAt },
+			{ ...PROFILE, kg: 72, goalRatePct: 0.5 }
+		);
+
+		expect(created.computedAt).not.toBe(recomputeAt.toISOString());
+		expect(recomputed.computedAt).toBe(recomputeAt.toISOString());
+		expect(onboarded.computedAt).toBe(onboardAt.toISOString());
+	});
+
+	it('computes a settings change from the settings in the database, not the request’s copy', async () => {
+		await withProfile();
+		await saveWeight(test.db, { date: '2026-10-30', kg: 72 });
+		const stale = await ctx(WED);
+		await settingsWrite(test.db, { fatPct: 0.35 });
+
+		const viaStale = await recomputeCurrentWeek(stale, { goalRatePct: 0.5 });
+		const viaFresh = await recomputeCurrentWeek(await ctx(WED), { goalRatePct: 0.5 });
+
+		expect(withoutComputedAt(viaStale)).toEqual(withoutComputedAt(viaFresh));
 	});
 
 	describe('when the row write fails', () => {
@@ -240,6 +279,24 @@ describe('targets repository', () => {
 		expect(await listWeights(test.db)).toEqual([{ date: WED, kg: 72 }]);
 		expect(await rows()).toEqual([row]);
 		expect(row).toMatchObject({ weekStart: MON, trendKg: 72 });
+	});
+
+	it('computes the onboarding row with the chosen goal rate', async () => {
+		const low = await saveOnboarding(await ctx(WED), { ...PROFILE, kg: 72, goalRatePct: 0.35 });
+		const high = await saveOnboarding(await ctx(WED), { ...PROFILE, kg: 72, goalRatePct: 0.5 });
+
+		expect(high.targetKcal).toBeGreaterThan(low.targetKcal);
+	});
+
+	it('computes the onboarding row from the settings in the database, not the request’s copy', async () => {
+		const stale = await ctx(WED);
+		await settingsWrite(test.db, { fatPct: 0.35 });
+		const input = { ...PROFILE, kg: 72, goalRatePct: 0.5 };
+
+		const viaStale = await saveOnboarding(stale, input);
+		const viaFresh = await saveOnboarding(await ctx(WED), input);
+
+		expect(withoutComputedAt(viaStale)).toEqual(withoutComputedAt(viaFresh));
 	});
 
 	// On WED the birth dates below make the age 15, 16, 100 and 101.
@@ -329,6 +386,10 @@ describe('targets repository', () => {
 
 		it('is the earliest row before the first one', async () => {
 			expect(await kcalOn('2026-09-20')).toBe(2700);
+		});
+
+		it('is this week’s row for a date in a later week, which has none yet', async () => {
+			expect((await targetFor(await ctx(SAT), '2026-11-16')).weekStart).toBe(MON);
 		});
 
 		it('makes this week’s row first, and a past date still reads its own week', async () => {
