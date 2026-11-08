@@ -27,10 +27,12 @@ test('every visible button and radio is at least 44 px tall', async ({ page }) =
 test('the theme control switches the theme and stores the preference', async ({ page }) => {
 	await page.emulateMedia({ colorScheme: 'dark' });
 	await gotoHydrated(page, '/design');
-	await page.getByRole('radio', { name: 'Light' }).click();
+	// The profile forms on the page have a "Light" activity level too, so scope to the theme control.
+	const theme = page.getByRole('radiogroup', { name: 'Theme' });
+	await theme.getByRole('radio', { name: 'Light' }).click();
 	await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 	expect(await page.evaluate(() => localStorage.getItem('kcal-theme'))).toBe('light');
-	await page.getByRole('radio', { name: 'Dark' }).click();
+	await theme.getByRole('radio', { name: 'Dark' }).click();
 	await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 });
 

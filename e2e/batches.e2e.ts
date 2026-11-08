@@ -346,6 +346,8 @@ test('Settings renames and deletes a container', async ({ page }, testInfo) => {
 	await field(page, 'Weight of the empty container').fill('1200');
 	await page.getByRole('button', { name: 'Save container' }).click();
 	await expect(field(page, 'Container')).toHaveText(new RegExp(name));
+	// The save refreshes the page's data; leaving while that runs can fail the next goto as interrupted.
+	await page.waitForLoadState('networkidle');
 
 	await gotoHydrated(page, '/settings');
 	const section = page.getByRole('region', { name: 'Containers' });

@@ -242,6 +242,13 @@ settings write (saveGoal, saveMacroRules, profile) -> recomputeCurrentWeek -> on
   get no row, and nothing is backfilled.
 - The Settings page lists the stored rows (`targetsHistory`), marking formula and adaptive weeks. The Weight tab shows
   this week's target and the goal slope on the chart.
+- Onboarding: until the profile is complete (`isProfileComplete`), every `(app)` page redirects (303) to `/onboarding`
+  (`src/routes/(app)/+layout.server.ts`, rule in `onboardingRedirect`, `src/lib/server/guard.ts`); a complete profile
+  sends `/onboarding` back to `/`. Remote functions are not under the layout, so they are not redirected.
+  `completeOnboardingOn` saves the profile, today's weigh-in and this week's row in one batch and refuses a second run.
+- The age limit (16 to 100, counted on the settings timezone's day) is checked once, in the repository
+  (`ageInRange`; `AgeOutOfRangeError`). The commands map it to 400 "Age must be 16 to 100"; the profile form checks
+  the same function on blur.
 - Settings writes that recompute the week answer 400 "Log a weigh-in first" when there is no weigh-in, and write nothing.
 
 ## Directory map
@@ -251,6 +258,7 @@ settings write (saveGoal, saveMacroRules, profile) -> recomputeCurrentWeek -> on
 | `src/hooks.server.ts`          | Request guard (rate limit, session, access)                                                                                                                     |
 | `src/routes/(app)`             | Signed in pages inside the app shell (tab bar, sidebar)                                                                                                         |
 | `src/routes/(auth)`            | `/login` and `/setup` without the shell                                                                                                                         |
+| `src/routes/onboarding`        | First run profile, goal rate and weight, without the shell                                                                                                      |
 | `src/lib/server`               | Better Auth setup, guard rules, rate limits, Drizzle schema, `off/` client, `foods/`, `log/`, `recipes/`, `batches/`, `weights/`, `targets/`, `settings/` repos |
 | `src/lib/schemas`              | Valibot schemas shared by forms and remote commands                                                                                                             |
 | `src/lib/domain`               | Pure domain math: nutrition, recipes (`batch.ts`), weight trend (`trend.ts`), targets, dates, search text, barcodes, limits                                     |

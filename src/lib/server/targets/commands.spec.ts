@@ -100,7 +100,6 @@ describe('target commands', () => {
 		]);
 	});
 
-
 	it('answers 400 "Log a weigh-in first" and writes nothing when a goal save has no weigh-in', async () => {
 		await settingsWrite(test.db, PROFILE);
 

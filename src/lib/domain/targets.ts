@@ -78,7 +78,7 @@ export function macroTargets(
 
 /** The goal gain per week in kg: `goalRatePct` percent of the trend weight (parent spec 6.4). */
 export function goalKgPerWeek(trendKg: number, goalRatePct: number): number {
-	return (trendKg * goalRatePct) / 100;
+	return (trendKg * goalRatePct) / PERCENT;
 }
 
 /**

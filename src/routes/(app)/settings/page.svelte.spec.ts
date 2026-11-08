@@ -6,6 +6,7 @@ import { toasts } from '#lib/stores/toasts.svelte.ts';
 import Page from './+page.svelte';
 
 const mocks = vi.hoisted(() => ({
+	saveProfile: vi.fn(),
 	saveGoal: vi.fn(),
 	saveMacroRules: vi.fn(),
 	saveContainer: vi.fn(),
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 	invalidateAll: vi.fn()
 }));
 
+vi.mock('./profile.remote.ts', () => ({ saveProfile: mocks.saveProfile }));
 vi.mock('./targets.remote.ts', () => ({
 	saveGoal: mocks.saveGoal,
 	saveMacroRules: mocks.saveMacroRules
@@ -41,6 +43,13 @@ function show() {
 	return render(Page, {
 		data: {
 			containers: [],
+			today: '2026-11-08',
+			profile: {
+				sex: 'male',
+				birthDate: '1990-11-04',
+				heightCm: 180,
+				activityLevel: 'moderate'
+			},
 			goalRatePct: 0.35,
 			macroRules: { proteinGPerKg: 1.8, fatPct: 0.25, energyDensity: 5000 },
 			trendKg: 70.4,
