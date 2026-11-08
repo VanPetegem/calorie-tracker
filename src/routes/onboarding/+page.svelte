@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button, SegmentedControl } from '#lib/components/ui/index.ts';
+	import SignOutButton from '#lib/components/ui/SignOutButton.svelte';
 	import ProfileForm from '#lib/components/settings/ProfileForm.svelte';
 	import TargetExplainer from '#lib/components/settings/TargetExplainer.svelte';
 	import { DEFAULT_GOAL_RATE, GOAL_RATES } from '#lib/domain/constants.ts';
@@ -34,6 +35,11 @@
 			throw cause;
 		}
 	}
+
+	// The heading that replaces the form takes focus, so a screen reader announces the target.
+	function focusOnShow(node: HTMLElement) {
+		node.focus();
+	}
 </script>
 
 <svelte:head>
@@ -43,7 +49,13 @@
 <main class="screen">
 	<div class="flex flex-col gap-6">
 		{#if target}
-			<h1 class="text-3xl font-semibold tracking-tight text-text">Your first target</h1>
+			<h1
+				class="text-3xl font-semibold tracking-tight text-text"
+				tabindex="-1"
+				{@attach focusOnShow}
+			>
+				Your first target
+			</h1>
 			<TargetExplainer {target} />
 			<Button href={resolve('/(app)')}>Start</Button>
 		{:else}
@@ -75,6 +87,7 @@
 				onsubmit={submit}
 				extra={goal}
 			/>
+			<SignOutButton />
 		{/if}
 	</div>
 </main>

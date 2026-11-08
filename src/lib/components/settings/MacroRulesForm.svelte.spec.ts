@@ -74,4 +74,12 @@ describe('MacroRulesForm', () => {
 		await page.getByRole('button', { name: 'Save rules' }).click();
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Add a weigh-in first');
 	});
+
+	it('shows the reason a settings conflict was answered with', async () => {
+		const onsave = vi.fn(async () => error(409, 'Settings changed, try again'));
+		render(MacroRulesForm, { value, onsave });
+		await page.getByLabelText('Protein per kg').fill('2');
+		await page.getByRole('button', { name: 'Save rules' }).click();
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Settings changed, try again');
+	});
 });

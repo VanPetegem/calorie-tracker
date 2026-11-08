@@ -29,7 +29,7 @@
 	let touched = $state({ proteinGPerKg: false, fatPct: false, energyDensity: false });
 	let submitted = $state(false);
 	let busy = $state(false);
-	// The message of the failed save: the server's reason for a 400, else a generic one.
+	// The message of the failed save: the server's reason for a 400 or a 409 conflict, else a generic one.
 	let failure = $state<string | null>(null);
 	// Advanced opens when its field has an error, so a failed save is never hidden inside it.
 	let advanced = $state(false);
@@ -66,7 +66,10 @@
 		try {
 			await onsave(result.output);
 		} catch (cause) {
-			failure = isHttpError(cause, 400) ? cause.body.message : 'Could not save. Try again.';
+			failure =
+				isHttpError(cause, 400) || isHttpError(cause, 409)
+					? cause.body.message
+					: 'Could not save. Try again.';
 		} finally {
 			busy = false;
 		}

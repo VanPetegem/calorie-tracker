@@ -1,6 +1,5 @@
 <script lang="ts">
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
-	import LogOut from '@lucide/svelte/icons/log-out';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Soup from '@lucide/svelte/icons/soup';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -14,6 +13,7 @@
 		ListItem,
 		Sheet
 	} from '#lib/components/ui/index.ts';
+	import SignOutButton from '#lib/components/ui/SignOutButton.svelte';
 	import ContainerForm from '#lib/components/recipes/ContainerForm.svelte';
 	import GoalPicker from '#lib/components/settings/GoalPicker.svelte';
 	import MacroRulesForm from '#lib/components/settings/MacroRulesForm.svelte';
@@ -22,15 +22,12 @@
 	import type { ContainerInput } from '#lib/schemas/batch.ts';
 	import type { MacroRulesInput, ProfileInput } from '#lib/schemas/settings.ts';
 	import type { Container } from '#lib/server/db/schema.ts';
-	import { signOutOrWarn } from '#lib/auth-client.ts';
 	import { toasts } from '#lib/stores/toasts.svelte.ts';
 	import { deleteContainer, saveContainer } from '../recipes/batches.remote.ts';
 	import { saveProfile } from './profile.remote.ts';
 	import { saveGoal, saveMacroRules } from './targets.remote.ts';
 
 	let { data } = $props();
-
-	let signingOut = $state(false);
 
 	// Containers: one sheet each for editing and for the delete question. The container is kept after closing so the
 	// content does not vanish during the exit transition.
@@ -92,11 +89,6 @@
 		await saveMacroRules(input);
 		toasts.show({ message: 'Macro rules saved', tone: 'success' });
 		await refresh();
-	}
-
-	async function handleSignOut() {
-		signingOut = true;
-		if (!(await signOutOrWarn())) signingOut = false;
 	}
 </script>
 
@@ -243,9 +235,7 @@
 			>.
 		</p>
 	</section>
-	<Button variant="secondary" icon={LogOut} loading={signingOut} onclick={handleSignOut}>
-		Sign out
-	</Button>
+	<SignOutButton />
 </div>
 
 <Sheet bind:open={editOpen} title="Edit container" description={editing?.name}>

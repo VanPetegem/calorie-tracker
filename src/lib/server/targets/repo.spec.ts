@@ -6,6 +6,7 @@ import { logEntries, settings, weeklyTargets, weights, type WeeklyTarget } from 
 import { addQuickEntry } from '../log/repo.ts';
 import { getSettings, settingsWrite, type TargetSettingsPatch } from '../settings/repo.ts';
 import { createTestDb } from '../test/d1.ts';
+import { beforeSettingsRead, interleaved } from '../test/interleave.ts';
 import { listWeights, saveWeight } from '../weights/repo.ts';
 import {
 	AgeOutOfRangeError,
@@ -78,6 +79,11 @@ describe('targets repository', () => {
 
 	async function withProfile(patch: TargetSettingsPatch = PROFILE) {
 		await settingsWrite(test.db, patch);
+	}
+
+	/** Makes the profile incomplete again, so another onboarding may run. */
+	async function unsetProfile() {
+		await settingsWrite(test.db, { sex: null });
 	}
 
 	async function ctx(today: string) {
@@ -261,6 +267,7 @@ describe('targets repository', () => {
 			{ ...(await ctx(WED)), now: recomputeAt },
 			{ goalRatePct: 0.5 }
 		);
+		await unsetProfile();
 		const onboarded = await saveOnboarding(
 			{ ...(await ctx(WED)), now: onboardAt },
 			{ ...PROFILE, kg: 72, goalRatePct: 0.5 }
@@ -281,6 +288,41 @@ describe('targets repository', () => {
 		const viaFresh = await recomputeCurrentWeek(await ctx(WED), { goalRatePct: 0.5 });
 
 		expect(withoutComputedAt(viaStale)).toEqual(withoutComputedAt(viaFresh));
+	});
+
+	it('retries a settings save another save landed in, so the row is computed from the settings it ends with', async () => {
+		await withProfile();
+		await saveWeight(test.db, { date: '2026-10-20', kg: 72 });
+		await test.db.insert(weeklyTargets).values(storedRow(LAST_WEEK, { tdeeUsed: 2000 }));
+		await currentTarget(await ctx(WED));
+		const db = interleaved(
+			test.db,
+			async () => recomputeCurrentWeek(await ctx(WED), { heightCm: 170 }),
+			1
+		);
+
+		const saved = await recomputeCurrentWeek({ ...(await ctx(WED)), db }, { goalRatePct: 0.5 });
+
+		expect(await getSettings(test.db)).toMatchObject({ heightCm: 170, goalRatePct: 0.5 });
+		expect((await rows()).find((row) => row.weekStart === MON)).toEqual(saved);
+		// The interleaved profile change made this week unsmoothed; the retry reads that, not its first read.
+		expect(saved.tdeeUsed).toBe(saved.tdeeFormula);
+		const again = await recomputeCurrentWeek(await ctx(WED), { goalRatePct: 0.5 });
+		expect(withoutComputedAt(saved)).toEqual(withoutComputedAt(again));
+	});
+
+	it('reads this week’s row after the settings, so a profile change landing before the settings read is not smoothed away', async () => {
+		await withProfile();
+		await saveWeight(test.db, { date: '2026-10-20', kg: 72 });
+		await test.db.insert(weeklyTargets).values(storedRow(LAST_WEEK, { tdeeUsed: 2000 }));
+		await currentTarget(await ctx(WED));
+		const db = beforeSettingsRead(test.db, async () =>
+			recomputeCurrentWeek(await ctx(WED), { heightCm: 170 })
+		);
+
+		const saved = await recomputeCurrentWeek({ ...(await ctx(WED)), db }, { goalRatePct: 0.5 });
+
+		expect(saved.tdeeUsed).toBe(saved.tdeeFormula);
 	});
 
 	describe('when the row write fails', () => {
@@ -325,6 +367,7 @@ describe('targets repository', () => {
 
 	it('computes the onboarding row with the chosen goal rate', async () => {
 		const low = await saveOnboarding(await ctx(WED), { ...PROFILE, kg: 72, goalRatePct: 0.35 });
+		await unsetProfile();
 		const high = await saveOnboarding(await ctx(WED), { ...PROFILE, kg: 72, goalRatePct: 0.5 });
 
 		expect(high.targetKcal).toBeGreaterThan(low.targetKcal);
@@ -336,6 +379,7 @@ describe('targets repository', () => {
 		const input = { ...PROFILE, kg: 72, goalRatePct: 0.5 };
 
 		const viaStale = await saveOnboarding(stale, input);
+		await unsetProfile();
 		const viaFresh = await saveOnboarding(await ctx(WED), input);
 
 		expect(withoutComputedAt(viaStale)).toEqual(withoutComputedAt(viaFresh));

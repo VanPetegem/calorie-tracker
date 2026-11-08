@@ -6,7 +6,10 @@ import { weekRow } from '#lib/components/targets/week.fixture.ts';
 import { PROFILE_ALREADY_SET_UP } from '#lib/schemas/settings.ts';
 import Page from './+page.svelte';
 
-const mocks = vi.hoisted(() => ({ completeOnboarding: vi.fn(), goto: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+	completeOnboarding: vi.fn(),
+	goto: vi.fn()
+}));
 
 vi.mock('./onboarding.remote.ts', () => ({ completeOnboarding: mocks.completeOnboarding }));
 vi.mock('$app/navigation', () => ({ goto: mocks.goto, invalidateAll: vi.fn() }));
@@ -27,6 +30,11 @@ async function fillAndSubmit() {
 }
 
 describe('onboarding page', () => {
+	it('offers sign out on the setup screen', async () => {
+		render(Page, { data: { kg: null, today: '2026-11-08' }, params: {}, form: null } as never);
+		await expect.element(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+	});
+
 	it('goes to Today when the profile is already set up', async () => {
 		mocks.completeOnboarding.mockImplementation(async () => error(400, PROFILE_ALREADY_SET_UP));
 		await fillAndSubmit();
@@ -46,5 +54,12 @@ describe('onboarding page', () => {
 		await fillAndSubmit();
 		await expect.element(page.getByRole('heading', { name: 'Your first target' })).toBeVisible();
 		expect(mocks.goto).not.toHaveBeenCalled();
+		expect(page.getByRole('button', { name: 'Sign out' }).elements()).toHaveLength(0);
+	});
+
+	it('moves focus to the first target heading after a save', async () => {
+		mocks.completeOnboarding.mockResolvedValue(weekRow('2026-11-02', { targetKcal: 2450 }));
+		await fillAndSubmit();
+		await expect.element(page.getByRole('heading', { name: 'Your first target' })).toHaveFocus();
 	});
 });

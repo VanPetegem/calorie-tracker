@@ -50,4 +50,12 @@ describe('GoalPicker', () => {
 		await page.getByRole('button', { name: 'Save goal' }).click();
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Add a weigh-in first');
 	});
+
+	it('shows the reason a settings conflict was answered with', async () => {
+		const onsave = vi.fn(async () => error(409, 'Settings changed, try again'));
+		render(GoalPicker, { value: 0.35, trendKg: 70.4, onsave });
+		await page.getByRole('radio', { name: /^0\.5 %/ }).click();
+		await page.getByRole('button', { name: 'Save goal' }).click();
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Settings changed, try again');
+	});
 });

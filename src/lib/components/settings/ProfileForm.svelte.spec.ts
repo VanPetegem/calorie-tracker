@@ -37,6 +37,18 @@ describe('ProfileForm', () => {
 		expect(page.getByText('Age must be 16 to 100').query()).toBeNull();
 	});
 
+	it('refuses an age out of range on submit and does not save', async () => {
+		const onsubmit = renderSettings('2026-11-08');
+		await page.getByRole('radio', { name: 'Male', exact: true }).click();
+		// Born 8 November 2015: 11 on the day given.
+		await field('Birth date').fill('2015-11-08');
+		await field('Height').fill('180');
+		await page.getByRole('radio', { name: 'Moderate' }).click();
+		await page.getByRole('button', { name: 'Save profile' }).click();
+		await expect.element(page.getByText('Age must be 16 to 100')).toBeVisible();
+		expect(onsubmit).not.toHaveBeenCalled();
+	});
+
 	it('does not submit an incomplete profile and shows an error for each missing field', async () => {
 		const onsubmit = renderSettings('2026-11-08');
 		await page.getByRole('button', { name: 'Save profile' }).click();
@@ -111,5 +123,16 @@ describe('ProfileForm', () => {
 		await page.getByRole('radio', { name: 'Moderate' }).click();
 		await page.getByRole('button', { name: 'Save profile' }).click();
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Add a weigh-in first');
+	});
+
+	it('shows the reason a settings conflict was answered with', async () => {
+		const onsubmit = vi.fn(async () => error(409, 'Settings changed, try again'));
+		renderSettings('2026-11-08', onsubmit);
+		await page.getByRole('radio', { name: 'Male', exact: true }).click();
+		await field('Birth date').fill('1990-11-04');
+		await field('Height').fill('180');
+		await page.getByRole('radio', { name: 'Moderate' }).click();
+		await page.getByRole('button', { name: 'Save profile' }).click();
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Settings changed, try again');
 	});
 });
