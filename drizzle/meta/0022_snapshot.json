@@ -1064,7 +1064,7 @@
       "checkConstraints": {
         "weekly_targets_week_start_monday": {
           "name": "weekly_targets_week_start_monday",
-          "value": "strftime('%w', \"weekly_targets\".\"week_start\") = '1'"
+          "value": "date(\"weekly_targets\".\"week_start\") IS \"weekly_targets\".\"week_start\" AND strftime('%w', \"weekly_targets\".\"week_start\") = '1'"
         }
       }
     },

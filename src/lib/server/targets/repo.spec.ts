@@ -8,6 +8,7 @@ import { getSettings, settingsWrite, type TargetSettingsPatch } from '../setting
 import { createTestDb } from '../test/d1.ts';
 import { listWeights, saveWeight } from '../weights/repo.ts';
 import {
+	AgeOutOfRangeError,
 	currentTarget,
 	NoWeighInError,
 	ProfileIncompleteError,
@@ -239,6 +240,66 @@ describe('targets repository', () => {
 		expect(await listWeights(test.db)).toEqual([{ date: WED, kg: 72 }]);
 		expect(await rows()).toEqual([row]);
 		expect(row).toMatchObject({ weekStart: MON, trendKg: 72 });
+	});
+
+	// On WED the birth dates below make the age 15, 16, 100 and 101.
+	describe('age on the day of the write', () => {
+		it.each(['2010-11-05', '1925-11-04'])(
+			'refuses onboarding with birth date %s and writes nothing',
+			async (birthDate) => {
+				await expect(
+					saveOnboarding(await ctx(WED), { ...PROFILE, birthDate, kg: 72, goalRatePct: 0.5 })
+				).rejects.toBeInstanceOf(AgeOutOfRangeError);
+
+				expect(await getSettings(test.db)).toMatchObject({ sex: null, goalRatePct: 0.35 });
+				expect(await listWeights(test.db)).toEqual([]);
+				expect(await rows()).toEqual([]);
+			}
+		);
+
+		it.each(['2010-11-04', '1925-11-05'])(
+			'accepts onboarding with birth date %s, in range on the day',
+			async (birthDate) => {
+				const row = await saveOnboarding(await ctx(WED), {
+					...PROFILE,
+					birthDate,
+					kg: 72,
+					goalRatePct: 0.5
+				});
+
+				expect(row).toMatchObject({ weekStart: MON });
+				expect((await getSettings(test.db)).birthDate).toBe(birthDate);
+			}
+		);
+
+		it.each(['2010-11-05', '1925-11-04'])(
+			'refuses a settings change to birth date %s and keeps the settings and the row',
+			async (birthDate) => {
+				await withProfile();
+				await saveWeight(test.db, { date: '2026-10-30', kg: 72 });
+				const before = await currentTarget(await ctx(WED));
+
+				await expect(recomputeCurrentWeek(await ctx(WED), { birthDate })).rejects.toBeInstanceOf(
+					AgeOutOfRangeError
+				);
+
+				expect((await getSettings(test.db)).birthDate).toBe(PROFILE.birthDate);
+				expect(await rows()).toEqual([before]);
+			}
+		);
+
+		it.each(['2010-11-04', '1925-11-05'])(
+			'accepts a settings change to birth date %s, in range on the day',
+			async (birthDate) => {
+				await withProfile();
+				await saveWeight(test.db, { date: '2026-10-30', kg: 72 });
+
+				await expect(recomputeCurrentWeek(await ctx(WED), { birthDate })).resolves.toMatchObject({
+					weekStart: MON
+				});
+				expect((await getSettings(test.db)).birthDate).toBe(birthDate);
+			}
+		);
 	});
 
 	describe('target of a date', () => {

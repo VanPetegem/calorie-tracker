@@ -1,5 +1,5 @@
 import * as v from 'valibot';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { FoodInput, UpdateFoodInput } from './food.ts';
 import { BatchIdInput, BatchInput, ContainerIdInput, ContainerInput } from './batch.ts';
 import {
@@ -224,14 +224,6 @@ describe('QuickInput', () => {
 });
 
 describe('ProfileInput', () => {
-	// Age counts from today's UTC date; 2026-11-08 here.
-	beforeEach(() => {
-		vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-08T12:00:00.000Z') });
-	});
-	afterEach(() => {
-		vi.useRealTimers();
-	});
-
 	const profile = {
 		sex: 'male',
 		birthDate: '1990-05-01',
@@ -243,12 +235,11 @@ describe('ProfileInput', () => {
 		expect(v.parse(ProfileInput, profile)).toEqual({ ...profile, heightCm: 180.5 });
 	});
 
-	it('accepts ages 16 and 100 and rejects 15 and 101', () => {
+	it('checks the birth date format, not the age, which the server checks on its own day', () => {
 		const ok = (birthDate: string) => v.safeParse(ProfileInput, { ...profile, birthDate }).success;
-		expect(ok('2010-11-08')).toBe(true);
-		expect(ok('2010-11-09')).toBe(false);
-		expect(ok('1925-11-09')).toBe(true);
-		expect(ok('1925-11-08')).toBe(false);
+		expect(ok('2010-11-09')).toBe(true);
+		expect(ok('1925-11-08')).toBe(true);
+		expect(ok('1990-5-1')).toBe(false);
 	});
 
 	it('accepts heights 100 and 250 cm and rejects 99 and 250.1', () => {

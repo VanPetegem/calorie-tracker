@@ -13,7 +13,7 @@ CREATE TABLE `weekly_targets` (
 	`valid_days` integer NOT NULL,
 	`weigh_ins` integer NOT NULL,
 	`computed_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
-	CONSTRAINT "weekly_targets_week_start_monday" CHECK(strftime('%w', "weekly_targets"."week_start") = '1')
+	CONSTRAINT "weekly_targets_week_start_monday" CHECK(date("weekly_targets"."week_start") IS "weekly_targets"."week_start" AND strftime('%w', "weekly_targets"."week_start") = '1')
 );
 --> statement-breakpoint
 -- Hand edited: drizzle-kit wrote `PRAGMA foreign_keys=OFF` here and `=ON` after the rename. D1 runs a migration in

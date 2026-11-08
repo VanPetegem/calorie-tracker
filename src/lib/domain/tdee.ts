@@ -5,7 +5,9 @@ import {
 	BMR_KCAL_PER_KG,
 	BMR_KCAL_PER_YEAR,
 	BMR_SEX_OFFSET,
+	MAX_AGE_YEARS,
 	MAX_WEEKLY_TDEE_CHANGE,
+	MIN_AGE_YEARS,
 	MIN_VALID_DAYS,
 	MIN_WEIGH_INS,
 	PAL,
@@ -38,6 +40,12 @@ export function ageOn(birthDate: string, date: string): number {
 function splitYear(date: string): [number, string] {
 	const [year, month, day] = date.split('-');
 	return [Number(year), `${month}-${day}`];
+}
+
+/** True when the age on `today` is MIN_AGE_YEARS to MAX_AGE_YEARS, both inclusive. Both dates are `YYYY-MM-DD`. */
+export function ageInRange(birthDate: string, today: string): boolean {
+	const age = ageOn(birthDate, today);
+	return age >= MIN_AGE_YEARS && age <= MAX_AGE_YEARS;
 }
 
 /** Total daily energy expenditure from BMR and the activity level. Not rounded. */

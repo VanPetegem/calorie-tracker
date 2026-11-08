@@ -4,6 +4,7 @@ import {
 	KCAL_PER_G_CARBS,
 	KCAL_PER_G_FAT,
 	KCAL_PER_G_PROTEIN,
+	PERCENT,
 	TARGET_MAX_FACTOR,
 	TARGET_MIN_FACTOR,
 	TARGET_ROUND_KCAL
@@ -86,7 +87,7 @@ export function targetKcal(
 	goalRatePct: number,
 	rho: number
 ): number {
-	const goalKgPerWeek = (trendKg * goalRatePct) / 100;
+	const goalKgPerWeek = (trendKg * goalRatePct) / PERCENT;
 	const raw = tdeeUsed + (goalKgPerWeek * rho) / DAYS_PER_WEEK;
 	const clamped = Math.min(
 		TARGET_MAX_FACTOR * tdeeUsed,

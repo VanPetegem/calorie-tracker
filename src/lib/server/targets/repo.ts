@@ -1,8 +1,9 @@
 import { asc, desc, eq, lt, lte } from 'drizzle-orm';
 import * as v from 'valibot';
-import { ADAPTIVE_WINDOW_DAYS } from '../../domain/constants.ts';
+import { ADAPTIVE_WINDOW_DAYS, MAX_AGE_YEARS, MIN_AGE_YEARS } from '../../domain/constants.ts';
 import { addDays, weekStart } from '../../domain/dates.ts';
 import { weekTarget, type WeekTargetRow } from '../../domain/targets.ts';
+import { ageInRange } from '../../domain/tdee.ts';
 import { trendSeries, type WeighIn } from '../../domain/trend.ts';
 import { OnboardingInput } from '../../schemas/settings.ts';
 import type { AppContext } from '../context.ts';
@@ -33,6 +34,19 @@ export class NoWeighInError extends Error {
 	override name = 'NoWeighInError';
 	constructor(readonly weekStart: string) {
 		super(`No weigh-in to compute the target of the week of ${weekStart}`);
+	}
+}
+
+/** The birth date gives an age outside MIN_AGE_YEARS to MAX_AGE_YEARS on `today`, the local day of the write. */
+export class AgeOutOfRangeError extends Error {
+	override name = 'AgeOutOfRangeError';
+	constructor(
+		readonly birthDate: string,
+		readonly today: string
+	) {
+		super(
+			`Age on ${today} is outside ${MIN_AGE_YEARS} to ${MAX_AGE_YEARS} (birth date ${birthDate})`
+		);
 	}
 }
 
@@ -159,12 +173,15 @@ export async function targetFor(ctx: TargetContext, date: string): Promise<Weekl
 /**
  * Writes a settings change and replaces this week's row computed with it, in one batch. The row uses the same
  * weigh-ins, window and previous row as `currentTarget`; earlier rows are not touched. `patch` needs at least one
- * field and is validated by the caller.
+ * field and is validated by the caller. Throws `AgeOutOfRangeError` for a birth date out of range on `ctx.today`.
  */
 export async function recomputeCurrentWeek(
 	ctx: TargetContext,
 	patch: TargetSettingsPatch
 ): Promise<WeeklyTarget> {
+	if (typeof patch.birthDate === 'string' && !ageInRange(patch.birthDate, ctx.today)) {
+		throw new AgeOutOfRangeError(patch.birthDate, ctx.today);
+	}
 	const monday = weekStart(ctx.today);
 	const row = await computeRow(
 		ctx.db,
@@ -178,13 +195,16 @@ export async function recomputeCurrentWeek(
 
 /**
  * Saves the profile and goal rate, today's weigh-in (replacing one of today) and this week's row in one batch, and
- * returns the row.
+ * returns the row. Throws `AgeOutOfRangeError` when the birth date is out of range on `ctx.today`, before any write.
  */
 export async function saveOnboarding(
 	ctx: TargetContext,
 	input: OnboardingInput
 ): Promise<WeeklyTarget> {
 	const { kg, ...profile } = v.parse(OnboardingInput, input);
+	if (!ageInRange(profile.birthDate, ctx.today)) {
+		throw new AgeOutOfRangeError(profile.birthDate, ctx.today);
+	}
 	const today: WeighIn = { date: ctx.today, kg };
 	const monday = weekStart(ctx.today);
 	const weighIns = (await listWeights(ctx.db)).filter((weighIn) => weighIn.date !== ctx.today);

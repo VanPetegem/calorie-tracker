@@ -34,13 +34,17 @@ foreign_keys=OFF/ON` became `PRAGMA defer_foreign_keys = on` as in 0020, and its
   `ACTIVITY_LEVELS`, which `BMR_SEX_OFFSET` and `PAL` must cover), `settings_height_cm_range`, `settings_goal_rate`
   (`IN` the presets), `settings_protein_g_per_kg_range`, `settings_fat_pct_range`, `settings_energy_density_range`.
   Profile columns are nullable until onboarding; goal and rules are `NOT NULL` with the defaults. Birth date has no SQL
-  check; the age limit needs a today.
+  check; the age limit needs a today. Fat is a share (0.15 to 0.40), not a percent.
 - **`weekly_targets` stores values as `weekTarget` computes them**: kcal, TDEE and grams as `real`, counts as
-  `integer`, `carbs_floored` as a boolean, `week_start` checked to be a Monday (`strftime('%w') = '1'`). A type check
-  in `schema.spec.ts` keeps `WeeklyTarget` minus `computedAt` equal to `WeekTargetRow`.
-- **`ProfileInput` checks age 16 to 100 against today's UTC date.** The schema is shared by browser and Worker, which
-  agree on UTC; near a birthday it can be a day off the settings timezone, which these bounds do not need. Settings
-  uses the same schema, so a birth date edit keeps the limit too. Fat is a share (0.15 to 0.40), not a percent.
+  `integer`, `carbs_floored` as a boolean, `week_start` checked to be a real date on a Monday
+  (`date(week_start) IS week_start` and `strftime('%w') = '1'`; `=` alone let text through, because a CHECK passes
+  on NULL). A type check in `schema.spec.ts` keeps `WeeklyTarget` minus `computedAt` equal to `WeekTargetRow`.
+- **The age limit (16 to 100) is checked on the server against the local today, not in the schemas.** `ageInRange(birthDate,
+today)` in `domain/tdee.ts` is inclusive on both ends. `saveOnboarding` and `recomputeCurrentWeek` (when the patch has a birth
+  date) check it against `ctx.today`, the day in the settings timezone, and throw `AgeOutOfRangeError` before any write.
+  `ProfileInput` and `OnboardingInput` check only the birth date format: a UTC check in the shared schema could disagree with
+  the server's day near a birthday. Until a remote command maps `AgeOutOfRangeError` to a field error, the form shows no age
+  message on blur. The 15, 16, 100 and 101 boundary days are tested through both functions in `repo.spec.ts`.
 - **The manual target is gone ahead of the weekly targets.** `ManualTargetInput`, `saveManualTarget`,
   `target.remote.ts`, `MAX_MANUAL_TARGET_KCAL`, the Settings card and its two e2e tests are removed; `loadDay` returns
   `target: null` until it reads `weekly_targets`.

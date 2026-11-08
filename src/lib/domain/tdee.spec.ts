@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { addDays } from './dates';
-import { adaptiveTdee, ageOn, bmr, formulaTdee, smoothTdee, type ActivityLevel } from './tdee';
+import {
+	adaptiveTdee,
+	ageInRange,
+	ageOn,
+	bmr,
+	formulaTdee,
+	smoothTdee,
+	type ActivityLevel
+} from './tdee';
 import type { TrendPoint } from './trend';
 
 describe('bmr', () => {
@@ -22,6 +30,18 @@ describe('ageOn', () => {
 	});
 });
 
+describe('ageInRange', () => {
+	it('admits 16 from the birthday on and refuses 15 the day before', () => {
+		expect(ageInRange('2010-11-08', '2026-11-07')).toBe(false);
+		expect(ageInRange('2010-11-08', '2026-11-08')).toBe(true);
+	});
+
+	it('admits 100 up to the day before the 101st birthday and refuses 101 from it', () => {
+		expect(ageInRange('1926-11-08', '2027-11-07')).toBe(true);
+		expect(ageInRange('1926-11-08', '2027-11-08')).toBe(false);
+	});
+});
+
 describe('formulaTdee', () => {
 	it('multiplies BMR by the activity level', () => {
 		const levels: ActivityLevel[] = ['sedentary', 'light', 'moderate', 'active', 'very_active'];
@@ -36,6 +56,9 @@ describe('adaptiveTdee', () => {
 	const windowDays = Array.from({ length: 21 }, (_, i) => addDays(WINDOW_END, i - 21));
 	const intakesOn = (dates: string[], kcal: number): Record<string, number> =>
 		Object.fromEntries(dates.map((date) => [date, kcal]));
+	/** One intake per window day, oldest first. */
+	const intakesInOrder = (values: number[]): Record<string, number> =>
+		Object.fromEntries(values.map((kcal, i) => [windowDays[i], kcal]));
 	const flatSeries = (dates: string[]): TrendPoint[] =>
 		dates.map((date) => ({ date, kg: 70, trend: 70 }));
 	const base = { windowEnd: WINDOW_END, formulaTdee: 2500, rho: 5000 };
@@ -77,6 +100,35 @@ describe('adaptiveTdee', () => {
 		const result = adaptiveTdee({ ...base, intakes, series: flatSeries(windowDays.slice(0, 6)) });
 		expect(result.validDays).toBe(16);
 		expect(result.observed).toBeCloseTo((15 * 2000 + 1000) / 16, 10);
+	});
+
+	it('sets the floor from the mean of the two middle intakes when the count is even', () => {
+		// Sorted: 1000, 1300, 2900, 2900. The median is 2100, the floor 1050: only 1000 is out. The upper middle
+		// alone would set the floor at 1450 (1300 out), the lower at 650 (1000 in).
+		const intakes = intakesInOrder([1300, 2900, 1000, 2900]);
+		const result = adaptiveTdee({ ...base, intakes, series: flatSeries(windowDays.slice(0, 6)) });
+		expect(result.validDays).toBe(3);
+	});
+
+	it('sorts intakes as numbers, not as text, when it takes the median', () => {
+		// Numeric median 1100, floor 550: all three are valid. As text "2000" sorts before "980", so the
+		// median would read 2000, the floor 1000, and 980 would be out.
+		const intakes = intakesInOrder([980, 1100, 2000]);
+		const result = adaptiveTdee({ ...base, intakes, series: flatSeries(windowDays.slice(0, 6)) });
+		expect(result.validDays).toBe(3);
+	});
+
+	it('takes the median over the window only, not over intakes outside it', () => {
+		// Window median 2000, floor 1000: all three are valid. Over every intake the median is 5000.
+		const outside = [
+			WINDOW_END,
+			addDays(WINDOW_END, 1),
+			addDays(WINDOW_END, -22),
+			addDays(WINDOW_END, -40)
+		];
+		const intakes = { ...intakesInOrder([1200, 2000, 2000]), ...intakesOn(outside, 5000) };
+		const result = adaptiveTdee({ ...base, intakes, series: flatSeries(windowDays.slice(0, 6)) });
+		expect(result.validDays).toBe(3);
 	});
 
 	it('takes the trend change over the window, from the day before it to its last day, off the mean intake', () => {

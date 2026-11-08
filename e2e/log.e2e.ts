@@ -44,7 +44,7 @@ function dayAfter(date: string): string {
 test('a day without entries shows the empty state and the no target hero', async ({ page }) => {
 	await gotoHydrated(page, `/day/${EMPTY_DATE}`);
 	await expect(page.getByRole('heading', { name: 'Nothing logged yet' })).toBeVisible();
-	// "kcal eaten" without a target, "kcal remaining, ..." with one: the target test in this file sets it briefly.
+	// "kcal eaten" without a target, "kcal remaining, ..." with one. No e2e test sets up a profile, so there is none.
 	await expect(page.getByText(/^kcal (eaten|remaining)/)).toBeVisible();
 	await expect(page.getByRole('button', { name: /^More actions/ })).toHaveCount(0);
 });

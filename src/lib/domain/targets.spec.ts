@@ -55,6 +55,7 @@ describe('macroTargets', () => {
 describe('targetKcal', () => {
 	it.each([
 		['adds the goal gain at the energy density and rounds to 10 kcal', 2501, 70, 0.35, 5000, 2680],
+		['rounds a raw 2672 kcal down to 2670, not up', 2502, 68, 0.35, 5000, 2670],
 		['raises a target under 1.05 x TDEE', 2400, 50, 0.25, 5000, 2520],
 		['lowers a target over 1.20 x TDEE', 2000, 100, 0.5, 7700, 2400]
 	])('%s', (_, tdeeUsed, trendKg, goalRatePct, rho, kcal) => {

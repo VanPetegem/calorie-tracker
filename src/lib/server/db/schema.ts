@@ -326,8 +326,12 @@ export const weeklyTargets = sqliteTable(
 		computedAt: text('computed_at').notNull().default(nowIso)
 	},
 	(table) => [
-		// SQLite's %w is 0 for Sunday, so 1 is Monday.
-		check('weekly_targets_week_start_monday', sql`strftime('%w', ${table.weekStart}) = '1'`)
+		// A CHECK passes on NULL, and date() and strftime() return NULL for text that is not a date. `IS` never yields
+		// NULL, so only a real date passes. SQLite's %w is 0 for Sunday, so 1 is Monday.
+		check(
+			'weekly_targets_week_start_monday',
+			sql`date(${table.weekStart}) IS ${table.weekStart} AND strftime('%w', ${table.weekStart}) = '1'`
+		)
 	]
 );
 

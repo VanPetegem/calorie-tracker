@@ -21,7 +21,7 @@
 
 1. Concurrent first loads of a week create exactly one row, and the row is identical whichever day of the week computes it. Tests in Task 7.
 2. Adaptive gate boundaries (13 vs 14 valid days, 5 vs 6 weigh-ins), the median filter and the +/-150 clamp both ways. Tests in Task 5.
-3. The 4b migration keeps the settings row (timezone) and every other table untouched; `PRAGMA foreign_key_check` passes. Test in Task 6.
+3. The 4b migration keeps the settings row (timezone) and every other table untouched, and the migration runs with foreign keys enforced. Test in Task 6.
 4. No app page renders without a profile, and `/onboarding` cannot be reached with one; remote functions are not redirected. Tests in Task 8.
 5. Today, day pages, Settings and Weight show the same target for the same date, including a gap week and a day before the first row. Tests in Tasks 7 and 9.
 
@@ -186,7 +186,7 @@ e2e/weight.e2e.ts (4a), e2e/targets.e2e.ts and onboarding in e2e/auth.setup.ts (
 
 **Interfaces:**
 - Produces: settings columns and `weekly_targets` per spec section 3 (4b), with SQL checks for the enums and ranges; type `WeeklyTarget`. Valibot `ProfileInput` (sex, birthDate, heightCm, activityLevel), `OnboardingInput` (profile plus kg and goalRatePct), `GoalInput`, `MacroRulesInput` (proteinGPerKg, fatPct, energyDensity). `ManualTargetInput` removed with its tests.
-- [ ] **Step 1: Write failing tests**: migration check (spec Review Focus 3): apply up to 0021, write settings with timezone and a manual target, a weight, a log entry; apply the rest; the row keeps its timezone and gets defaults, other rows are unchanged, foreign key check passes; schema rejects age 15 and 101, height 99, goal rate 0.4, extra keys.
+- [ ] **Step 1: Write failing tests**: migration check (spec Review Focus 3): apply up to 0021, write settings with timezone and a manual target, a weight, a log entry; apply the rest; the row keeps its timezone and gets defaults, other rows are unchanged, the migration runs with foreign keys enforced; schema rejects age 15 and 101, height 99, goal rate 0.4, extra keys.
 - [ ] **Step 2: Run**; fail.
 - [ ] **Step 3: Implement**, `pnpm db:generate`, `pnpm db:migrate:local`. Record the migration outcome in `docs/decisions.md`.
 - [ ] **Step 4: Run** the gate (code that read the manual target is removed or stubbed to compile; Task 7 replaces it).

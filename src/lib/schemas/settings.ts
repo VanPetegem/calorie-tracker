@@ -2,43 +2,29 @@ import * as v from 'valibot';
 import {
 	ACTIVITY_LEVELS,
 	GOAL_RATES,
-	MAX_AGE_YEARS,
 	MAX_ENERGY_DENSITY,
 	MAX_FAT_PCT,
 	MAX_HEIGHT_CM,
 	MAX_PROTEIN_G_PER_KG,
-	MIN_AGE_YEARS,
 	MIN_ENERGY_DENSITY,
 	MIN_FAT_PCT,
 	MIN_HEIGHT_CM,
 	MIN_PROTEIN_G_PER_KG,
 	SEXES
 } from '../domain/constants.ts';
-import { ageOn } from '../domain/tdee.ts';
 import { decimalIn, decimalOneOf, isoDate } from './fields.ts';
 import { WeightInput } from './weight.ts';
-
-/**
- * Age MIN_AGE_YEARS to MAX_AGE_YEARS today. Today is the UTC date, so the browser and the Worker agree; near a
- * birthday it can be a day off the settings timezone, which these bounds do not need.
- */
-function ageInRange(birthDate: string): boolean {
-	const age = ageOn(birthDate, new Date().toISOString().slice(0, 10));
-	return age >= MIN_AGE_YEARS && age <= MAX_AGE_YEARS;
-}
-
-const birthDate = v.pipe(
-	isoDate,
-	v.check(ageInRange, `Age must be ${MIN_AGE_YEARS} to ${MAX_AGE_YEARS}`)
-);
 
 /** The goal rate in percent of trend weight per week: one of the presets. */
 const goalRatePct = decimalOneOf(GOAL_RATES, 'Choose a goal rate');
 
-/** The profile behind the formula TDEE, as onboarding and Settings edit it. */
+/**
+ * The profile behind the formula TDEE, as onboarding and Settings edit it. The birth date is only checked for format:
+ * the age limit needs the server's day, so `saveOnboarding` and `recomputeCurrentWeek` check it with `ageInRange`.
+ */
 export const ProfileInput = v.strictObject({
 	sex: v.picklist(SEXES, 'Choose one'),
-	birthDate,
+	birthDate: isoDate,
 	heightCm: decimalIn(MIN_HEIGHT_CM, MAX_HEIGHT_CM),
 	activityLevel: v.picklist(ACTIVITY_LEVELS, 'Choose an activity level')
 });

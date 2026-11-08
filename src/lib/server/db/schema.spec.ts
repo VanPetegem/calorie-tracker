@@ -137,10 +137,16 @@ describe('schema constraints', () => {
 			weighIns: 1
 		});
 
-		it('start on a Monday, one row per week', async () => {
-			await expect(test.db.insert(weeklyTargets).values(row('2026-11-08'))).rejects.toMatchObject(
-				failedOn('CHECK constraint failed: weekly_targets_week_start_monday')
-			);
+		it('start on a Monday date, one row per week', async () => {
+			// 2026-02-30 is no date, but SQLite's date() reads it as 2026-03-02, a Monday.
+			for (const weekStart of ['2026-11-08', 'garbage', '2026-02-30']) {
+				await expect(
+					test.db.insert(weeklyTargets).values(row(weekStart)),
+					weekStart
+				).rejects.toMatchObject(
+					failedOn('CHECK constraint failed: weekly_targets_week_start_monday')
+				);
+			}
 			await test.db.insert(weeklyTargets).values(row('2026-11-09'));
 			const [stored] = await test.db.select().from(weeklyTargets);
 			expect(stored).toMatchObject({ ...row('2026-11-09'), computedAt: expect.any(String) });

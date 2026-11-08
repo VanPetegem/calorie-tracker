@@ -50,6 +50,10 @@ export const TREND_SEED_WEIGH_INS = 3;
 /** The weekly rate compares today's trend with the trend this many days earlier. */
 export const RATE_WINDOW_DAYS = 14;
 export const DAYS_PER_WEEK = 7;
+/** Added to getUTCDay so that Monday maps to 0 modulo DAYS_PER_WEEK. */
+export const MONDAY_OFFSET = 6;
+/** A percent is one hundredth: a rate of 0.35 percent is 0.35 / PERCENT. */
+export const PERCENT = 100;
 
 /** Profile limits (phase 4b). Inclusive on both ends. Age applies at onboarding. */
 export const MIN_HEIGHT_CM = 100;

@@ -1,10 +1,8 @@
 /** Dates are `YYYY-MM-DD` strings. Times are UTC ISO strings. */
 
-import { DAYS_PER_WEEK } from './constants';
+import { DAYS_PER_WEEK, MONDAY_OFFSET } from './constants';
 
 const DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/;
-/** Added to getUTCDay so that Monday maps to 0 modulo DAYS_PER_WEEK. */
-const MONDAY_OFFSET = 6;
 
 type WallClock = {
 	year: number;
