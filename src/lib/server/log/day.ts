@@ -1,10 +1,12 @@
 import { FREQUENTS_SIZE, RECENTS_SIZE } from '../../domain/constants.ts';
 import type { Nutrients } from '../../domain/nutrition.ts';
 import { activeBatches, portionWeights, type BatchSummary } from '../batches/repo.ts';
-import type { LogEntry } from '../db/schema.ts';
+import type { LogEntry, WeeklyTarget } from '../db/schema.ts';
 import { frequents, recents, type RecentFood } from '../foods/repo.ts';
 import type { AppContext } from '../context.ts';
 import type { Db } from '../db/index.ts';
+import { isProfileComplete } from '../settings/repo.ts';
+import { targetFor } from '../targets/repo.ts';
 import { dayEntries, dayTotals } from './repo.ts';
 
 /** The daily target shown in the hero: kcal and macros of the day's week. */
@@ -15,6 +17,17 @@ export type DayTarget = {
 	carbsG: number;
 	carbsFloored: boolean;
 };
+
+/** The hero's target from a week's row. */
+export function dayTarget(row: WeeklyTarget): DayTarget {
+	return {
+		kcal: row.targetKcal,
+		proteinG: row.proteinG,
+		fatG: row.fatG,
+		carbsG: row.carbsG,
+		carbsFloored: row.carbsFloored
+	};
+}
 
 /** What the Today and day pages load. `today` lets the page decide what "next" and the title mean. */
 export type DayData = {
@@ -57,11 +70,15 @@ export async function suggestions(
 	return { recents: recentFoods, frequents: frequentFoods, batches };
 }
 
-/** Everything one day's page needs, read in one pass. */
+/**
+ * Everything one day's page needs, read in one pass. The target is the date's week row (`targetFor`), null while the
+ * profile is incomplete (onboarding redirects those pages).
+ */
 export async function loadDay(ctx: AppContext, date: string): Promise<DayData> {
-	const [entries, suggested] = await Promise.all([
+	const [entries, suggested, target] = await Promise.all([
 		dayEntries(ctx.db, date),
-		suggestions(ctx.db, ctx.today, ctx.now)
+		suggestions(ctx.db, ctx.today, ctx.now),
+		isProfileComplete(ctx.settings) ? targetFor(ctx, date).then(dayTarget) : null
 	]);
 	const batchIds = new Set<string>();
 	for (const entry of entries) if (entry.batchId !== null) batchIds.add(entry.batchId);
@@ -70,8 +87,7 @@ export async function loadDay(ctx: AppContext, date: string): Promise<DayData> {
 		today: ctx.today,
 		entries,
 		totals: dayTotals(entries),
-		// The manual target is gone; the week's target from `weekly_targets` takes its place.
-		target: null,
+		target,
 		...suggested,
 		batchPortionG: await portionWeights(ctx.db, [...batchIds])
 	};

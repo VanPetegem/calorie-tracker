@@ -2,11 +2,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { saveBatch, finishBatch } from '../batches/repo.ts';
 import type { AppContext } from '../context.ts';
 import { createFood } from '../foods/repo.ts';
+import { getSettings, settingsWrite } from '../settings/repo.ts';
+import { targetFor } from '../targets/repo.ts';
 import { createTestDb } from '../test/d1.ts';
+import { saveWeight } from '../weights/repo.ts';
 import { addBatchEntry, addQuickEntry } from './repo.ts';
 import { loadDay, suggestions } from './day.ts';
 
-describe('batches in the day data', () => {
+describe('day data', () => {
 	type TestDb = Awaited<ReturnType<typeof createTestDb>>;
 	let test: TestDb;
 	const NOW = new Date('2026-11-06T12:00:00.000Z');
@@ -70,10 +73,7 @@ describe('batches in the day data', () => {
 			ctx
 		);
 		const day = await loadDay(
-			{
-				...ctx,
-				db: test.db
-			} as AppContext,
+			{ ...ctx, db: test.db, settings: await getSettings(test.db) } as AppContext,
 			'2026-11-04'
 		);
 		expect(day.batchPortionG).toEqual({
@@ -85,12 +85,33 @@ describe('batches in the day data', () => {
 
 	it('has no portion weights on a day without batch entries', async () => {
 		const day = await loadDay(
-			{
-				...ctx,
-				db: test.db
-			} as AppContext,
+			{ ...ctx, db: test.db, settings: await getSettings(test.db) } as AppContext,
 			'2019-01-01'
 		);
 		expect(day.batchPortionG).toEqual({});
+	});
+
+	it('has no target without a profile, and the target of the date’s week with one', async () => {
+		const dayCtx = async () =>
+			({ ...ctx, db: test.db, settings: await getSettings(test.db) }) as AppContext;
+		expect((await loadDay(await dayCtx(), '2026-11-04')).target).toBeNull();
+
+		await settingsWrite(test.db, {
+			sex: 'male',
+			birthDate: '1990-01-01',
+			heightCm: 180,
+			activityLevel: 'moderate'
+		});
+		await saveWeight(test.db, { date: '2026-10-30', kg: 72 });
+		const context = await dayCtx();
+		const row = await targetFor(context, '2026-11-04');
+
+		expect((await loadDay(context, '2026-11-04')).target).toEqual({
+			kcal: row.targetKcal,
+			proteinG: row.proteinG,
+			fatG: row.fatG,
+			carbsG: row.carbsG,
+			carbsFloored: row.carbsFloored
+		});
 	});
 });

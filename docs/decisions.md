@@ -4,6 +4,20 @@ Living record of decisions. Newest first. Each entry: date, decision, reason.
 
 ## 2026-11-08
 
+- **A week row with no weigh-in before its week is built from the single earliest weigh-in ever.** `currentTarget`
+  builds the row from weigh-ins dated before `weekStart` (`rowWeighIns` in `server/targets/repo.ts`). In the user's
+  first week the onboarding weigh-in is today, so there are none; the row then uses only the earliest weigh-in as the
+  series (its kg is the trend, the rate is null). This overrides the plan's before-only rule, which left an empty
+  series and a `weekTarget` RangeError, and keeps the row the same however many weigh-ins the week gains. Tested: a
+  first-week row stays the same after a later weigh-in, also when recomputed.
+- **Weekly target rows (Task 7).** `currentTarget` inserts with `ON CONFLICT DO NOTHING` and reads back, so two loads
+  of a new week leave one row. `recomputeCurrentWeek` (settings patch plus this week's row) and `saveOnboarding`
+  (profile, goal rate, today's weigh-in, row) each run in one `db.batch`; a test with a failing trigger on
+  `weekly_targets` proves nothing else is written. A replaced row gets a new `computed_at`. `targetFor` makes this
+  week's row first, then reads the date's week, else the latest earlier, else the earliest row. With no weigh-in at
+  all `currentTarget` throws `NoWeighInError` (separate from `ProfileIncompleteError`) and `targetFor` falls back to
+  the stored rows, so deleting every weigh-in does not break Today. `loadDay` returns `target: null` while the profile
+  is incomplete instead of throwing; Task 8's redirect keeps those pages away.
 - **Migration 0022 (`0022_targets.sql`) rebuilds `settings` and creates `weekly_targets`; the migration check passes.**
   Dropping `settings_manual_target_pair` forces a rebuild. drizzle-kit's rebuild was hand edited twice: `PRAGMA
 foreign_keys=OFF/ON` became `PRAGMA defer_foreign_keys = on` as in 0020, and its copy `INSERT ... SELECT "id",

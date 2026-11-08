@@ -14,6 +14,7 @@ import {
 	addBatchEntry,
 	addFoodEntry,
 	addQuickEntry,
+	dailyIntakes,
 	dayEntries,
 	dayTotals,
 	deleteEntry,
@@ -346,6 +347,29 @@ describe('log repository', () => {
 				carbs: 59,
 				fat: 7,
 				fiber: 10
+			});
+		});
+	});
+
+	describe('dailyIntakes', () => {
+		it('sums the live kcal of each date in the range, both ends included', async () => {
+			const quick = (date: string, kcal: number) =>
+				addQuickEntry(
+					test.db,
+					{ date, label: null, kcal, protein: null, carbs: null, fat: null },
+					ctx
+				);
+			await quick('2026-11-01', 500);
+			await quick('2026-11-02', 1000);
+			await quick('2026-11-02', 250.5);
+			const deleted = await quick('2026-11-03', 800);
+			await deleteEntry(test.db, deleted.id);
+			await quick('2026-11-04', 300);
+			await quick('2026-11-05', 900);
+
+			expect(await dailyIntakes(test.db, '2026-11-02', '2026-11-04')).toEqual({
+				'2026-11-02': 1250.5,
+				'2026-11-04': 300
 			});
 		});
 	});

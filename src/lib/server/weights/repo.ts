@@ -21,8 +21,12 @@ export async function weightOn(db: Db, date: string): Promise<WeighIn | null> {
 /** Saves the weigh-in of a date; a date that has one gets the new kg and keeps its `created_at`;
  * `updated_at` is set by the column's `$onUpdate`. */
 export async function saveWeight(db: Db, input: WeightInput): Promise<void> {
-	const { date, kg } = v.parse(WeightInput, input);
-	await db
+	await weightUpsert(db, v.parse(WeightInput, input));
+}
+
+/** The unsent write behind `saveWeight`, for a `db.batch`. The caller validates. */
+export function weightUpsert(db: Db, { date, kg }: WeighIn) {
+	return db
 		.insert(weights)
 		.values({ date, kg })
 		.onConflictDoUpdate({ target: weights.date, set: { kg } });
