@@ -1,3 +1,4 @@
+import { error } from '@sveltejs/kit';
 import { describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
@@ -64,5 +65,13 @@ describe('MacroRulesForm', () => {
 		await page.getByRole('button', { name: 'Save rules' }).click();
 		await expect.element(page.getByRole('button', { name: 'Retry' })).toBeVisible();
 		await expect.element(page.getByLabelText('Protein per kg')).toHaveValue('2');
+	});
+
+	it('shows the reason the server rejected the rules with', async () => {
+		const onsave = vi.fn(async () => error(400, 'Add a weigh-in first'));
+		render(MacroRulesForm, { value, onsave });
+		await page.getByLabelText('Protein per kg').fill('2');
+		await page.getByRole('button', { name: 'Save rules' }).click();
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Add a weigh-in first');
 	});
 });

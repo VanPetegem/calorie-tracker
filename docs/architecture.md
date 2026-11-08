@@ -40,7 +40,7 @@ trigger (`user_single_account`). Sessions last a year and slide daily.
   uncached URL gets a small 503 "This page is unavailable offline" page.
 - Client side navigations fetch `<path>/__data.json`. Those go network first into the same cache, one copy per path. The
   worker drops `x-sveltekit-invalidated` (the server then loads every node, so one copy fits any request). Only load
-  results are stored, never a redirect. With no copy offline it answers 503; SvelteKit turns that into a full navigation
+  results are stored, never a redirect or a response with an error node. With no copy offline it answers 503; SvelteKit turns that into a full navigation
   only because the root layout has a server load (`src/routes/+layout.server.ts`, keep it). See `docs/decisions.md`
   (2026-11-08).
 - `/api/*` and anything that is not a same origin GET is never touched.
@@ -236,6 +236,9 @@ settings write (saveGoal, saveMacroRules, profile) -> recomputeCurrentWeek -> on
 - A row is built from the days before its Monday only: the trend and rate on the Sunday before, and the adaptive
   window of 21 days ending that Sunday. Weigh-ins and log edits never change a stored row, so the row is the same
   whichever day of the week builds it. Past rows never change.
+- In a user's first week the onboarding weigh-in is dated today, so nothing is dated before the Monday and the trend on
+  the Sunday before does not exist. The row then uses the kg of the earliest weigh-in as the trend, with a null rate
+  (`weekTarget` falls back to `series[0].kg`); later weigh-ins in the week never change it.
 - Adaptive TDEE is used only when the gate passes (14 valid days and 6 weigh-ins); otherwise the formula TDEE is used
   and `tdee_adaptive` is null. The target moves at most 150 kcal a week from the adaptive part.
 - A day shows the row of its week, else the latest earlier row, else the earliest row. Weeks the app was not opened
@@ -244,7 +247,9 @@ settings write (saveGoal, saveMacroRules, profile) -> recomputeCurrentWeek -> on
   this week's target and the goal slope on the chart.
 - Onboarding: until the profile is complete (`isProfileComplete`), every `(app)` page redirects (303) to `/onboarding`
   (`src/routes/(app)/+layout.server.ts`, rule in `onboardingRedirect`, `src/lib/server/guard.ts`); a complete profile
-  sends `/onboarding` back to `/`. Remote functions are not under the layout, so they are not redirected.
+  sends `/onboarding` back to `/`. Remote functions are not under the layout, so they are not redirected. Onboarding does
+  not `invalidateAll` after its write (its load would redirect past the result screen); a second submit answers 400
+  "The profile is already set up" and the page goes to Today.
   `completeOnboardingOn` saves the profile, today's weigh-in and this week's row in one batch and refuses a second run.
 - The age limit (16 to 100, counted on the settings timezone's day) is checked once, in the repository
   (`ageInRange`; `AgeOutOfRangeError`). The commands map it to 400 "Age must be 16 to 100"; the profile form checks
@@ -311,7 +316,8 @@ inside a transaction. When drizzle-kit rebuilds a table it writes `PRAGMA foreig
 hand with `PRAGMA defer_foreign_keys = on` before the rebuild (see `drizzle/0020_batches.sql`), check that the copy
 names every column and every index is recreated, and extend `src/lib/server/db/migrations.spec.ts`, which applies the
 migrations to a database that already holds data. The test helper (`src/lib/server/test/d1.ts`) applies a file the
-way `wrangler d1 migrations apply` does: its statements in one D1 `batch`.
+way `wrangler d1 migrations apply` does: its statements in one D1 `batch`. Also strip the `"__new_<table>".` prefix
+from the CHECKs of the rebuilt table, so they do not depend on SQLite rewriting them on rename (see `docs/decisions.md`).
 
 `drizzle/0001_single_account.sql` is hand written: a trigger on `user` that aborts a second insert (the database
 level backstop for single account sign up). SQLite drops a table's triggers when the table is rebuilt, which

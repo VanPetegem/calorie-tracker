@@ -93,6 +93,8 @@ async function fromPage(path: string, init?: RequestInit) {
 // Bodies shaped like SvelteKit's data responses: a load result, and the redirect a signed out user gets.
 const LOAD_A = '{"type":"data","nodes":[{"type":"data","data":{"day":"A"}}]}';
 const LOAD_B = '{"type":"data","nodes":[{"type":"data","data":{"day":"B"}}]}';
+const LOAD_ERROR =
+	'{"type":"data","nodes":[{"type":"data","data":{"day":"B"}},{"type":"error","status":500,"error":{"message":"Internal Error"}}]}';
 const REDIRECT = '{"type":"redirect","status":302,"location":"/login"}';
 
 /** Stores a copy the way an earlier online visit would have. */
@@ -141,6 +143,17 @@ describe('service worker, client side data requests', () => {
 		await prime('/weight/__data.json', LOAD_A);
 
 		network.mockResolvedValueOnce(json(REDIRECT));
+		await fromPage('/weight/__data.json?x-sveltekit-invalidated=01');
+
+		network.mockImplementation(offline);
+		const offlineCopy = await fromPage('/weight/__data.json?x-sveltekit-invalidated=01');
+		expect(await offlineCopy?.text()).toBe(LOAD_A);
+	});
+
+	it('does not store a response in which a load failed, so it never replaces the last good copy', async () => {
+		await prime('/weight/__data.json', LOAD_A);
+
+		network.mockResolvedValueOnce(json(LOAD_ERROR));
 		await fromPage('/weight/__data.json?x-sveltekit-invalidated=01');
 
 		network.mockImplementation(offline);

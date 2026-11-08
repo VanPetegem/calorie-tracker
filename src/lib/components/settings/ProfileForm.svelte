@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isHttpError } from '@sveltejs/kit';
 	import type { Snippet } from 'svelte';
 	import { untrack } from 'svelte';
 	import * as v from 'valibot';
@@ -55,7 +56,8 @@
 	});
 	let submitted = $state(false);
 	let busy = $state(false);
-	let failure = $state(false);
+	// The message of the failed save: the server's reason for a 400, else a generic one.
+	let failure = $state<string | null>(null);
 	let form = $state<HTMLFormElement>();
 
 	const SEX_OPTIONS: { value: Sex; label: string }[] = [
@@ -72,6 +74,7 @@
 		{ value: 'very_active', label: 'Very active', hint: 'Very hard exercise or a physical job' }
 	];
 
+	const SAVE_FAILED = 'Could not save. Try again.';
 	const AGE_MESSAGE = `Age must be ${MIN_AGE_YEARS} to ${MAX_AGE_YEARS}`;
 
 	/** The age error on `today`, for a birth date in the form YYYY-MM-DD. */
@@ -109,11 +112,11 @@
 		const weight = withWeight ? v.safeParse(TodayWeightInput, { kg }) : null;
 		if (!profile.success || ageError(birthDate, today) || (weight && !weight.success)) return;
 		busy = true;
-		failure = false;
+		failure = null;
 		try {
 			await onsubmit({ profile: profile.output, kg: weight?.success ? weight.output.kg : null });
-		} catch {
-			failure = true;
+		} catch (cause) {
+			failure = isHttpError(cause, 400) ? cause.body.message : SAVE_FAILED;
 		} finally {
 			busy = false;
 		}
@@ -203,8 +206,8 @@
 
 	{@render extra?.()}
 
-	{#if failure}
-		<p role="alert" class="text-sm text-danger">Could not save. Try again.</p>
+	{#if failure !== null}
+		<p role="alert" class="text-sm text-danger">{failure}</p>
 	{/if}
-	<Button type="submit" loading={busy}>{failure ? 'Retry' : submitLabel}</Button>
+	<Button type="submit" loading={busy}>{failure !== null ? 'Retry' : submitLabel}</Button>
 </form>

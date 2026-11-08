@@ -31,6 +31,9 @@ export const ProfileInput = v.strictObject({
 
 export type ProfileInput = v.InferOutput<typeof ProfileInput>;
 
+/** The refusal onboarding gives once the profile is complete; the page then goes to Today instead of showing it. */
+export const PROFILE_ALREADY_SET_UP = 'The profile is already set up';
+
 /** Onboarding: the profile, today's weight and the goal rate. The weigh-in is for the server's today. */
 export const OnboardingInput = v.strictObject({
 	...ProfileInput.entries,

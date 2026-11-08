@@ -28,6 +28,7 @@ vi.mock('$app/navigation', () => ({ invalidateAll: mocks.invalidateAll }));
 const THIS_WEEK = '2026-11-02';
 
 beforeEach(() => {
+	mocks.saveProfile.mockReset().mockResolvedValue(undefined);
 	mocks.saveGoal.mockReset().mockResolvedValue(weekRow(THIS_WEEK));
 	mocks.saveMacroRules.mockReset().mockResolvedValue(weekRow(THIS_WEEK));
 	mocks.invalidateAll.mockReset().mockResolvedValue(undefined);
@@ -62,6 +63,25 @@ function show() {
 }
 
 describe('settings page', () => {
+	it('prefills the profile, saves an edited height, toasts it and refreshes', async () => {
+		show();
+		const height = page.getByLabelText('Height', { exact: true });
+		await expect.element(height).toHaveValue('180');
+		await expect.element(page.getByLabelText('Birth date')).toHaveValue('1990-11-04');
+		await expect.element(page.getByRole('radio', { name: 'Male', exact: true })).toBeChecked();
+		await expect.element(page.getByRole('radio', { name: 'Moderate' })).toBeChecked();
+		await height.fill('185');
+		await page.getByRole('button', { name: 'Save profile' }).click();
+		await vi.waitFor(() => expect(toastTexts()).toEqual(['Profile saved']));
+		expect(mocks.saveProfile).toHaveBeenCalledWith({
+			sex: 'male',
+			birthDate: '1990-11-04',
+			heightCm: 185,
+			activityLevel: 'moderate'
+		});
+		expect(mocks.invalidateAll).toHaveBeenCalledOnce();
+	});
+
 	it('saves the chosen goal rate, toasts it and refreshes', async () => {
 		show();
 		await page.getByRole('radio', { name: /^0\.5 %/ }).click();
@@ -81,6 +101,7 @@ describe('settings page', () => {
 			fatPct: 0.25,
 			energyDensity: 5000
 		});
+		expect(mocks.invalidateAll).toHaveBeenCalledOnce();
 	});
 
 	it("lists this week's target in the targets history", async () => {

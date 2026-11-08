@@ -31,14 +31,14 @@ CREATE TABLE `__new_settings` (
 	`protein_g_per_kg` real DEFAULT 1.8 NOT NULL,
 	`fat_pct` real DEFAULT 0.25 NOT NULL,
 	`energy_density_kcal_per_kg` real DEFAULT 5000 NOT NULL,
-	CONSTRAINT "settings_single_row" CHECK("__new_settings"."id" = 1),
-	CONSTRAINT "settings_sex" CHECK("__new_settings"."sex" IS NULL OR "__new_settings"."sex" IN ('male', 'female')),
-	CONSTRAINT "settings_activity_level" CHECK("__new_settings"."activity_level" IS NULL OR "__new_settings"."activity_level" IN ('sedentary', 'light', 'moderate', 'active', 'very_active')),
-	CONSTRAINT "settings_height_cm_range" CHECK("__new_settings"."height_cm" IS NULL OR "__new_settings"."height_cm" BETWEEN 100 AND 250),
-	CONSTRAINT "settings_goal_rate" CHECK("__new_settings"."goal_rate_pct" IN (0.25, 0.35, 0.5)),
-	CONSTRAINT "settings_protein_g_per_kg_range" CHECK("__new_settings"."protein_g_per_kg" BETWEEN 1.2 AND 3),
-	CONSTRAINT "settings_fat_pct_range" CHECK("__new_settings"."fat_pct" BETWEEN 0.15 AND 0.4),
-	CONSTRAINT "settings_energy_density_range" CHECK("__new_settings"."energy_density_kcal_per_kg" BETWEEN 3000 AND 7700)
+	CONSTRAINT "settings_single_row" CHECK("id" = 1),
+	CONSTRAINT "settings_sex" CHECK("sex" IS NULL OR "sex" IN ('male', 'female')),
+	CONSTRAINT "settings_activity_level" CHECK("activity_level" IS NULL OR "activity_level" IN ('sedentary', 'light', 'moderate', 'active', 'very_active')),
+	CONSTRAINT "settings_height_cm_range" CHECK("height_cm" IS NULL OR "height_cm" BETWEEN 100 AND 250),
+	CONSTRAINT "settings_goal_rate" CHECK("goal_rate_pct" IN (0.25, 0.35, 0.5)),
+	CONSTRAINT "settings_protein_g_per_kg_range" CHECK("protein_g_per_kg" BETWEEN 1.2 AND 3),
+	CONSTRAINT "settings_fat_pct_range" CHECK("fat_pct" BETWEEN 0.15 AND 0.4),
+	CONSTRAINT "settings_energy_density_range" CHECK("energy_density_kcal_per_kg" BETWEEN 3000 AND 7700)
 );
 --> statement-breakpoint
 -- Hand edited: drizzle-kit copied every new column from the old table, where SQLite reads the unknown double quoted

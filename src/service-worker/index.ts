@@ -127,7 +127,8 @@ async function networkFirstData(request: Request, event: ExtendableEvent) {
 
 /**
  * Stores a data response only when it holds a load result. A redirect (a signed out user, say) also answers 200, with
- * `{"type":"redirect"}`, and storing it would replace the last good copy for the next offline tab switch.
+ * `{"type":"redirect"}`, and storing it would replace the last good copy for the next offline tab switch. So does a
+ * response in which a load failed (a node of `type: 'error'`), which would hide the last good copy the same way.
  */
 async function storeLoadData(cache: Cache, key: string, response: Response) {
 	const body = await response.text();
@@ -137,7 +138,12 @@ async function storeLoadData(cache: Cache, key: string, response: Response) {
 
 function isLoadData(body: string) {
 	try {
-		return (JSON.parse(body) as { type?: unknown }).type === 'data';
+		const result = JSON.parse(body) as { type?: unknown; nodes?: unknown };
+		if (result.type !== 'data') return false;
+		const nodes = Array.isArray(result.nodes)
+			? (result.nodes as ({ type?: unknown } | null)[])
+			: [];
+		return !nodes.some((node) => node?.type === 'error');
 	} catch {
 		return false;
 	}

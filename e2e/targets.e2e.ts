@@ -2,18 +2,22 @@ import { expect, test } from './fixtures.ts';
 import { gotoHydrated } from './helpers.ts';
 
 /*
- * Weekly targets. The setup project completes onboarding, so every page has a target. Both browser projects pick a goal
- * rate other than the stored one and never set it back: the rate is shared, and a reset from one project could land
- * between the other project's save and its read. Exact target numbers live in the domain and server tests.
+ * Weekly targets. The setup project completes onboarding, so every page has a target. The goal rate is shared by both
+ * browser projects and a save from one lands between the other's save and its read, so this file runs in one project
+ * only. Exact target numbers live in the domain and server tests.
  */
+
+test.skip(
+	({ browserName }) => browserName !== 'chromium',
+	'chromium only: the goal rate is shared'
+);
 
 /** "2,450" from the text of a number with thousands separators. */
 const kcalIn = (text: string) => Number(text.replace(/,/g, ''));
 
 test('changing the goal rate in Settings changes Today to the same target', async ({ page }) => {
 	await gotoHydrated(page, '/settings');
-	// Another rate than the stored one: Save goal stays off until the rate changes, and the other browser project may
-	// have set any of them already.
+	// Another rate than the stored one: Save goal stays off until the rate changes, and any rate may be stored.
 	await page
 		.getByRole('radio', { name: /^0\.\d+ %/, checked: false })
 		.first()

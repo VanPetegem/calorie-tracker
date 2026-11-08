@@ -249,13 +249,31 @@ describe('weight page', () => {
 		await expect.element(card).toHaveTextContent('TDEE used 2,600 kcal');
 	});
 
-	it("draws the goal slope from this week's trend at the goal rate", async () => {
-		show(weighIns(3, TODAY), null, {
-			week: weekRow(weekStart(TODAY), { trendKg: 70.4 }),
-			goalRatePct: 0.5
-		});
-		// 70.4 kg at 0.5 percent a week is 0.352 kg, shown as +0.35.
-		await expect.element(page.getByTestId('goal-line')).toHaveTextContent('Goal +0.35 kg/week');
+	it("draws the goal slope from this week's start, at the row's trend and the goal rate", async () => {
+		// The row's trend (80 kg) is far from the series trend (about 70 kg), so a slope that took its start kg
+		// from the series, or its start day from today, would start somewhere else.
+		show(
+			[
+				{ date: '2026-11-05', kg: 70 },
+				{ date: '2026-11-06', kg: 70.2 },
+				{ date: '2026-11-07', kg: 70.1 }
+			],
+			null,
+			{ week: weekRow(weekStart(TODAY), { trendKg: 80 }), goalRatePct: 0.5 }
+		);
+		// 80 kg at 0.5 percent a week is 0.4 kg a week.
+		const line = page.getByTestId('goal-line');
+		await expect.element(line).toHaveTextContent('Goal +0.40 kg/week');
+
+		const dots = [...document.querySelectorAll('[data-dot]')].map((dot) =>
+			Number(dot.getAttribute('cx'))
+		);
+		const perDay = dots[1] - dots[0];
+		const element = line.element();
+		// Monday 2 Nov is three days before the first dot, 5 Nov.
+		expect(Number(element.getAttribute('x1'))).toBeCloseTo(dots[0] - 3 * perDay, 1);
+		// 80 kg is far above the chart, whose scale fits the weigh-ins near 70 kg.
+		expect(Number(element.getAttribute('y1'))).toBeLessThan(0);
 	});
 
 	it('shows neither the week card nor the goal line for an earlier week', async () => {

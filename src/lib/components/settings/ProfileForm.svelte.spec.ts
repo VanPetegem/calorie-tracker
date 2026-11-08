@@ -1,3 +1,4 @@
+import { error } from '@sveltejs/kit';
 import { describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
@@ -99,5 +100,16 @@ describe('ProfileForm', () => {
 		await expect.element(field('Height')).toHaveValue('180');
 		await page.getByRole('button', { name: 'Retry' }).click();
 		await vi.waitFor(() => expect(onsubmit).toHaveBeenCalledTimes(2));
+	});
+
+	it('shows the reason the server rejected the profile with', async () => {
+		const onsubmit = vi.fn(async () => error(400, 'Add a weigh-in first'));
+		renderSettings('2026-11-08', onsubmit);
+		await page.getByRole('radio', { name: 'Male', exact: true }).click();
+		await field('Birth date').fill('1990-11-04');
+		await field('Height').fill('180');
+		await page.getByRole('radio', { name: 'Moderate' }).click();
+		await page.getByRole('button', { name: 'Save profile' }).click();
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Add a weigh-in first');
 	});
 });

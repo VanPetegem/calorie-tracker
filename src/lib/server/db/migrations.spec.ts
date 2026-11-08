@@ -183,6 +183,19 @@ describe('migrations after 4a', () => {
 		]);
 	});
 
+	it.each([
+		['settings_single_row', 'id = 2'],
+		['settings_sex', "sex = 'other'"],
+		['settings_activity_level', "activity_level = 'extreme'"],
+		['settings_height_cm_range', 'height_cm = 50'],
+		['settings_goal_rate', 'goal_rate_pct = 0.4'],
+		['settings_protein_g_per_kg_range', 'protein_g_per_kg = 5'],
+		['settings_fat_pct_range', 'fat_pct = 0.9'],
+		['settings_energy_density_range', 'energy_density_kcal_per_kg = 9000']
+	])('keep the rebuilt settings check %s', async (name, change) => {
+		await expect(test.d1.prepare(`UPDATE settings SET ${change}`).run()).rejects.toThrow(name);
+	});
+
 	it('keep every other table, its rows and every index and trigger as they were', async () => {
 		expect(before.contents.weights).toHaveLength(1);
 		const after = await contents(test);

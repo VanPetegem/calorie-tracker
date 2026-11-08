@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isHttpError } from '@sveltejs/kit';
 	import { untrack } from 'svelte';
 	import { GOAL_RATES } from '#lib/domain/constants.ts';
 	import { goalKgPerWeek } from '#lib/domain/targets.ts';
@@ -19,20 +20,23 @@
 
 	let { value, trendKg, onsave }: Props = $props();
 
+	const uid = $props.id();
+
 	// Starts from the saved rate; a choice stays until it is saved or another one is picked.
 	let chosen = $state(untrack(() => value));
 	let busy = $state(false);
-	let failure = $state(false);
+	// The message of the failed save: the server's reason for a 400, else a generic one.
+	let failure = $state<string | null>(null);
 
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
 		if (busy) return;
 		busy = true;
-		failure = false;
+		failure = null;
 		try {
 			await onsave(chosen);
-		} catch {
-			failure = true;
+		} catch (cause) {
+			failure = isHttpError(cause, 400) ? cause.body.message : 'Could not save. Try again.';
 		} finally {
 			busy = false;
 		}
@@ -51,7 +55,7 @@
 			>
 				<input
 					type="radio"
-					name="goal-rate"
+					name="{uid}-goal-rate"
 					class="size-5 accent-brand-solid"
 					value={rate}
 					checked={chosen === rate}
@@ -69,12 +73,12 @@
 			</label>
 		{/each}
 	</fieldset>
-	{#if failure}
-		<p role="alert" class="text-sm text-danger">Could not save. Try again.</p>
+	{#if failure !== null}
+		<p role="alert" class="text-sm text-danger">{failure}</p>
 	{/if}
 	<div>
 		<Button type="submit" loading={busy} disabled={chosen === value}>
-			{failure ? 'Retry' : 'Save goal'}
+			{failure !== null ? 'Retry' : 'Save goal'}
 		</Button>
 	</div>
 </form>

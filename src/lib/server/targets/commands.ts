@@ -1,10 +1,11 @@
 import { error } from '@sveltejs/kit';
 import { MAX_AGE_YEARS, MIN_AGE_YEARS } from '../../domain/constants.ts';
-import type {
-	GoalInput,
-	MacroRulesInput,
-	OnboardingInput,
-	ProfileInput
+import {
+	PROFILE_ALREADY_SET_UP,
+	type GoalInput,
+	type MacroRulesInput,
+	type OnboardingInput,
+	type ProfileInput
 } from '../../schemas/settings.ts';
 import type { Db } from '../db/index.ts';
 import type { WeeklyTarget } from '../db/schema.ts';
@@ -53,7 +54,7 @@ export async function completeOnboardingOn(
 	ctx: TargetContext,
 	input: OnboardingInput
 ): Promise<WeeklyTarget> {
-	if (isProfileComplete(ctx.settings)) error(400, 'The profile is already set up');
+	if (isProfileComplete(ctx.settings)) error(400, PROFILE_ALREADY_SET_UP);
 	return mapRefusals(() => saveOnboarding(ctx, input));
 }
 

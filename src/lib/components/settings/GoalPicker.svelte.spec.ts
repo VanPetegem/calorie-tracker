@@ -1,3 +1,4 @@
+import { error } from '@sveltejs/kit';
 import { describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
@@ -40,5 +41,13 @@ describe('GoalPicker', () => {
 		await page.getByRole('button', { name: 'Save goal' }).click();
 		await expect.element(page.getByRole('button', { name: 'Retry' })).toBeVisible();
 		await expect.element(page.getByRole('radio', { name: /^0\.5 %/ })).toBeChecked();
+	});
+
+	it('shows the reason the server rejected the rate with', async () => {
+		const onsave = vi.fn(async () => error(400, 'Add a weigh-in first'));
+		render(GoalPicker, { value: 0.35, trendKg: 70.4, onsave });
+		await page.getByRole('radio', { name: /^0\.5 %/ }).click();
+		await page.getByRole('button', { name: 'Save goal' }).click();
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Add a weigh-in first');
 	});
 });

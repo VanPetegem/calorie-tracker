@@ -1,11 +1,13 @@
 <script lang="ts">
+	import { isHttpError } from '@sveltejs/kit';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button, SegmentedControl } from '#lib/components/ui/index.ts';
 	import ProfileForm from '#lib/components/settings/ProfileForm.svelte';
 	import TargetExplainer from '#lib/components/settings/TargetExplainer.svelte';
 	import { DEFAULT_GOAL_RATE, GOAL_RATES } from '#lib/domain/constants.ts';
 	import type { WeeklyTarget } from '#lib/server/db/schema.ts';
-	import type { ProfileInput } from '#lib/schemas/settings.ts';
+	import { PROFILE_ALREADY_SET_UP, type ProfileInput } from '#lib/schemas/settings.ts';
 	import type { PageProps } from './$types';
 	import { completeOnboarding } from './onboarding.remote.ts';
 
@@ -21,7 +23,16 @@
 	async function submit({ profile, kg }: { profile: ProfileInput; kg: number | null }) {
 		// Onboarding always sends today's weight, which the form checks before it submits.
 		if (kg === null) return;
-		target = await completeOnboarding({ ...profile, kg, goalRatePct: Number(goalRate) });
+		try {
+			target = await completeOnboarding({ ...profile, kg, goalRatePct: Number(goalRate) });
+		} catch (cause) {
+			// Set up in another tab or session: there is nothing left to do here, so go to Today.
+			if (isHttpError(cause, 400) && cause.body.message === PROFILE_ALREADY_SET_UP) {
+				await goto(resolve('/(app)'));
+				return;
+			}
+			throw cause;
+		}
 	}
 </script>
 

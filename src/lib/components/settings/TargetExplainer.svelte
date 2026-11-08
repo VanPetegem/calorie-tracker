@@ -8,6 +8,8 @@
 
 	let { target }: Props = $props();
 
+	const uid = $props.id();
+
 	const round = (value: number) => Math.round(value).toLocaleString('en-US');
 
 	// Until the adaptive gate passes, the target rests on the formula alone.
@@ -25,9 +27,9 @@
 </script>
 
 <Card>
-	<section class="flex flex-col gap-4" aria-labelledby="target-explainer-heading">
+	<section class="flex flex-col gap-4" aria-labelledby="{uid}-heading">
 		<div class="flex flex-col gap-1">
-			<h2 id="target-explainer-heading" class="text-lg font-semibold text-text">Your target</h2>
+			<h2 id="{uid}-heading" class="text-lg font-semibold text-text">Your target</h2>
 			<p class="text-5xl font-semibold tracking-tight text-text tabular-nums">
 				{round(target.targetKcal)}
 			</p>

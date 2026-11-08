@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isHttpError } from '@sveltejs/kit';
 	import { untrack } from 'svelte';
 	import * as v from 'valibot';
 	import { MAX_FAT_PCT, MIN_FAT_PCT } from '#lib/domain/constants.ts';
@@ -28,7 +29,8 @@
 	let touched = $state({ proteinGPerKg: false, fatPct: false, energyDensity: false });
 	let submitted = $state(false);
 	let busy = $state(false);
-	let failure = $state(false);
+	// The message of the failed save: the server's reason for a 400, else a generic one.
+	let failure = $state<string | null>(null);
 	// Advanced opens when its field has an error, so a failed save is never hidden inside it.
 	let advanced = $state(false);
 
@@ -60,11 +62,11 @@
 		if (errors.energyDensity) advanced = true;
 		if (!result.success || busy) return;
 		busy = true;
-		failure = false;
+		failure = null;
 		try {
 			await onsave(result.output);
-		} catch {
-			failure = true;
+		} catch (cause) {
+			failure = isHttpError(cause, 400) ? cause.body.message : 'Could not save. Try again.';
 		} finally {
 			busy = false;
 		}
@@ -110,10 +112,10 @@
 			/>
 		</div>
 	</details>
-	{#if failure}
-		<p role="alert" class="text-sm text-danger">Could not save. Try again.</p>
+	{#if failure !== null}
+		<p role="alert" class="text-sm text-danger">{failure}</p>
 	{/if}
 	<div>
-		<Button type="submit" loading={busy}>{failure ? 'Retry' : 'Save rules'}</Button>
+		<Button type="submit" loading={busy}>{failure !== null ? 'Retry' : 'Save rules'}</Button>
 	</div>
 </form>

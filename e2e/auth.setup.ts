@@ -30,5 +30,9 @@ setup('create the account through first run setup', async ({ page }) => {
 	await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
 	await expect(page.getByText('kcal remaining')).toBeVisible();
 
+	// A set up profile leaves onboarding: the page sends a signed in user on to Today.
+	await page.goto('/onboarding');
+	await expect(page).toHaveURL(/\/$/);
+
 	await page.context().storageState({ path: AUTH_FILE });
 });
