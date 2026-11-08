@@ -2,11 +2,11 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { addDays } from '../../domain/dates.ts';
 import type { WeekTargetRow } from '../../domain/targets.ts';
 import { smoothTdee } from '../../domain/tdee.ts';
-import type { Db } from '../db/index.ts';
 import { logEntries, settings, weeklyTargets, weights, type WeeklyTarget } from '../db/schema.ts';
 import { addQuickEntry } from '../log/repo.ts';
 import { getSettings, settingsWrite, type TargetSettingsPatch } from '../settings/repo.ts';
 import { createTestDb } from '../test/d1.ts';
+import { interleaved } from '../test/interleave.ts';
 import { listWeights, saveWeight } from '../weights/repo.ts';
 import {
 	AgeOutOfRangeError,
@@ -54,21 +54,6 @@ function storedRow(weekStart: string, overrides: Partial<WeekTargetRow> = {}): W
 		weighIns: 0,
 		...overrides
 	};
-}
-
-/**
- * `db` whose `batch` first awaits `interleave` (which must use the real `db`) on each of its first `times` calls: a
- * write that lands between a save's read and its batch, deterministically.
- */
-function interleaved(db: Db, interleave: () => Promise<unknown>, times = Infinity): Db {
-	let left = times;
-	const batch: Db['batch'] = async (queries) => {
-		if (left-- > 0) await interleave();
-		return db.batch(queries);
-	};
-	return new Proxy(db, {
-		get: (target, key, receiver) => (key === 'batch' ? batch : Reflect.get(target, key, receiver))
-	});
 }
 
 function withoutComputedAt(row: WeeklyTarget): WeekTargetRow {

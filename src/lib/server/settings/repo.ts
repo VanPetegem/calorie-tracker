@@ -39,14 +39,12 @@ export async function getSettings(db: Db): Promise<Settings> {
 	return created;
 }
 
-/** True when sex, birth date, height and activity level are all set, so a target can be computed. */
+/** The settings a target's formula TDEE comes from: a target can be computed only when all of them are set. */
+export const PROFILE_FIELDS = ['sex', 'birthDate', 'heightCm', 'activityLevel'] as const;
+
+/** True when every profile field is set, so a target can be computed. */
 export function isProfileComplete(value: Settings): value is CompleteSettings {
-	return (
-		value.sex !== null &&
-		value.birthDate !== null &&
-		value.heightCm !== null &&
-		value.activityLevel !== null
-	);
+	return PROFILE_FIELDS.every((field) => value[field] !== null);
 }
 
 /**
@@ -64,12 +62,9 @@ export function settingsWrite(db: Db, patch: TargetSettingsPatch) {
 /** Every column but the id: what a save compares to tell whether the row changed since it was read. */
 const MUTABLE_COLUMNS = Object.entries(getTableColumns(settings)).filter(([key]) => key !== 'id');
 
-/** SQL true when the profile is incomplete: sex, birth date, height or activity level is null (`isProfileComplete`). */
+/** SQL true when the profile is incomplete: a profile field is null (`isProfileComplete`). */
 export const profileIncomplete: SQL = or(
-	sql`${settings.sex} IS NULL`,
-	sql`${settings.birthDate} IS NULL`,
-	sql`${settings.heightCm} IS NULL`,
-	sql`${settings.activityLevel} IS NULL`
+	...PROFILE_FIELDS.map((field) => sql`${settings[field]} IS NULL`)
 )!;
 
 /**

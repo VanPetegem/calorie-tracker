@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PROFILE_ALREADY_SET_UP } from '../../schemas/settings.ts';
-import type { Db } from '../db/index.ts';
 import { logEntries, settings, weeklyTargets, weights } from '../db/schema.ts';
 import { getSettings, settingsWrite } from '../settings/repo.ts';
 import { createTestDb } from '../test/d1.ts';
+import { interleaved } from '../test/interleave.ts';
 import { listWeights, saveWeight } from '../weights/repo.ts';
 import {
 	completeOnboardingOn,
@@ -23,21 +23,6 @@ const PROFILE = {
 	activityLevel: 'moderate'
 } as const;
 const ONBOARDING = { ...PROFILE, kg: 72, goalRatePct: 0.35 } as const;
-
-/**
- * `db` whose `batch` first awaits `interleave` (which must use the real `db`) on each of its first `times` calls: a
- * write that lands between a save's read and its batch, deterministically.
- */
-function interleaved(db: Db, interleave: () => Promise<unknown>, times = Infinity): Db {
-	let left = times;
-	const batch: Db['batch'] = async (queries) => {
-		if (left-- > 0) await interleave();
-		return db.batch(queries);
-	};
-	return new Proxy(db, {
-		get: (target, key, receiver) => (key === 'batch' ? batch : Reflect.get(target, key, receiver))
-	});
-}
 
 describe('target commands', () => {
 	let test: TestDb;
@@ -103,6 +88,17 @@ describe('target commands', () => {
 		expect(await getSettings(test.db)).toMatchObject({ heightCm: 180, goalRatePct: 0.35 });
 		expect(await listWeights(test.db)).toEqual([{ date: TODAY, kg: 72 }]);
 		expect(await test.db.select().from(weeklyTargets)).toEqual([first]);
+	});
+
+	it('refuses a second onboarding from its settings alone, without a batch', async () => {
+		await completeOnboardingOn(await ctx(TODAY), ONBOARDING);
+		let batches = 0;
+		const db = interleaved(test.db, async () => void batches++);
+
+		await expect(
+			completeOnboardingOn({ ...(await ctx(TODAY)), db }, { ...ONBOARDING, heightCm: 190 })
+		).rejects.toMatchObject({ status: 400, body: { message: PROFILE_ALREADY_SET_UP } });
+		expect(batches).toBe(0);
 	});
 
 	it('answers 400 "Log a weigh-in first" when a profile save has no weigh-in to compute from', async () => {

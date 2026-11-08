@@ -1,5 +1,4 @@
-import { asc, desc, eq, getTableColumns, is, lt, lte, SQL, sql } from 'drizzle-orm';
-import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
+import { asc, desc, eq, lt, lte, type SQL } from 'drizzle-orm';
 import { ADAPTIVE_WINDOW_DAYS, MAX_AGE_YEARS, MIN_AGE_YEARS } from '../../domain/constants.ts';
 import { addDays, weekStart } from '../../domain/dates.ts';
 import { wasSmoothed, weekTarget, type WeekTargetRow } from '../../domain/targets.ts';
@@ -8,12 +7,14 @@ import { trendSeries, type WeighIn } from '../../domain/trend.ts';
 import type { OnboardingInput } from '../../schemas/settings.ts';
 import type { AppContext } from '../context.ts';
 import type { Db } from '../db/index.ts';
-import { weeklyTargets, weights, type WeeklyTarget } from '../db/schema.ts';
+import { rowWhere } from '../db/row-where.ts';
+import { weeklyTargets, type WeeklyTarget } from '../db/schema.ts';
 import { dailyIntakes } from '../log/repo.ts';
 import {
 	getSettings,
 	isProfileComplete,
 	onboardingWrite,
+	PROFILE_FIELDS,
 	profileIncomplete,
 	settingsAre,
 	settingsSwap,
@@ -21,7 +22,7 @@ import {
 	type Settings,
 	type TargetSettingsPatch
 } from '../settings/repo.ts';
-import { listWeights } from '../weights/repo.ts';
+import { listWeights, weightUpsertWhere } from '../weights/repo.ts';
 
 /**
  * What the target functions read from the request: the database, the settings row and today. `now` stamps
@@ -77,9 +78,6 @@ export class SettingsConflictError extends Error {
 /** How often a settings save reads, computes and tries its write before giving up with `SettingsConflictError`. */
 export const SETTINGS_SAVE_ATTEMPTS = 3;
 
-/** The settings a target's formula TDEE comes from. */
-const PROFILE_FIELDS = ['sex', 'birthDate', 'heightCm', 'activityLevel'] as const;
-
 /** The TDEE used of the latest row before `monday`, null without one. */
 async function previousUsed(db: Db, monday: string): Promise<number | null> {
 	const [row] = await db
@@ -114,19 +112,6 @@ async function computeRow(
 		intakes: await dailyIntakes(db, addDays(monday, -ADAPTIVE_WINDOW_DAYS), sunday),
 		previousUsed: previous
 	});
-}
-
-/**
- * A one row `SELECT` of `values` in `table`'s column order that yields the row only when `where` holds, for an
- * `INSERT ... SELECT` that writes nothing otherwise. A column left out of `values` takes its SQL default.
- */
-function rowWhere(table: SQLiteTable, values: Record<string, unknown>, where: SQL): SQL {
-	const columns = Object.entries(getTableColumns(table)).map(([key, column]) => {
-		if (key in values) return sql.param(values[key], column);
-		if (is(column.default, SQL)) return column.default;
-		throw new Error(`No value or SQL default for ${column.name}`);
-	});
-	return sql`SELECT ${sql.join(columns, sql`, `)} WHERE ${where}`;
 }
 
 /**
@@ -212,8 +197,8 @@ export async function targetFor(ctx: TargetContext, date: string): Promise<Weekl
  * Throws `AgeOutOfRangeError` for a birth date out of range on `ctx.today`.
  *
  * Another save landing between the read and the batch cannot mix settings into the row: the settings write is a
- * compare and swap against the row as read (`settingsSwap`), and the row is written only when the settings then hold
- * the values it was computed from. On a conflict nothing is written and the save reads, computes and tries again,
+ * compare and swap against the row as read (`settingsSwap`), and the row is written under the same condition, first in
+ * the batch, so both are written or neither. On a conflict nothing is written and the save reads, computes and tries again,
  * `SETTINGS_SAVE_ATTEMPTS` times in all, then throws `SettingsConflictError`.
  */
 export async function recomputeCurrentWeek(
@@ -248,12 +233,14 @@ async function trySettingsSave(
 	const smooth = !profileChanged && (existing === undefined || wasSmoothed(existing, previous));
 	const next: Settings = { ...current, ...patch };
 	const row = await computeRow(ctx.db, next, monday, weighIns, smooth ? previous : null);
-	const [swap, [saved]] = await ctx.db.batch([
-		settingsSwap(ctx.db, current, patch),
-		rowUpsert(ctx.db, row, ctx.now ?? new Date(), settingsWhere(settingsAre(next)))
+	// The row goes first and under the same condition as the swap (the settings still hold `current`), so both write
+	// or neither does, and the swap sees the settings as the row's statement did.
+	const [[saved], swap] = await ctx.db.batch([
+		rowUpsert(ctx.db, row, ctx.now ?? new Date(), settingsWhere(settingsAre(current))),
+		settingsSwap(ctx.db, current, patch)
 	]);
 	if (swap.meta.changes === 0) return undefined;
-	if (!saved) throw new Error(`The row of the week of ${monday} was not written`);
+	if (!saved) throw new Error(`The row of the week of ${monday} was not written`); // invariant: same condition as the swap
 	return saved;
 }
 
@@ -290,10 +277,7 @@ export async function saveOnboarding(
 	);
 	const incomplete = settingsWhere(profileIncomplete);
 	const [, [saved], written] = await ctx.db.batch([
-		ctx.db
-			.insert(weights)
-			.select(rowWhere(weights, today, incomplete))
-			.onConflictDoUpdate({ target: weights.date, set: { kg } }),
+		weightUpsertWhere(ctx.db, today, incomplete),
 		rowUpsert(ctx.db, row, ctx.now ?? new Date(), incomplete),
 		onboardingWrite(ctx.db, profile)
 	]);
