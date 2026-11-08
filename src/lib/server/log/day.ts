@@ -1,15 +1,13 @@
-import { FREQUENTS_SIZE, MACRO_RULE_DEFAULTS, RECENTS_SIZE } from '../../domain/constants.ts';
-import { macroTargets } from '../../domain/targets.ts';
+import { FREQUENTS_SIZE, RECENTS_SIZE } from '../../domain/constants.ts';
 import type { Nutrients } from '../../domain/nutrition.ts';
 import { activeBatches, portionWeights, type BatchSummary } from '../batches/repo.ts';
 import type { LogEntry } from '../db/schema.ts';
 import { frequents, recents, type RecentFood } from '../foods/repo.ts';
 import type { AppContext } from '../context.ts';
 import type { Db } from '../db/index.ts';
-import type { Settings } from '../settings/repo.ts';
 import { dayEntries, dayTotals } from './repo.ts';
 
-/** The daily target shown in the hero: kcal as entered, macros from `macroTargets`. */
+/** The daily target shown in the hero: kcal and macros of the day's week. */
 export type DayTarget = {
 	kcal: number;
 	proteinG: number;
@@ -36,15 +34,6 @@ export type DayData = {
 	 */
 	batchPortionG: Record<string, number | null>;
 };
-
-/** The manual target, or null while kcal and body weight are not both set. */
-export function dayTarget(
-	settings: Pick<Settings, 'manualTargetKcal' | 'manualWeightKg'>
-): DayTarget | null {
-	const { manualTargetKcal: kcal, manualWeightKg: weightKg } = settings;
-	if (kcal === null || weightKg === null) return null;
-	return { kcal, ...macroTargets(kcal, weightKg, MACRO_RULE_DEFAULTS) };
-}
 
 /**
  * The add sheet's suggestions: the active batches (which also finishes the stale ones), recents, then frequents that
@@ -81,7 +70,8 @@ export async function loadDay(ctx: AppContext, date: string): Promise<DayData> {
 		today: ctx.today,
 		entries,
 		totals: dayTotals(entries),
-		target: dayTarget(ctx.settings),
+		// The manual target is gone; the week's target from `weekly_targets` takes its place.
+		target: null,
 		...suggested,
 		batchPortionG: await portionWeights(ctx.db, [...batchIds])
 	};

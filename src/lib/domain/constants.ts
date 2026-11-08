@@ -9,9 +9,6 @@ export const MIN_QUICK_KCAL = 0;
 export const MAX_QUICK_KCAL = 10000;
 export const MAX_QUICK_MACRO_G = 1000;
 
-/** Bounds for the temporary manual target (phase 2). */
-export const MAX_MANUAL_TARGET_KCAL = 10000;
-
 /** Energy per gram of each macro (Atwater factors). */
 export const KCAL_PER_G_PROTEIN = 4;
 export const KCAL_PER_G_CARBS = 4;
@@ -75,11 +72,18 @@ export const DEFAULT_ENERGY_DENSITY = 5000;
 export const MIN_ENERGY_DENSITY = 3000;
 export const MAX_ENERGY_DENSITY = 7700;
 
+/** The profile's choices, in the order forms list them. Settings columns and their checks use these lists. */
+export const SEXES = ['male', 'female'] as const;
+export const ACTIVITY_LEVELS = ['sedentary', 'light', 'moderate', 'active', 'very_active'] as const;
+
 /** Mifflin St Jeor BMR (parent spec 6.1): kcal per kg, per cm, per year of age, and the offset by sex. */
 export const BMR_KCAL_PER_KG = 10;
 export const BMR_KCAL_PER_CM = 6.25;
 export const BMR_KCAL_PER_YEAR = 5;
-export const BMR_SEX_OFFSET = { male: 5, female: -161 } as const;
+export const BMR_SEX_OFFSET = { male: 5, female: -161 } as const satisfies Record<
+	(typeof SEXES)[number],
+	number
+>;
 
 /** Physical activity level by activity level: formula TDEE = BMR x PAL (parent spec 6.2). */
 export const PAL = {
@@ -88,7 +92,7 @@ export const PAL = {
 	moderate: 1.55,
 	active: 1.725,
 	very_active: 1.9
-} as const;
+} as const satisfies Record<(typeof ACTIVITY_LEVELS)[number], number>;
 
 /** Adaptive TDEE (parent spec 6.6). The window is the days before the week's Monday. */
 export const ADAPTIVE_WINDOW_DAYS = 21;

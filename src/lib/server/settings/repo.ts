@@ -15,15 +15,3 @@ export async function getSettings(db: Db): Promise<Settings> {
 	const [created] = await read();
 	return created;
 }
-
-/** Saves the temporary daily target; null clears kcal and weight together. */
-export async function saveManualTarget(
-	db: Db,
-	value: { kcal: number; weightKg: number } | null
-): Promise<void> {
-	const target = { manualTargetKcal: value?.kcal ?? null, manualWeightKg: value?.weightKg ?? null };
-	await db
-		.insert(settings)
-		.values({ id: ROW_ID, ...target })
-		.onConflictDoUpdate({ target: settings.id, set: target });
-}

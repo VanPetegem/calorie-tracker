@@ -9,7 +9,24 @@ import {
 	text,
 	uniqueIndex
 } from 'drizzle-orm/sqlite-core';
-import { MAX_WEIGHT_KG, MIN_WEIGHT_KG } from '../../domain/constants.ts';
+import {
+	ACTIVITY_LEVELS,
+	DEFAULT_ENERGY_DENSITY,
+	DEFAULT_GOAL_RATE,
+	GOAL_RATES,
+	MACRO_RULE_DEFAULTS,
+	MAX_ENERGY_DENSITY,
+	MAX_FAT_PCT,
+	MAX_HEIGHT_CM,
+	MAX_PROTEIN_G_PER_KG,
+	MAX_WEIGHT_KG,
+	MIN_ENERGY_DENSITY,
+	MIN_FAT_PCT,
+	MIN_HEIGHT_CM,
+	MIN_PROTEIN_G_PER_KG,
+	MIN_WEIGHT_KG,
+	SEXES
+} from '../../domain/constants.ts';
 
 export * from './auth.schema';
 
@@ -224,21 +241,93 @@ export const weights = sqliteTable(
 	]
 );
 
-/** A single row (id 1). Phase 4 adds the remaining settings columns. */
+/** SQL text for a list of constants, for checks: `'male', 'female'` or `0.25, 0.35, 0.5`. */
+function sqlList(values: readonly (string | number)[]) {
+	return sql.raw(
+		values.map((value) => (typeof value === 'string' ? `'${value}'` : String(value))).join(', ')
+	);
+}
+
+/** SQL text for a number constant in a check or default. */
+const num = (value: number) => sql.raw(String(value));
+
+/**
+ * A single row (id 1): the timezone, the profile behind the targets and the rules. The profile fields stay null until
+ * onboarding; the profile is complete when sex, birth date, height and activity level are all set.
+ */
 export const settings = sqliteTable(
 	'settings',
 	{
 		id: integer('id').primaryKey().default(1),
 		timezone: text('timezone').notNull().default('Europe/Zurich'),
-		manualTargetKcal: real('manual_target_kcal'),
-		manualWeightKg: real('manual_weight_kg')
+		sex: text('sex', { enum: SEXES }),
+		/** Local calendar date (`YYYY-MM-DD`). */
+		birthDate: text('birth_date'),
+		heightCm: real('height_cm'),
+		activityLevel: text('activity_level', { enum: ACTIVITY_LEVELS }),
+		/** Percent of trend weight per week, one of GOAL_RATES. */
+		goalRatePct: real('goal_rate_pct').notNull().default(DEFAULT_GOAL_RATE),
+		proteinGPerKg: real('protein_g_per_kg').notNull().default(MACRO_RULE_DEFAULTS.proteinGPerKg),
+		/** Fat as a share of kcal (0.25 is 25 percent). */
+		fatPct: real('fat_pct').notNull().default(MACRO_RULE_DEFAULTS.fatPct),
+		/** kcal stored per kg of weight gained. */
+		energyDensity: real('energy_density_kcal_per_kg').notNull().default(DEFAULT_ENERGY_DENSITY)
 	},
 	(table) => [
 		check('settings_single_row', sql`${table.id} = 1`),
+		check('settings_sex', sql`${table.sex} IS NULL OR ${table.sex} IN (${sqlList(SEXES)})`),
 		check(
-			'settings_manual_target_pair',
-			sql`(${table.manualTargetKcal} IS NULL) = (${table.manualWeightKg} IS NULL)`
+			'settings_activity_level',
+			sql`${table.activityLevel} IS NULL OR ${table.activityLevel} IN (${sqlList(ACTIVITY_LEVELS)})`
+		),
+		check(
+			'settings_height_cm_range',
+			sql`${table.heightCm} IS NULL OR ${table.heightCm} BETWEEN ${num(MIN_HEIGHT_CM)} AND ${num(MAX_HEIGHT_CM)}`
+		),
+		check('settings_goal_rate', sql`${table.goalRatePct} IN (${sqlList(GOAL_RATES)})`),
+		check(
+			'settings_protein_g_per_kg_range',
+			sql`${table.proteinGPerKg} BETWEEN ${num(MIN_PROTEIN_G_PER_KG)} AND ${num(MAX_PROTEIN_G_PER_KG)}`
+		),
+		check(
+			'settings_fat_pct_range',
+			sql`${table.fatPct} BETWEEN ${num(MIN_FAT_PCT)} AND ${num(MAX_FAT_PCT)}`
+		),
+		check(
+			'settings_energy_density_range',
+			sql`${table.energyDensity} BETWEEN ${num(MIN_ENERGY_DENSITY)} AND ${num(MAX_ENERGY_DENSITY)}`
 		)
+	]
+);
+
+/**
+ * One week's target, made the first time a load needs it and replaced only by a settings change during that week.
+ * Values are as computed (`weekTarget`), rounded only where the domain rounds.
+ */
+export const weeklyTargets = sqliteTable(
+	'weekly_targets',
+	{
+		/** The week's Monday (`YYYY-MM-DD`). */
+		weekStart: text('week_start').primaryKey(),
+		tdeeFormula: real('tdee_formula').notNull(),
+		/** Null when the adaptive gate fails. */
+		tdeeAdaptive: real('tdee_adaptive'),
+		tdeeUsed: real('tdee_used').notNull(),
+		targetKcal: real('target_kcal').notNull(),
+		proteinG: real('protein_g').notNull(),
+		carbsG: real('carbs_g').notNull(),
+		fatG: real('fat_g').notNull(),
+		carbsFloored: integer('carbs_floored', { mode: 'boolean' }).notNull(),
+		trendKg: real('trend_kg').notNull(),
+		/** Null while the trend does not reach back over the rate window. */
+		rateKgPerWeek: real('rate_kg_per_week'),
+		validDays: integer('valid_days').notNull(),
+		weighIns: integer('weigh_ins').notNull(),
+		computedAt: text('computed_at').notNull().default(nowIso)
+	},
+	(table) => [
+		// SQLite's %w is 0 for Sunday, so 1 is Monday.
+		check('weekly_targets_week_start_monday', sql`strftime('%w', ${table.weekStart}) = '1'`)
 	]
 );
 
@@ -250,3 +339,4 @@ export type Container = typeof containers.$inferSelect;
 export type Batch = typeof batches.$inferSelect;
 export type BatchIngredient = typeof batchIngredients.$inferSelect;
 export type Weight = typeof weights.$inferSelect;
+export type WeeklyTarget = typeof weeklyTargets.$inferSelect;

@@ -10,8 +10,8 @@ export type TestDb = {
 	db: Db;
 	/** The raw binding, for SQL that must not go through the current Drizzle schema. */
 	d1: D1Database;
-	/** Applies the migrations left out by `through`. */
-	migrateRest(): Promise<void>;
+	/** Applies the migrations left out by `through`, or those up to and including `options.through`. */
+	migrateRest(options?: { through?: string }): Promise<void>;
 	dispose(): Promise<void>;
 };
 
@@ -26,6 +26,14 @@ async function applyMigration(d1: D1Database, file: string): Promise<void> {
 		.map((statement) => statement.trim())
 		.filter(Boolean);
 	await d1.batch(statements.map((statement) => d1.prepare(statement)));
+}
+
+/** The number of `files` up to and including migration `through`; all of them without `through`. */
+function splitAt(files: string[], through: string | undefined): number {
+	if (through === undefined) return files.length;
+	const index = files.findIndex((file) => file.startsWith(`${through}_`));
+	if (index === -1) throw new Error(`No migration ${through}`);
+	return index + 1;
 }
 
 /**
@@ -44,19 +52,16 @@ export async function createTestDb(options: { through?: string } = {}): Promise<
 		const d1 = proxy.env.DB;
 		const files = (await readdir(MIGRATIONS_DIR)).filter((name) => name.endsWith('.sql')).sort();
 		const { through } = options;
-		const split =
-			through === undefined
-				? files.length
-				: files.findIndex((file) => file.startsWith(`${through}_`)) + 1;
-		if (split === 0) throw new Error(`No migration ${through}`);
+		const split = splitAt(files, through);
 		for (const file of files.slice(0, split)) await applyMigration(d1, file);
 		let rest = files.slice(split);
 		return {
 			db: getDb(d1),
 			d1,
-			async migrateRest() {
-				for (const file of rest) await applyMigration(d1, file);
-				rest = [];
+			async migrateRest(options = {}) {
+				const end = splitAt(rest, options.through);
+				for (const file of rest.slice(0, end)) await applyMigration(d1, file);
+				rest = rest.slice(end);
 			},
 			dispose: proxy.dispose
 		};

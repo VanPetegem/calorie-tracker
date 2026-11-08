@@ -4,18 +4,7 @@ import type { AppContext } from '../context.ts';
 import { createFood } from '../foods/repo.ts';
 import { createTestDb } from '../test/d1.ts';
 import { addBatchEntry, addQuickEntry } from './repo.ts';
-import { dayTarget, loadDay, suggestions } from './day.ts';
-
-describe('dayTarget', () => {
-	it('is null until kcal and body weight are both set', () => {
-		expect(dayTarget({ manualTargetKcal: null, manualWeightKg: null })).toBeNull();
-	});
-
-	it('adds macro targets to the entered kcal', () => {
-		const target = dayTarget({ manualTargetKcal: 3000, manualWeightKg: 70 });
-		expect(target).toMatchObject({ kcal: 3000, proteinG: 126, carbsFloored: false });
-	});
-});
+import { loadDay, suggestions } from './day.ts';
 
 describe('batches in the day data', () => {
 	type TestDb = Awaited<ReturnType<typeof createTestDb>>;
@@ -83,8 +72,7 @@ describe('batches in the day data', () => {
 		const day = await loadDay(
 			{
 				...ctx,
-				db: test.db,
-				settings: { manualTargetKcal: null, manualWeightKg: null }
+				db: test.db
 			} as AppContext,
 			'2026-11-04'
 		);
@@ -99,8 +87,7 @@ describe('batches in the day data', () => {
 		const day = await loadDay(
 			{
 				...ctx,
-				db: test.db,
-				settings: { manualTargetKcal: null, manualWeightKg: null }
+				db: test.db
 			} as AppContext,
 			'2019-01-01'
 		);

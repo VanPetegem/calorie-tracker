@@ -2,6 +2,35 @@
 
 Living record of decisions. Newest first. Each entry: date, decision, reason.
 
+## 2026-11-08
+
+- **Migration 0022 (`0022_targets.sql`) rebuilds `settings` and creates `weekly_targets`; the migration check passes.**
+  Dropping `settings_manual_target_pair` forces a rebuild. drizzle-kit's rebuild was hand edited twice: `PRAGMA
+foreign_keys=OFF/ON` became `PRAGMA defer_foreign_keys = on` as in 0020, and its copy `INSERT ... SELECT "id",
+"timezone", "sex", ... FROM settings` became `SELECT "id", "timezone"`. The old table has no `sex`, and SQLite reads
+  an unknown double quoted name as text, so the generated copy wrote `'sex'` into `sex` and only the new check stopped
+  it. `migrations.spec.ts` applies up to 0021, writes settings (timezone `America/New_York`, a manual target), the 3a
+  rows and a weigh-in, applies 0022, and checks the row keeps id and timezone with every default and null profile, and
+  that every other table, index, trigger and row is unchanged. Applied locally with `pnpm db:migrate:local`.
+- **No migration test runs `PRAGMA foreign_key_check`.** Both copies (3a and 4b) could not fail: with keys enforced,
+  a migration that leaves a broken key fails at its commit, so the check never sees one (tried on 0021 and 0022).
+  `run with foreign keys enforced, as on D1` carries that guarantee. `migrateRest({ through })` lets the 3a check stop
+  at 0021, because 0022 changes `settings` on purpose.
+- **Settings checks come from the constants.** `settings_sex`, `settings_activity_level` (from the new `SEXES` and
+  `ACTIVITY_LEVELS`, which `BMR_SEX_OFFSET` and `PAL` must cover), `settings_height_cm_range`, `settings_goal_rate`
+  (`IN` the presets), `settings_protein_g_per_kg_range`, `settings_fat_pct_range`, `settings_energy_density_range`.
+  Profile columns are nullable until onboarding; goal and rules are `NOT NULL` with the defaults. Birth date has no SQL
+  check; the age limit needs a today.
+- **`weekly_targets` stores values as `weekTarget` computes them**: kcal, TDEE and grams as `real`, counts as
+  `integer`, `carbs_floored` as a boolean, `week_start` checked to be a Monday (`strftime('%w') = '1'`). A type check
+  in `schema.spec.ts` keeps `WeeklyTarget` minus `computedAt` equal to `WeekTargetRow`.
+- **`ProfileInput` checks age 16 to 100 against today's UTC date.** The schema is shared by browser and Worker, which
+  agree on UTC; near a birthday it can be a day off the settings timezone, which these bounds do not need. Settings
+  uses the same schema, so a birth date edit keeps the limit too. Fat is a share (0.15 to 0.40), not a percent.
+- **The manual target is gone ahead of the weekly targets.** `ManualTargetInput`, `saveManualTarget`,
+  `target.remote.ts`, `MAX_MANUAL_TARGET_KCAL`, the Settings card and its two e2e tests are removed; `loadDay` returns
+  `target: null` until it reads `weekly_targets`.
+
 ## 2026-11-07
 
 - **The entry card saves through `logWeightToday({ kg })`, which uses the server's today; the sheet keeps `saveWeight`
