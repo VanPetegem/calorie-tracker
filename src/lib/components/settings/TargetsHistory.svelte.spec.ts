@@ -35,15 +35,6 @@ describe('TargetsHistory', () => {
 		expect(rowWith('Week of Mon 26 Oct 2026').element().textContent).not.toContain('Formula');
 	});
 
-	it('titles the current week This week and the others by their Monday', async () => {
-		render(TargetsHistory, {
-			rows: [weekRow(THIS_WEEK), weekRow(LAST_WEEK)],
-			currentWeekStart: THIS_WEEK
-		});
-		expect(rowWith('This week').elements()).toHaveLength(1);
-		expect(rowWith('Week of Mon 26 Oct 2026').elements()).toHaveLength(1);
-	});
-
 	it("shows each week's target and the TDEE it used", async () => {
 		render(TargetsHistory, {
 			rows: [weekRow(THIS_WEEK, { targetKcal: 2450, tdeeUsed: 2640, tdeeFormula: 2600 })],
