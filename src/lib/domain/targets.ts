@@ -101,6 +101,18 @@ export function targetKcal(
 }
 
 /**
+ * Whether `row` was smoothed against `previousUsed`: its TDEE used is `smoothTdee` of its own adaptive (else formula)
+ * TDEE and `previousUsed`. A row made without smoothing (a profile change) differs, except when smoothing would not
+ * have moved it. Exact: the stored values are the doubles the row was computed from, and `smoothTdee` is not rounded.
+ */
+export function wasSmoothed(
+	row: Pick<WeekTargetRow, 'tdeeFormula' | 'tdeeAdaptive' | 'tdeeUsed'>,
+	previousUsed: number | null
+): boolean {
+	return row.tdeeUsed === smoothTdee(row.tdeeAdaptive ?? row.tdeeFormula, previousUsed);
+}
+
+/**
  * The target row of the week starting `weekStart`. Everything comes from the days before that Monday: the trend and
  * rate on the Sunday before, and the adaptive window ending there, so weigh-ins and intakes from the week itself never
  * change the row. Pass `trendSeries(weighIns, addDays(weekStart, -1))` over all weigh-ins: points dated after that
@@ -108,8 +120,8 @@ export function targetKcal(
  * the week (the first week, where the onboarding weigh-in is today), the trend on the Sunday is null and the kg of
  * the earliest weigh-in stands in for the trend (`series[0]`), with a null rate; later weigh-ins of the week cannot
  * change it.
- * `previousUsed` is the TDEE used of the latest earlier row, null for the first and for a profile change, which is
- * not smoothed. Age is taken on `weekStart`.
+ * `previousUsed` is the TDEE used of the latest earlier row, null for the first and for a week whose row is not
+ * smoothed (a profile change, see `wasSmoothed`). Age is taken on `weekStart`.
  * Throws a RangeError for an empty series.
  */
 export function weekTarget(input: {

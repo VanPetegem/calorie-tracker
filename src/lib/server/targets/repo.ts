@@ -1,7 +1,7 @@
 import { asc, desc, eq, lt, lte } from 'drizzle-orm';
 import { ADAPTIVE_WINDOW_DAYS, MAX_AGE_YEARS, MIN_AGE_YEARS } from '../../domain/constants.ts';
 import { addDays, weekStart } from '../../domain/dates.ts';
-import { weekTarget, type WeekTargetRow } from '../../domain/targets.ts';
+import { wasSmoothed, weekTarget, type WeekTargetRow } from '../../domain/targets.ts';
 import { ageInRange } from '../../domain/tdee.ts';
 import { trendSeries, type WeighIn } from '../../domain/trend.ts';
 import type { OnboardingInput } from '../../schemas/settings.ts';
@@ -70,28 +70,24 @@ async function previousUsed(db: Db, monday: string): Promise<number | null> {
 /**
  * The row of the week starting `monday` for `settings`, from `weighIns` (all of them: `trendSeries` and `weekTarget`
  * read only what is dated before the week, see `weekTarget`), the intake of the adaptive window before the week and
- * the previous row. With `smooth: false` the TDEE is not smoothed against the previous row. Writes nothing.
+ * `previous`, the TDEE used to smooth against (`previousUsed`, or null for no smoothing). Writes nothing.
  */
 async function computeRow(
 	db: Db,
 	settings: Settings,
 	monday: string,
 	weighIns: WeighIn[],
-	{ smooth = true }: { smooth?: boolean } = {}
+	previous: number | null
 ): Promise<WeekTargetRow> {
 	if (!isProfileComplete(settings)) throw new ProfileIncompleteError();
 	if (weighIns.length === 0) throw new NoWeighInError(monday);
 	const sunday = addDays(monday, -1);
-	const [intakes, previous] = await Promise.all([
-		dailyIntakes(db, addDays(monday, -ADAPTIVE_WINDOW_DAYS), sunday),
-		smooth ? previousUsed(db, monday) : null
-	]);
 	return weekTarget({
 		weekStart: monday,
 		profile: settings,
 		rules: settings,
 		series: trendSeries(weighIns, sunday),
-		intakes,
+		intakes: await dailyIntakes(db, addDays(monday, -ADAPTIVE_WINDOW_DAYS), sunday),
 		previousUsed: previous
 	});
 }
@@ -126,7 +122,11 @@ export async function currentTarget(ctx: TargetContext): Promise<WeeklyTarget> {
 	const monday = weekStart(ctx.today);
 	const existing = await rowOf(ctx.db, monday);
 	if (existing) return existing;
-	const row = await computeRow(ctx.db, ctx.settings, monday, await listWeights(ctx.db));
+	const [weighIns, previous] = await Promise.all([
+		listWeights(ctx.db),
+		previousUsed(ctx.db, monday)
+	]);
+	const row = await computeRow(ctx.db, ctx.settings, monday, weighIns, previous);
 	await ctx.db.insert(weeklyTargets).values(row).onConflictDoNothing();
 	const created = await rowOf(ctx.db, monday);
 	if (!created) throw new Error(`The row of the week of ${monday} was not written`);
@@ -167,8 +167,10 @@ export async function targetFor(ctx: TargetContext, date: string): Promise<Weekl
  * weigh-ins, window and previous row as `currentTarget`; earlier rows are not touched. The settings it merges
  * `patch` into are read from the database, not taken from `ctx`, which may be older than another save in flight.
  * A patch that changes the profile (sex, birth date, height or activity level) is not smoothed against the previous
- * row, so a corrected profile shows in this week's target in full; any other change is. `patch` needs at least one
- * field and is validated by the caller. Throws `AgeOutOfRangeError` for a birth date out of range on `ctx.today`.
+ * row, so a corrected profile shows in this week's target in full; nor is any later change this week once the row was
+ * made that way (`wasSmoothed`), so a goal save cannot pull it back. Any other change is smoothed. `patch` needs at
+ * least one field and is validated by the caller. Throws `AgeOutOfRangeError` for a birth date out of range on
+ * `ctx.today`.
  */
 export async function recomputeCurrentWeek(
 	ctx: TargetContext,
@@ -178,18 +180,22 @@ export async function recomputeCurrentWeek(
 		throw new AgeOutOfRangeError(patch.birthDate, ctx.today);
 	}
 	const monday = weekStart(ctx.today);
-	const current = await getSettings(ctx.db);
+	const [current, existing, previous, weighIns] = await Promise.all([
+		getSettings(ctx.db),
+		rowOf(ctx.db, monday),
+		previousUsed(ctx.db, monday),
+		listWeights(ctx.db)
+	]);
 	const profileChanged = PROFILE_FIELDS.some(
 		(field) => patch[field] !== undefined && patch[field] !== current[field]
 	);
+	const smooth = !profileChanged && (existing === undefined || wasSmoothed(existing, previous));
 	const row = await computeRow(
 		ctx.db,
 		{ ...current, ...patch },
 		monday,
-		await listWeights(ctx.db),
-		{
-			smooth: !profileChanged
-		}
+		weighIns,
+		smooth ? previous : null
 	);
 	const [, [saved]] = await ctx.db.batch([
 		settingsWrite(ctx.db, patch),
@@ -214,8 +220,17 @@ export async function saveOnboarding(
 	const today: WeighIn = { date: ctx.today, kg };
 	const monday = weekStart(ctx.today);
 	const weighIns = (await listWeights(ctx.db)).filter((weighIn) => weighIn.date !== ctx.today);
-	const current = await getSettings(ctx.db);
-	const row = await computeRow(ctx.db, { ...current, ...profile }, monday, [...weighIns, today]);
+	const [current, previous] = await Promise.all([
+		getSettings(ctx.db),
+		previousUsed(ctx.db, monday)
+	]);
+	const row = await computeRow(
+		ctx.db,
+		{ ...current, ...profile },
+		monday,
+		[...weighIns, today],
+		previous
+	);
 	const [, , [saved]] = await ctx.db.batch([
 		settingsWrite(ctx.db, profile),
 		weightUpsert(ctx.db, today),

@@ -212,23 +212,41 @@ describe('targets repository', () => {
 		beforeEach(async () => {
 			await withProfile();
 			await saveWeight(test.db, { date: '2026-10-20', kg: 72 });
-			await test.db.insert(weeklyTargets).values(storedRow(LAST_WEEK, { tdeeUsed: 2500 }));
+			// Far from every formula TDEE below, so smoothing always moves (and caps) this week's.
+			await test.db.insert(weeklyTargets).values(storedRow(LAST_WEEK, { tdeeUsed: 2000 }));
 		});
 
-		it('that changes the profile recomputes this week without smoothing against last week', async () => {
-			const after = await recomputeCurrentWeek(await ctx(WED), {
-				...PROFILE,
-				activityLevel: 'active'
-			});
+		it.each<TargetSettingsPatch>([
+			{ sex: 'female' },
+			{ birthDate: '1980-11-04' },
+			{ heightCm: 170 },
+			{ activityLevel: 'active' }
+		])(
+			'that changes %o recomputes this week without smoothing against last week',
+			async (change) => {
+				const after = await recomputeCurrentWeek(await ctx(WED), { ...PROFILE, ...change });
 
-			expect(after.tdeeAdaptive).toBeNull();
+				expect(after.tdeeAdaptive).toBeNull();
+				expect(after.tdeeUsed).toBe(after.tdeeFormula);
+			}
+		);
+
+		it.each<[string, TargetSettingsPatch]>([
+			['a goal save', { goalRatePct: 0.5 }],
+			['a macro rule save', { proteinGPerKg: 2.2 }],
+			['a re-save of the unchanged profile', { ...PROFILE, activityLevel: 'active' }]
+		])('that changes the profile keeps this week unsmoothed through %s', async (_, patch) => {
+			await recomputeCurrentWeek(await ctx(WED), { ...PROFILE, activityLevel: 'active' });
+
+			const after = await recomputeCurrentWeek(await ctx(WED), patch);
+
 			expect(after.tdeeUsed).toBe(after.tdeeFormula);
 		});
 
 		it('that changes nothing keeps smoothing against last week', async () => {
 			const after = await recomputeCurrentWeek(await ctx(WED), PROFILE);
 
-			expect(after.tdeeUsed).toBeCloseTo(smoothTdee(after.tdeeFormula, 2500), 9);
+			expect(after.tdeeUsed).toBeCloseTo(smoothTdee(after.tdeeFormula, 2000), 9);
 		});
 	});
 
