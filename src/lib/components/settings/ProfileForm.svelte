@@ -56,7 +56,7 @@
 	});
 	let submitted = $state(false);
 	let busy = $state(false);
-	// The message of the failed save: the server's reason for a 400, else a generic one.
+	// The message of the failed save: the server's reason for a 400 or a 409 conflict, else a generic one.
 	let failure = $state<string | null>(null);
 	let form = $state<HTMLFormElement>();
 
@@ -116,7 +116,8 @@
 		try {
 			await onsubmit({ profile: profile.output, kg: weight?.success ? weight.output.kg : null });
 		} catch (cause) {
-			failure = isHttpError(cause, 400) ? cause.body.message : SAVE_FAILED;
+			failure =
+				isHttpError(cause, 400) || isHttpError(cause, 409) ? cause.body.message : SAVE_FAILED;
 		} finally {
 			busy = false;
 		}

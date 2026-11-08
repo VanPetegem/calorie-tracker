@@ -124,4 +124,15 @@ describe('ProfileForm', () => {
 		await page.getByRole('button', { name: 'Save profile' }).click();
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Add a weigh-in first');
 	});
+
+	it('shows the reason a settings conflict was answered with', async () => {
+		const onsubmit = vi.fn(async () => error(409, 'Settings changed, try again'));
+		renderSettings('2026-11-08', onsubmit);
+		await page.getByRole('radio', { name: 'Male', exact: true }).click();
+		await field('Birth date').fill('1990-11-04');
+		await field('Height').fill('180');
+		await page.getByRole('radio', { name: 'Moderate' }).click();
+		await page.getByRole('button', { name: 'Save profile' }).click();
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Settings changed, try again');
+	});
 });
