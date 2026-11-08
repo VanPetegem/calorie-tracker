@@ -1,4 +1,5 @@
-import { asc, desc, eq, lt, lte } from 'drizzle-orm';
+import { asc, desc, eq, getTableColumns, is, lt, lte, SQL, sql } from 'drizzle-orm';
+import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { ADAPTIVE_WINDOW_DAYS, MAX_AGE_YEARS, MIN_AGE_YEARS } from '../../domain/constants.ts';
 import { addDays, weekStart } from '../../domain/dates.ts';
 import { wasSmoothed, weekTarget, type WeekTargetRow } from '../../domain/targets.ts';
@@ -7,16 +8,20 @@ import { trendSeries, type WeighIn } from '../../domain/trend.ts';
 import type { OnboardingInput } from '../../schemas/settings.ts';
 import type { AppContext } from '../context.ts';
 import type { Db } from '../db/index.ts';
-import { weeklyTargets, type WeeklyTarget } from '../db/schema.ts';
+import { weeklyTargets, weights, type WeeklyTarget } from '../db/schema.ts';
 import { dailyIntakes } from '../log/repo.ts';
 import {
 	getSettings,
 	isProfileComplete,
-	settingsWrite,
+	onboardingWrite,
+	profileIncomplete,
+	settingsAre,
+	settingsSwap,
+	settingsWhere,
 	type Settings,
 	type TargetSettingsPatch
 } from '../settings/repo.ts';
-import { listWeights, weightUpsert } from '../weights/repo.ts';
+import { listWeights } from '../weights/repo.ts';
 
 /**
  * What the target functions read from the request: the database, the settings row and today. `now` stamps
@@ -52,6 +57,25 @@ export class AgeOutOfRangeError extends Error {
 		);
 	}
 }
+
+/** Onboarding found the profile complete when it wrote: another submit finished first. Nothing was written. */
+export class ProfileAlreadySetUpError extends Error {
+	override name = 'ProfileAlreadySetUpError';
+	constructor() {
+		super('The profile is already set up');
+	}
+}
+
+/** Every try of a settings save found the row changed by another save between its read and its write. */
+export class SettingsConflictError extends Error {
+	override name = 'SettingsConflictError';
+	constructor(readonly attempts: number) {
+		super(`The settings changed during each of ${attempts} tries to save them`);
+	}
+}
+
+/** How often a settings save reads, computes and tries its write before giving up with `SettingsConflictError`. */
+export const SETTINGS_SAVE_ATTEMPTS = 3;
 
 /** The settings a target's formula TDEE comes from. */
 const PROFILE_FIELDS = ['sex', 'birthDate', 'heightCm', 'activityLevel'] as const;
@@ -92,11 +116,27 @@ async function computeRow(
 	});
 }
 
-/** The unsent insert or replace of a week's row, returning it, for a `db.batch`. A replace stamps `now` as `computed_at`. */
-function rowUpsert(db: Db, row: WeekTargetRow, now: Date) {
+/**
+ * A one row `SELECT` of `values` in `table`'s column order that yields the row only when `where` holds, for an
+ * `INSERT ... SELECT` that writes nothing otherwise. A column left out of `values` takes its SQL default.
+ */
+function rowWhere(table: SQLiteTable, values: Record<string, unknown>, where: SQL): SQL {
+	const columns = Object.entries(getTableColumns(table)).map(([key, column]) => {
+		if (key in values) return sql.param(values[key], column);
+		if (is(column.default, SQL)) return column.default;
+		throw new Error(`No value or SQL default for ${column.name}`);
+	});
+	return sql`SELECT ${sql.join(columns, sql`, `)} WHERE ${where}`;
+}
+
+/**
+ * The unsent insert or replace of a week's row, returning it, for a `db.batch`; it writes only when `where` holds, and
+ * returns no row otherwise. A replace stamps `now` as `computed_at`.
+ */
+function rowUpsert(db: Db, row: WeekTargetRow, now: Date, where: SQL) {
 	return db
 		.insert(weeklyTargets)
-		.values(row)
+		.select(rowWhere(weeklyTargets, row, where))
 		.onConflictDoUpdate({
 			target: weeklyTargets.weekStart,
 			set: { ...row, computedAt: now.toISOString() }
@@ -165,12 +205,16 @@ export async function targetFor(ctx: TargetContext, date: string): Promise<Weekl
 /**
  * Writes a settings change and replaces this week's row computed with it, in one batch. The row uses the same
  * weigh-ins, window and previous row as `currentTarget`; earlier rows are not touched. The settings it merges
- * `patch` into are read from the database, not taken from `ctx`, which may be older than another save in flight.
- * A patch that changes the profile (sex, birth date, height or activity level) is not smoothed against the previous
- * row, so a corrected profile shows in this week's target in full; nor is any later change this week once the row was
- * made that way (`wasSmoothed`), so a goal save cannot pull it back. Any other change is smoothed. `patch` needs at
- * least one field and is validated by the caller. Throws `AgeOutOfRangeError` for a birth date out of range on
- * `ctx.today`.
+ * `patch` into are read from the database, not taken from `ctx`. A patch that changes the profile (sex, birth date,
+ * height or activity level) is not smoothed against the previous row, so a corrected profile shows in this week's
+ * target in full; nor is any later change this week once the row was made that way (`wasSmoothed`), so a goal save
+ * cannot pull it back. Any other change is smoothed. `patch` needs at least one field and is validated by the caller.
+ * Throws `AgeOutOfRangeError` for a birth date out of range on `ctx.today`.
+ *
+ * Another save landing between the read and the batch cannot mix settings into the row: the settings write is a
+ * compare and swap against the row as read (`settingsSwap`), and the row is written only when the settings then hold
+ * the values it was computed from. On a conflict nothing is written and the save reads, computes and tries again,
+ * `SETTINGS_SAVE_ATTEMPTS` times in all, then throws `SettingsConflictError`.
  */
 export async function recomputeCurrentWeek(
 	ctx: TargetContext,
@@ -179,6 +223,18 @@ export async function recomputeCurrentWeek(
 	if (typeof patch.birthDate === 'string' && !ageInRange(patch.birthDate, ctx.today)) {
 		throw new AgeOutOfRangeError(patch.birthDate, ctx.today);
 	}
+	for (let attempt = 1; attempt <= SETTINGS_SAVE_ATTEMPTS; attempt++) {
+		const saved = await trySettingsSave(ctx, patch);
+		if (saved) return saved;
+	}
+	throw new SettingsConflictError(SETTINGS_SAVE_ATTEMPTS);
+}
+
+/** One try of `recomputeCurrentWeek`, from a fresh read: the saved row, or undefined when the settings changed. */
+async function trySettingsSave(
+	ctx: TargetContext,
+	patch: TargetSettingsPatch
+): Promise<WeeklyTarget | undefined> {
 	const monday = weekStart(ctx.today);
 	const [current, existing, previous, weighIns] = await Promise.all([
 		getSettings(ctx.db),
@@ -190,17 +246,14 @@ export async function recomputeCurrentWeek(
 		(field) => patch[field] !== undefined && patch[field] !== current[field]
 	);
 	const smooth = !profileChanged && (existing === undefined || wasSmoothed(existing, previous));
-	const row = await computeRow(
-		ctx.db,
-		{ ...current, ...patch },
-		monday,
-		weighIns,
-		smooth ? previous : null
-	);
-	const [, [saved]] = await ctx.db.batch([
-		settingsWrite(ctx.db, patch),
-		rowUpsert(ctx.db, row, ctx.now ?? new Date())
+	const next: Settings = { ...current, ...patch };
+	const row = await computeRow(ctx.db, next, monday, weighIns, smooth ? previous : null);
+	const [swap, [saved]] = await ctx.db.batch([
+		settingsSwap(ctx.db, current, patch),
+		rowUpsert(ctx.db, row, ctx.now ?? new Date(), settingsWhere(settingsAre(next)))
 	]);
+	if (swap.meta.changes === 0) return undefined;
+	if (!saved) throw new Error(`The row of the week of ${monday} was not written`);
 	return saved;
 }
 
@@ -208,6 +261,10 @@ export async function recomputeCurrentWeek(
  * Saves the profile and goal rate, today's weigh-in (replacing one of today) and this week's row in one batch, and
  * returns the row. The other settings the row uses are read from the database, not `ctx`. `input` is validated by the
  * caller. Throws `AgeOutOfRangeError` when the birth date is out of range on `ctx.today`, before any write.
+ *
+ * Every statement of the batch runs only while the profile is still incomplete, and the settings write comes last, so
+ * a second onboarding whose read came before the first one's write finds the profile complete in the batch, writes
+ * nothing and throws `ProfileAlreadySetUpError`.
  */
 export async function saveOnboarding(
 	ctx: TargetContext,
@@ -231,11 +288,17 @@ export async function saveOnboarding(
 		[...weighIns, today],
 		previous
 	);
-	const [, , [saved]] = await ctx.db.batch([
-		settingsWrite(ctx.db, profile),
-		weightUpsert(ctx.db, today),
-		rowUpsert(ctx.db, row, ctx.now ?? new Date())
+	const incomplete = settingsWhere(profileIncomplete);
+	const [, [saved], written] = await ctx.db.batch([
+		ctx.db
+			.insert(weights)
+			.select(rowWhere(weights, today, incomplete))
+			.onConflictDoUpdate({ target: weights.date, set: { kg } }),
+		rowUpsert(ctx.db, row, ctx.now ?? new Date(), incomplete),
+		onboardingWrite(ctx.db, profile)
 	]);
+	if (written.meta.changes === 0) throw new ProfileAlreadySetUpError();
+	if (!saved) throw new Error(`The row of the week of ${monday} was not written`);
 	return saved;
 }
 

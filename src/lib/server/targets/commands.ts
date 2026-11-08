@@ -14,16 +14,19 @@ import { loadWeight } from '../weights/commands.ts';
 import {
 	AgeOutOfRangeError,
 	NoWeighInError,
+	ProfileAlreadySetUpError,
 	ProfileIncompleteError,
 	recomputeCurrentWeek,
 	saveOnboarding,
+	SettingsConflictError,
 	type TargetContext
 } from './repo.ts';
 
 /**
  * Runs a target write and maps the repository's refusals to 400s the person can act on, not 500s: no weigh-in to
- * compute from, an incomplete profile, or an age out of range on the settings timezone's day (the repository is the
- * single age check).
+ * compute from, an incomplete profile, a profile another onboarding already set up, or an age out of range on the
+ * settings timezone's day (the repository is the single age check). Settings that kept changing under every try of a
+ * save are a 409.
  */
 async function mapRefusals<T>(write: () => Promise<T>): Promise<T> {
 	try {
@@ -31,6 +34,8 @@ async function mapRefusals<T>(write: () => Promise<T>): Promise<T> {
 	} catch (cause) {
 		if (cause instanceof NoWeighInError) error(400, 'Log a weigh-in first');
 		if (cause instanceof ProfileIncompleteError) error(400, 'Finish setting up your profile first');
+		if (cause instanceof ProfileAlreadySetUpError) error(400, PROFILE_ALREADY_SET_UP);
+		if (cause instanceof SettingsConflictError) error(409, 'Settings changed, try again');
 		if (cause instanceof AgeOutOfRangeError) {
 			error(400, `Age must be ${MIN_AGE_YEARS} to ${MAX_AGE_YEARS}`);
 		}
@@ -51,7 +56,9 @@ export function recomputeWeekOn(
 
 /**
  * Onboarding: refuses once the profile is complete, so a replayed submit cannot overwrite the profile, goal or
- * weigh-in. Otherwise saves the profile, today's weigh-in and this week's target in one batch.
+ * weigh-in. Otherwise saves the profile, today's weigh-in and this week's target in one batch. The check here is the
+ * fast path on the request's settings; a submit that passes it while another one is writing is refused by the batch
+ * itself (`saveOnboarding`), with the same 400.
  */
 export async function completeOnboardingOn(
 	ctx: TargetContext,

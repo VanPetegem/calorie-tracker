@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { addDays } from '../../domain/dates.ts';
 import type { WeekTargetRow } from '../../domain/targets.ts';
 import { smoothTdee } from '../../domain/tdee.ts';
+import type { Db } from '../db/index.ts';
 import { logEntries, settings, weeklyTargets, weights, type WeeklyTarget } from '../db/schema.ts';
 import { addQuickEntry } from '../log/repo.ts';
 import { getSettings, settingsWrite, type TargetSettingsPatch } from '../settings/repo.ts';
@@ -55,6 +56,21 @@ function storedRow(weekStart: string, overrides: Partial<WeekTargetRow> = {}): W
 	};
 }
 
+/**
+ * `db` whose `batch` first awaits `interleave` (which must use the real `db`) on each of its first `times` calls: a
+ * write that lands between a save's read and its batch, deterministically.
+ */
+function interleaved(db: Db, interleave: () => Promise<unknown>, times = Infinity): Db {
+	let left = times;
+	const batch: Db['batch'] = async (queries) => {
+		if (left-- > 0) await interleave();
+		return db.batch(queries);
+	};
+	return new Proxy(db, {
+		get: (target, key, receiver) => (key === 'batch' ? batch : Reflect.get(target, key, receiver))
+	});
+}
+
 function withoutComputedAt(row: WeeklyTarget): WeekTargetRow {
 	const { computedAt, ...rest } = row;
 	expect(computedAt).toEqual(expect.any(String));
@@ -78,6 +94,11 @@ describe('targets repository', () => {
 
 	async function withProfile(patch: TargetSettingsPatch = PROFILE) {
 		await settingsWrite(test.db, patch);
+	}
+
+	/** Makes the profile incomplete again, so another onboarding may run. */
+	async function unsetProfile() {
+		await settingsWrite(test.db, { sex: null });
 	}
 
 	async function ctx(today: string) {
@@ -261,6 +282,7 @@ describe('targets repository', () => {
 			{ ...(await ctx(WED)), now: recomputeAt },
 			{ goalRatePct: 0.5 }
 		);
+		await unsetProfile();
 		const onboarded = await saveOnboarding(
 			{ ...(await ctx(WED)), now: onboardAt },
 			{ ...PROFILE, kg: 72, goalRatePct: 0.5 }
@@ -281,6 +303,27 @@ describe('targets repository', () => {
 		const viaFresh = await recomputeCurrentWeek(await ctx(WED), { goalRatePct: 0.5 });
 
 		expect(withoutComputedAt(viaStale)).toEqual(withoutComputedAt(viaFresh));
+	});
+
+	it('retries a settings save another save landed in, so the row is computed from the settings it ends with', async () => {
+		await withProfile();
+		await saveWeight(test.db, { date: '2026-10-20', kg: 72 });
+		await test.db.insert(weeklyTargets).values(storedRow(LAST_WEEK, { tdeeUsed: 2000 }));
+		await currentTarget(await ctx(WED));
+		const db = interleaved(
+			test.db,
+			async () => recomputeCurrentWeek(await ctx(WED), { heightCm: 170 }),
+			1
+		);
+
+		const saved = await recomputeCurrentWeek({ ...(await ctx(WED)), db }, { goalRatePct: 0.5 });
+
+		expect(await getSettings(test.db)).toMatchObject({ heightCm: 170, goalRatePct: 0.5 });
+		expect((await rows()).find((row) => row.weekStart === MON)).toEqual(saved);
+		// The interleaved profile change made this week unsmoothed; the retry reads that, not its first read.
+		expect(saved.tdeeUsed).toBe(saved.tdeeFormula);
+		const again = await recomputeCurrentWeek(await ctx(WED), { goalRatePct: 0.5 });
+		expect(withoutComputedAt(saved)).toEqual(withoutComputedAt(again));
 	});
 
 	describe('when the row write fails', () => {
@@ -325,6 +368,7 @@ describe('targets repository', () => {
 
 	it('computes the onboarding row with the chosen goal rate', async () => {
 		const low = await saveOnboarding(await ctx(WED), { ...PROFILE, kg: 72, goalRatePct: 0.35 });
+		await unsetProfile();
 		const high = await saveOnboarding(await ctx(WED), { ...PROFILE, kg: 72, goalRatePct: 0.5 });
 
 		expect(high.targetKcal).toBeGreaterThan(low.targetKcal);
@@ -336,6 +380,7 @@ describe('targets repository', () => {
 		const input = { ...PROFILE, kg: 72, goalRatePct: 0.5 };
 
 		const viaStale = await saveOnboarding(stale, input);
+		await unsetProfile();
 		const viaFresh = await saveOnboarding(await ctx(WED), input);
 
 		expect(withoutComputedAt(viaStale)).toEqual(withoutComputedAt(viaFresh));
