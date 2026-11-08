@@ -23,6 +23,7 @@
 		"db:migrate:remote": "wrangler d1 migrations apply DB --remote",
 		"auth:schema": "auth generate --config src/lib/server/auth.cli.ts --output src/lib/server/db/auth.schema.ts --yes",
 		"blv:import": "node --experimental-strip-types scripts/import-blv.ts",
+		"backup:restore": "node --experimental-strip-types scripts/backup-restore.ts",
 		"icons": "pwa-assets-generator"
 	},
 	"devDependencies": {
