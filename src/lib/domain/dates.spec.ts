@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, daysBetween, isAllowedLogDate, loggedAtFor, localDate } from './dates';
+import { addDays, daysBetween, isAllowedLogDate, loggedAtFor, localDate, weekStart } from './dates';
 
 const ZURICH = 'Europe/Zurich';
 
@@ -83,5 +83,14 @@ describe('loggedAtFor', () => {
 
 	it('uses the UTC offset in force on that date', () => {
 		expect(loggedAtFor('2026-07-01', '2026-11-05', now, ZURICH)).toBe('2026-07-01T10:15:00.000Z');
+	});
+});
+
+describe('weekStart', () => {
+	it.each([
+		['2026-11-09', '2026-11-09'],
+		['2026-11-15', '2026-11-09']
+	])('gives the Monday on or before %s as %s', (date, expected) => {
+		expect(weekStart(date)).toBe(expected);
 	});
 });

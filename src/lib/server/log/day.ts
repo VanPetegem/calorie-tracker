@@ -1,4 +1,4 @@
-import { FREQUENTS_SIZE, RECENTS_SIZE } from '../../domain/constants.ts';
+import { FREQUENTS_SIZE, MACRO_RULE_DEFAULTS, RECENTS_SIZE } from '../../domain/constants.ts';
 import { macroTargets } from '../../domain/targets.ts';
 import type { Nutrients } from '../../domain/nutrition.ts';
 import { activeBatches, portionWeights, type BatchSummary } from '../batches/repo.ts';
@@ -43,7 +43,7 @@ export function dayTarget(
 ): DayTarget | null {
 	const { manualTargetKcal: kcal, manualWeightKg: weightKg } = settings;
 	if (kcal === null || weightKg === null) return null;
-	return { kcal, ...macroTargets(kcal, weightKg) };
+	return { kcal, ...macroTargets(kcal, weightKg, MACRO_RULE_DEFAULTS) };
 }
 
 /**

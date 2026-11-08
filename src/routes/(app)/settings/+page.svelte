@@ -21,6 +21,7 @@
 	import type { ContainerInput } from '#lib/schemas/batch.ts';
 	import type { Container } from '#lib/server/db/schema.ts';
 	import { signOutOrWarn } from '#lib/auth-client.ts';
+	import { MACRO_RULE_DEFAULTS } from '#lib/domain/constants.ts';
 	import { macroTargets } from '#lib/domain/targets.ts';
 	import { ManualTargetInput } from '#lib/schemas/settings.ts';
 	import { toasts } from '#lib/stores/toasts.svelte.ts';
@@ -53,7 +54,7 @@
 	// The macros that go with what is typed, live. Nothing while either field is empty or invalid.
 	const macros = $derived(
 		parsed.success && parsed.output.kcal !== null
-			? macroTargets(parsed.output.kcal, parsed.output.weightKg)
+			? macroTargets(parsed.output.kcal, parsed.output.weightKg, MACRO_RULE_DEFAULTS)
 			: null
 	);
 	const hasTarget = $derived(data.target.kcal !== null);
