@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import { addDays } from '#lib/domain/dates.ts';
+import { weekRow } from '#lib/components/targets/week.fixture.ts';
+import { addDays, weekStart } from '#lib/domain/dates.ts';
 import { trendSeries } from '#lib/domain/trend.ts';
 import { toasts } from '#lib/stores/toasts.svelte.ts';
 import Page from './+page.svelte';
@@ -36,7 +37,11 @@ afterEach(() => {
 	for (const toast of [...toasts.items]) toasts.dismiss(toast.id);
 });
 
-function pageData(weighIns: { date: string; kg: number }[], todayKg: number | null = null) {
+function pageData(
+	weighIns: { date: string; kg: number }[],
+	todayKg: number | null = null,
+	target: { week?: ReturnType<typeof weekRow> | null; goalRatePct?: number } = {}
+) {
 	const series = trendSeries(weighIns);
 	const last = series.filter((point) => point.date <= TODAY).at(-1);
 	return {
@@ -45,7 +50,9 @@ function pageData(weighIns: { date: string; kg: number }[], todayKg: number | nu
 		todayKg,
 		lastKg: last?.kg ?? null,
 		trendKg: last?.trend ?? null,
-		rate: null
+		rate: null,
+		week: target.week ?? null,
+		goalRatePct: target.goalRatePct ?? 0.35
 	};
 }
 
@@ -57,9 +64,13 @@ function weighIns(count: number, last: string) {
 	}));
 }
 
-function show(weighIns: { date: string; kg: number }[], todayKg: number | null = null) {
+function show(
+	weighIns: { date: string; kg: number }[],
+	todayKg: number | null = null,
+	target?: Parameters<typeof pageData>[2]
+) {
 	return render(Page, {
-		data: pageData(weighIns, todayKg),
+		data: pageData(weighIns, todayKg, target),
 		params: {},
 		form: null
 	} as never);
@@ -226,5 +237,30 @@ describe('weight page', () => {
 
 		await vi.waitFor(() => expect(rows().elements()).toHaveLength(60));
 		expect(page.getByRole('button', { name: 'Show more' }).elements()).toHaveLength(0);
+	});
+
+	it("shows this week's target and its TDEE used under the summary", async () => {
+		show(weighIns(3, TODAY), null, {
+			week: weekRow(weekStart(TODAY), { targetKcal: 2450, tdeeUsed: 2600 }),
+			goalRatePct: 0.35
+		});
+		const card = page.getByRole('region', { name: "This week's target" });
+		await expect.element(card).toHaveTextContent('2,450 kcal');
+		await expect.element(card).toHaveTextContent('TDEE used 2,600 kcal');
+	});
+
+	it("draws the goal slope from this week's trend at the goal rate", async () => {
+		show(weighIns(3, TODAY), null, {
+			week: weekRow(weekStart(TODAY), { trendKg: 70.4 }),
+			goalRatePct: 0.5
+		});
+		// 70.4 kg at 0.5 percent a week is 0.352 kg, shown as +0.35.
+		await expect.element(page.getByTestId('goal-line')).toHaveTextContent('Goal +0.35 kg/week');
+	});
+
+	it('shows neither the week card nor the goal line for an earlier week', async () => {
+		show(weighIns(3, TODAY), null, { week: weekRow(addDays(weekStart(TODAY), -7)) });
+		expect(page.getByRole('region', { name: "This week's target" }).elements()).toHaveLength(0);
+		expect(page.getByTestId('goal-line').elements()).toHaveLength(0);
 	});
 });

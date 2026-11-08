@@ -41,11 +41,11 @@ function dayAfter(date: string): string {
 	return d.toISOString().slice(0, 10);
 }
 
-test('a day without entries shows the empty state and the no target hero', async ({ page }) => {
+test('a day without entries shows the empty state and the target hero', async ({ page }) => {
 	await gotoHydrated(page, `/day/${EMPTY_DATE}`);
 	await expect(page.getByRole('heading', { name: 'Nothing logged yet' })).toBeVisible();
-	// "kcal eaten" without a target, "kcal remaining, ..." with one. No e2e test sets up a profile, so there is none.
-	await expect(page.getByText(/^kcal (eaten|remaining)/)).toBeVisible();
+	// Every day has a target after onboarding: nothing eaten, so the whole target is remaining.
+	await expect(page.getByText(/^kcal remaining, 0 of [\d,]+ eaten/)).toBeVisible();
 	await expect(page.getByRole('button', { name: /^More actions/ })).toHaveCount(0);
 });
 

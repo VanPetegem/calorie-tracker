@@ -76,6 +76,11 @@ export function macroTargets(
 	};
 }
 
+/** The goal gain per week in kg: `goalRatePct` percent of the trend weight (parent spec 6.4). */
+export function goalKgPerWeek(trendKg: number, goalRatePct: number): number {
+	return (trendKg * goalRatePct) / 100;
+}
+
 /**
  * Daily target kcal: the TDEE used plus the daily share of the goal gain (`goalRatePct` percent of trend weight per
  * week at `rho` kcal per kg), clamped to TARGET_MIN_FACTOR to TARGET_MAX_FACTOR times the TDEE used, then rounded to
@@ -87,8 +92,7 @@ export function targetKcal(
 	goalRatePct: number,
 	rho: number
 ): number {
-	const goalKgPerWeek = (trendKg * goalRatePct) / PERCENT;
-	const raw = tdeeUsed + (goalKgPerWeek * rho) / DAYS_PER_WEEK;
+	const raw = tdeeUsed + (goalKgPerWeek(trendKg, goalRatePct) * rho) / DAYS_PER_WEEK;
 	const clamped = Math.min(
 		TARGET_MAX_FACTOR * tdeeUsed,
 		Math.max(TARGET_MIN_FACTOR * tdeeUsed, raw)

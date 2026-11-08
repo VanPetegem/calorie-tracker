@@ -5,12 +5,15 @@
 	import { invalidateAll } from '$app/navigation';
 	import { Button, Card, EmptyState } from '#lib/components/ui/index.ts';
 	import EditWeightSheet from '#lib/components/weight/EditWeightSheet.svelte';
+	import WeekTargetCard from '#lib/components/weight/WeekTargetCard.svelte';
 	import WeightChart from '#lib/components/weight/WeightChart.svelte';
 	import WeightEntry from '#lib/components/weight/WeightEntry.svelte';
 	import WeightRow from '#lib/components/weight/WeightRow.svelte';
 	import WeightSummary from '#lib/components/weight/WeightSummary.svelte';
-	import { formatDay, formatKg } from '#lib/components/weight/chart.ts';
+	import { formatDay, formatKg, type Goal } from '#lib/components/weight/chart.ts';
 	import { WEIGHT_HISTORY_PAGE } from '#lib/domain/constants.ts';
+	import { weekStart } from '#lib/domain/dates.ts';
+	import { goalKgPerWeek } from '#lib/domain/targets.ts';
 	import type { TrendPoint } from '#lib/domain/trend.ts';
 	import type { WeightInput } from '#lib/schemas/weight.ts';
 	import { toasts, withUndo } from '#lib/stores/toasts.svelte.ts';
@@ -20,6 +23,20 @@
 	let { data }: PageProps = $props();
 
 	const history = $derived([...data.series].reverse());
+	// The target of this week only: an earlier row (no weigh-in this week) is not this week's target.
+	const thisWeek = $derived(
+		data.week && data.week.weekStart === weekStart(data.today) ? data.week : null
+	);
+	// The goal slope starts at this week's trend and runs at the goal rate.
+	const goal = $derived<Goal | null>(
+		thisWeek
+			? {
+					from: thisWeek.weekStart,
+					trendKg: thisWeek.trendKg,
+					kgPerWeek: goalKgPerWeek(thisWeek.trendKg, data.goalRatePct)
+				}
+			: null
+	);
 	// How many of the newest weigh-ins the history lists. "Show more" adds a page; a write keeps the count.
 	let listed = $state(WEIGHT_HISTORY_PAGE);
 	const shownHistory = $derived(history.slice(0, listed));
@@ -137,7 +154,10 @@
 		</Card>
 	{:else}
 		<WeightSummary trendKg={data.trendKg} rate={data.rate} />
-		<WeightChart series={data.series} today={data.today} />
+		{#if thisWeek}
+			<WeekTargetCard week={thisWeek} />
+		{/if}
+		<WeightChart series={data.series} today={data.today} {goal} />
 	{/if}
 
 	<section class="flex flex-col gap-3" aria-labelledby="history-heading">

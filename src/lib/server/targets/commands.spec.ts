@@ -3,7 +3,12 @@ import { logEntries, settings, weeklyTargets, weights } from '../db/schema.ts';
 import { getSettings, settingsWrite } from '../settings/repo.ts';
 import { createTestDb } from '../test/d1.ts';
 import { listWeights, saveWeight } from '../weights/repo.ts';
-import { completeOnboardingOn, loadOnboarding, saveProfileOn } from './commands.ts';
+import {
+	completeOnboardingOn,
+	loadOnboarding,
+	recomputeWeekOn,
+	saveProfileOn
+} from './commands.ts';
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>;
 
@@ -42,16 +47,13 @@ describe('target commands', () => {
 		expect(await loadOnboarding({ db: test.db, today: TODAY })).toEqual({ today: TODAY, kg: 70 });
 	});
 
-	it('accepts 16 on the birthday and refuses 15 the day before, counted on the day given, with nothing written', async () => {
-		// Born 8 November 2010: 15 on 7 November 2026 (the day given), 16 on 8 November.
+	it('maps an onboarding age out of range to 400 and writes nothing', async () => {
+		// Born 8 November 2010: 15 on 7 November 2026, the day given.
 		await expect(
 			completeOnboardingOn(await ctx('2026-11-07'), { ...ONBOARDING, birthDate: '2010-11-08' })
-		).rejects.toMatchObject({ status: 400 });
+		).rejects.toMatchObject({ status: 400, body: { message: 'Age must be 16 to 100' } });
 		expect(await listWeights(test.db)).toEqual([]);
 		expect((await getSettings(test.db)).sex).toBeNull();
-		await expect(
-			completeOnboardingOn(await ctx(TODAY), { ...ONBOARDING, birthDate: '2010-11-08' })
-		).resolves.toMatchObject({ weekStart: '2026-11-02' });
 	});
 
 	it('saves the profile, today weigh-in and this week target together and returns the target', async () => {
@@ -81,11 +83,11 @@ describe('target commands', () => {
 		expect((await getSettings(test.db)).heightCm).toBe(PROFILE.heightCm);
 	});
 
-	it('refuses a profile save with an age out of range and keeps the stored profile', async () => {
+	it('maps a profile save with an age out of range to 400 and keeps the stored profile', async () => {
 		await completeOnboardingOn(await ctx(TODAY), ONBOARDING);
 		await expect(
 			saveProfileOn(await ctx(TODAY), { ...PROFILE, birthDate: '1925-11-07' })
-		).rejects.toMatchObject({ status: 400 });
+		).rejects.toMatchObject({ status: 400, body: { message: 'Age must be 16 to 100' } });
 		expect((await getSettings(test.db)).birthDate).toBe(PROFILE.birthDate);
 	});
 
@@ -96,5 +98,17 @@ describe('target commands', () => {
 		expect(await test.db.select().from(weeklyTargets)).toEqual([
 			expect.objectContaining({ weekStart: '2026-11-02', tdeeFormula: saved.tdeeFormula })
 		]);
+	});
+
+
+	it('answers 400 "Log a weigh-in first" and writes nothing when a goal save has no weigh-in', async () => {
+		await settingsWrite(test.db, PROFILE);
+
+		await expect(recomputeWeekOn(await ctx(TODAY), { goalRatePct: 0.5 })).rejects.toMatchObject({
+			status: 400,
+			body: { message: 'Log a weigh-in first' }
+		});
+		expect((await getSettings(test.db)).goalRatePct).toBe(0.35);
+		expect(await test.db.select().from(weeklyTargets)).toHaveLength(0);
 	});
 });

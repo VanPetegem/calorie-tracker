@@ -15,14 +15,18 @@
 		Sheet
 	} from '#lib/components/ui/index.ts';
 	import ContainerForm from '#lib/components/recipes/ContainerForm.svelte';
+	import GoalPicker from '#lib/components/settings/GoalPicker.svelte';
+	import MacroRulesForm from '#lib/components/settings/MacroRulesForm.svelte';
 	import ProfileForm from '#lib/components/settings/ProfileForm.svelte';
+	import TargetsHistory from '#lib/components/settings/TargetsHistory.svelte';
 	import type { ContainerInput } from '#lib/schemas/batch.ts';
-	import type { ProfileInput } from '#lib/schemas/settings.ts';
+	import type { MacroRulesInput, ProfileInput } from '#lib/schemas/settings.ts';
 	import type { Container } from '#lib/server/db/schema.ts';
 	import { signOutOrWarn } from '#lib/auth-client.ts';
 	import { toasts } from '#lib/stores/toasts.svelte.ts';
 	import { deleteContainer, saveContainer } from '../recipes/batches.remote.ts';
 	import { saveProfile } from './profile.remote.ts';
+	import { saveGoal, saveMacroRules } from './targets.remote.ts';
 
 	let { data } = $props();
 
@@ -78,6 +82,18 @@
 		deleting = false;
 	}
 
+	async function saveGoalRate(goalRatePct: number) {
+		await saveGoal({ goalRatePct });
+		toasts.show({ message: 'Goal saved', tone: 'success' });
+		await refresh();
+	}
+
+	async function saveRules(input: MacroRulesInput) {
+		await saveMacroRules(input);
+		toasts.show({ message: 'Macro rules saved', tone: 'success' });
+		await refresh();
+	}
+
 	async function handleSignOut() {
 		signingOut = true;
 		if (!(await signOutOrWarn())) signingOut = false;
@@ -106,6 +122,38 @@
 				onsubmit={saveProfileSection}
 			/>
 		</Card>
+	</section>
+	<section class="flex flex-col gap-3" aria-labelledby="goal-heading">
+		<div class="flex flex-col gap-1">
+			<h2 id="goal-heading" class="text-lg font-semibold text-text">Goal</h2>
+			<p class="text-sm text-text-muted">
+				How fast you gain. This week's target changes with it at once.
+			</p>
+		</div>
+		<Card>
+			<GoalPicker value={data.goalRatePct} trendKg={data.trendKg} onsave={saveGoalRate} />
+		</Card>
+	</section>
+	<section class="flex flex-col gap-3" aria-labelledby="rules-heading">
+		<div class="flex flex-col gap-1">
+			<h2 id="rules-heading" class="text-lg font-semibold text-text">Macro rules</h2>
+			<p class="text-sm text-text-muted">
+				Protein per kg of trend weight and fat as a share of kcal. Carbs take the rest.
+			</p>
+		</div>
+		<Card>
+			<MacroRulesForm value={data.macroRules} onsave={saveRules} />
+		</Card>
+	</section>
+	<section class="flex flex-col gap-3" aria-labelledby="history-heading">
+		<div class="flex flex-col gap-1">
+			<h2 id="history-heading" class="text-lg font-semibold text-text">Targets history</h2>
+			<p class="text-sm text-text-muted">
+				One target per week, newest first. A week uses the adaptive estimate once it has enough
+				logged days and weigh-ins, and the formula until then.
+			</p>
+		</div>
+		<TargetsHistory rows={data.targets} currentWeekStart={data.currentWeekStart} />
 	</section>
 	<section class="flex flex-col gap-3" aria-labelledby="containers-heading">
 		<div class="flex flex-col gap-1">

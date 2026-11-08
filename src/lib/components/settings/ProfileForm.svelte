@@ -4,7 +4,7 @@
 	import * as v from 'valibot';
 	import { MAX_AGE_YEARS, MIN_AGE_YEARS, WEIGHT_STEP_KG } from '#lib/domain/constants.ts';
 	import { isCalendarDate } from '#lib/domain/dates.ts';
-	import { ageOn, type ActivityLevel, type Sex } from '#lib/domain/tdee.ts';
+	import { ageInRange, type ActivityLevel, type Sex } from '#lib/domain/tdee.ts';
 	import { Button, Input, NumberInput } from '#lib/components/ui/index.ts';
 	import { ProfileInput } from '#lib/schemas/settings.ts';
 	import { TodayWeightInput } from '#lib/schemas/weight.ts';
@@ -77,8 +77,7 @@
 	/** The age error on `today`, for a birth date in the form YYYY-MM-DD. */
 	function ageError(birth: string, on: string): string | undefined {
 		if (!isCalendarDate(birth)) return undefined;
-		const age = ageOn(birth, on);
-		return age < MIN_AGE_YEARS || age > MAX_AGE_YEARS ? AGE_MESSAGE : undefined;
+		return ageInRange(birth, on) ? undefined : AGE_MESSAGE;
 	}
 
 	const profileResult = $derived(

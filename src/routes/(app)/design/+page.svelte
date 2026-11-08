@@ -54,9 +54,15 @@
 		draftTotals,
 		type DraftIngredient
 	} from '#lib/components/recipes/draft.ts';
-	import { addDays } from '#lib/domain/dates.ts';
+	import { addDays, weekStart } from '#lib/domain/dates.ts';
 	import { trendSeries, weeklyRate, type TrendPoint, type WeighIn } from '#lib/domain/trend.ts';
 	import EditWeightSheet from '#lib/components/weight/EditWeightSheet.svelte';
+	import WeekTargetCard from '#lib/components/weight/WeekTargetCard.svelte';
+	import GoalPicker from '#lib/components/settings/GoalPicker.svelte';
+	import MacroRulesForm from '#lib/components/settings/MacroRulesForm.svelte';
+	import TargetsHistory from '#lib/components/settings/TargetsHistory.svelte';
+	import TdeeBasis from '#lib/components/targets/TdeeBasis.svelte';
+	import { weekRow } from '#lib/components/targets/week.fixture.ts';
 	import WeightChart from '#lib/components/weight/WeightChart.svelte';
 	import WeightEntry from '#lib/components/weight/WeightEntry.svelte';
 	import WeightRow from '#lib/components/weight/WeightRow.svelte';
@@ -189,6 +195,32 @@
 	const weightSteady = trendSeries(weighIns(20));
 	const weightRateNow = weeklyRate(weightDense, weightToday);
 	const weightRows: TrendPoint[] = weightSteady.slice(-3).reverse();
+	// Targets: this week and two before it, the middle one on the adaptive estimate.
+	const thisWeekStart = weekStart(weightToday);
+	const targetRows = [
+		weekRow(thisWeekStart, { targetKcal: 2450, tdeeUsed: 2600, rateKgPerWeek: 0.25 }),
+		weekRow(addDays(thisWeekStart, -7), {
+			targetKcal: 2380,
+			tdeeUsed: 2412,
+			tdeeAdaptive: 2412,
+			validDays: 16,
+			rateKgPerWeek: 0.18
+		}),
+		weekRow(addDays(thisWeekStart, -14), { rateKgPerWeek: null })
+	];
+	async function saveGoalDemo(rate: number): Promise<void> {
+		toasts.show({ message: `Goal ${rate} % a week saved` });
+	}
+	async function saveGoalFails(): Promise<void> {
+		throw new Error('offline');
+	}
+	async function saveRulesDemo(): Promise<void> {
+		toasts.show({ message: 'Macro rules saved' });
+	}
+	async function saveRulesFails(): Promise<void> {
+		throw new Error('offline');
+	}
+	const rulesSample = { proteinGPerKg: 1.8, fatPct: 0.25, energyDensity: 5000 };
 	let weightLog = $state('Change the weight and press Save.');
 	let weightRowLog = $state('Tap a row to edit it, or the bin to delete it.');
 	let weightSheetOpen = $state(false);
@@ -1445,6 +1477,57 @@
 				weightSheetLog = `Saved ${input.kg} kg on ${input.date}`;
 			}}
 		/>
+	</Section>
+
+	<Section
+		name="TdeeBasis"
+		description="How a week's TDEE was set: the formula, or the adaptive estimate with the valid days it rests on."
+	>
+		<div class="flex flex-wrap gap-3">
+			<TdeeBasis adaptive={null} validDays={9} />
+			<TdeeBasis adaptive={2412} validDays={16} />
+		</div>
+	</Section>
+
+	<Section
+		name="WeekTargetCard"
+		description="This week's target on the Weight tab: the kcal, the TDEE used and whether that TDEE is the formula or the adaptive estimate. Shown only for this week's row."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<WeekTargetCard week={targetRows[0]} />
+			<WeekTargetCard week={targetRows[1]} />
+		</div>
+	</Section>
+
+	<Section
+		name="GoalPicker"
+		description="The goal rate in percent of trend weight per week, each with the kg per week it means at the trend. Save goal is off until another rate is picked. A failed save keeps the choice and offers Retry."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<Card><GoalPicker value={0.35} trendKg={70.4} onsave={saveGoalDemo} /></Card>
+			<Card><GoalPicker value={0.35} trendKg={null} onsave={saveGoalDemo} /></Card>
+			<Card><GoalPicker value={0.35} trendKg={70.4} onsave={saveGoalFails} /></Card>
+		</div>
+	</Section>
+
+	<Section
+		name="MacroRulesForm"
+		description="Protein per kg of trend weight and fat as a percent of kcal, checked on blur and on Save with the server's schema. Energy density sits under Advanced, which opens by itself when its value is out of range. A failed save keeps the values and offers Retry."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<Card><MacroRulesForm value={rulesSample} onsave={saveRulesDemo} /></Card>
+			<Card><MacroRulesForm value={rulesSample} onsave={saveRulesFails} /></Card>
+		</div>
+	</Section>
+
+	<Section
+		name="TargetsHistory"
+		description="One row per stored week, newest first: the target, the TDEE used, its basis and the rate. The latest 26 weeks show, then Show all. Before the first week it says there are no targets yet."
+	>
+		<div class="flex flex-col gap-6">
+			<TargetsHistory rows={targetRows} currentWeekStart={thisWeekStart} />
+			<TargetsHistory rows={[]} currentWeekStart={thisWeekStart} />
+		</div>
 	</Section>
 
 	<Section

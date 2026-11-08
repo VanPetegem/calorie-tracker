@@ -117,3 +117,5 @@ export const TARGET_MAX_FACTOR = 1.2;
 export const TARGET_ROUND_KCAL = 10;
 /** The weight history lists this many of the newest weigh-ins, and "Show more" adds this many more (phase 4b). */
 export const WEIGHT_HISTORY_PAGE = 30;
+/** Settings lists the newest this many weeks of targets, and "Show all" lists the rest (phase 4b). */
+export const TARGETS_HISTORY_LATEST = 26;
