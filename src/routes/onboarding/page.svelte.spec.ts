@@ -54,6 +54,12 @@ describe('onboarding page', () => {
 		expect(mocks.goto).not.toHaveBeenCalled();
 	});
 
+	it('moves focus to the first target heading after a save', async () => {
+		mocks.completeOnboarding.mockResolvedValue(weekRow('2026-11-02', { targetKcal: 2450 }));
+		await fillAndSubmit();
+		await expect.element(page.getByRole('heading', { name: 'Your first target' })).toHaveFocus();
+	});
+
 	it('signs out from the setup screen through signOutOrWarn', async () => {
 		render(Page, { data: { kg: null, today: '2026-11-08' }, params: {}, form: null } as never);
 		const signOut = page.getByRole('button', { name: 'Sign out' });

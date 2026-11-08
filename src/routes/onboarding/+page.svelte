@@ -43,6 +43,11 @@
 		signingOut = true;
 		if (!(await signOutOrWarn())) signingOut = false;
 	}
+
+	// The heading that replaces the form takes focus, so a screen reader announces the target.
+	function focusOnShow(node: HTMLElement) {
+		node.focus();
+	}
 </script>
 
 <svelte:head>
@@ -52,7 +57,13 @@
 <main class="screen">
 	<div class="flex flex-col gap-6">
 		{#if target}
-			<h1 class="text-3xl font-semibold tracking-tight text-text">Your first target</h1>
+			<h1
+				class="text-3xl font-semibold tracking-tight text-text"
+				tabindex="-1"
+				{@attach focusOnShow}
+			>
+				Your first target
+			</h1>
 			<TargetExplainer {target} />
 			<Button href={resolve('/(app)')}>Start</Button>
 		{:else}
