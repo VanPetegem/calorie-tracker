@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { addDays } from './dates';
-import { macroTargets, targetKcal, weekTarget, type Profile, type TargetRules } from './targets';
+import {
+	macroTargets,
+	targetKcal,
+	wasSmoothed,
+	weekTarget,
+	type Profile,
+	type TargetRules
+} from './targets';
+import { smoothTdee } from './tdee';
 import { trendSeries, type WeighIn } from './trend';
 
 const RULES = { proteinGPerKg: 1.8, fatPct: 0.25 };
@@ -181,5 +189,17 @@ describe('weekTarget', () => {
 		expect(() =>
 			weekTarget({ weekStart: WEEK, profile, rules, series: [], intakes: {}, previousUsed: null })
 		).toThrow(RangeError);
+	});
+});
+
+describe('wasSmoothed', () => {
+	const adaptive = { tdeeFormula: 2400, tdeeAdaptive: 2600 };
+
+	it('judges a row against its adaptive TDEE when there is one', () => {
+		expect(wasSmoothed({ ...adaptive, tdeeUsed: smoothTdee(2600, 2000) }, 2000)).toBe(true);
+	});
+
+	it('is false for a row that used its TDEE as is, more than the cap away from last week', () => {
+		expect(wasSmoothed({ ...adaptive, tdeeUsed: 2600 }, 2000)).toBe(false);
 	});
 });
