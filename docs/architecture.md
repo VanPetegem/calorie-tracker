@@ -39,8 +39,10 @@ trigger (`user_single_account`). Sessions last a year and slide daily.
   network fails, that URL's cached page is used; only `/` falls back to the cached home page; any other
   uncached URL gets a small 503 "This page is unavailable offline" page.
 - Client side navigations fetch `<path>/__data.json`. Those go network first into the same cache, one copy per path. The
-  worker drops `x-sveltekit-invalidated` (the server then loads every node, so one copy fits any request); with no copy
-  offline it answers 503, which makes SvelteKit do a full navigation. See `docs/decisions.md` (2026-11-08).
+  worker drops `x-sveltekit-invalidated` (the server then loads every node, so one copy fits any request). Only load
+  results are stored, never a redirect. With no copy offline it answers 503; SvelteKit turns that into a full navigation
+  only because the root layout has a server load (`src/routes/+layout.server.ts`, keep it). See `docs/decisions.md`
+  (2026-11-08).
 - `/api/*` and anything that is not a same origin GET is never touched.
 - Caches are named `kcal-<version>`; old versions are deleted on activate.
 - Sign out (`src/lib/auth-client.ts`) deletes every `kcal-*` cache so pages rendered for the session cannot be

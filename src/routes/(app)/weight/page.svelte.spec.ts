@@ -198,17 +198,19 @@ describe('weight page', () => {
 		expect(mocks.invalidateAll).not.toHaveBeenCalled();
 	});
 
-	it('lists the newest 30 weigh-ins, and Show more adds the rest', async () => {
-		show(weighIns(31, '2026-11-01'));
+	it('pages the history 30 at a time: one Show more click shows 60, a second shows all 61', async () => {
+		show(weighIns(61, '2026-11-01'));
 		const rows = () => page.getByRole('button', { name: /^Delete weigh-in of/ });
+		const showMore = () => page.getByRole('button', { name: 'Show more' });
 		await vi.waitFor(() => expect(rows().elements()).toHaveLength(30));
 
-		await page.getByRole('button', { name: 'Show more' }).click();
-		await vi.waitFor(() => expect(rows().elements()).toHaveLength(31));
-		await expect
-			.element(page.getByRole('button', { name: 'Delete weigh-in of Fri 2 Oct 2026' }))
-			.toBeVisible();
-		expect(page.getByRole('button', { name: 'Show more' }).elements()).toHaveLength(0);
+		await showMore().click();
+		await vi.waitFor(() => expect(rows().elements()).toHaveLength(60));
+		expect(showMore().elements()).toHaveLength(1);
+
+		await showMore().click();
+		await vi.waitFor(() => expect(rows().elements()).toHaveLength(61));
+		expect(showMore().elements()).toHaveLength(0);
 	});
 
 	it('keeps the expanded list when a row past the first page is deleted', async () => {

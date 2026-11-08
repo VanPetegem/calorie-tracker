@@ -113,13 +113,33 @@ async function networkFirstData(request: Request, event: ExtendableEvent) {
 	const key = data.href;
 	try {
 		const response = await fetch(new Request(data, request));
-		if (cacheable(response)) event.waitUntil(cache.put(key, response.clone()));
+		if (cacheable(response)) event.waitUntil(storeLoadData(cache, key, response.clone()));
 		return response;
 	} catch {
 		const cached = await cache.match(key, { ignoreVary: true });
 		if (cached) return cached;
-		// Not OK, so SvelteKit's client does a full navigation, which gets the cached page or the offline page.
+		// Not OK, so SvelteKit's client does a full navigation, which gets the cached page or the offline page. That
+		// navigation needs the root layout's server load (`src/routes/+layout.server.ts`): without one, SvelteKit
+		// renders its bare error page instead.
 		return new Response(null, { status: 503 });
+	}
+}
+
+/**
+ * Stores a data response only when it holds a load result. A redirect (a signed out user, say) also answers 200, with
+ * `{"type":"redirect"}`, and storing it would replace the last good copy for the next offline tab switch.
+ */
+async function storeLoadData(cache: Cache, key: string, response: Response) {
+	const body = await response.text();
+	if (!isLoadData(body)) return;
+	await cache.put(key, new Response(body, { status: response.status, headers: response.headers }));
+}
+
+function isLoadData(body: string) {
+	try {
+		return (JSON.parse(body) as { type?: unknown }).type === 'data';
+	} catch {
+		return false;
 	}
 }
 

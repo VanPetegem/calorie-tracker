@@ -73,11 +73,11 @@ afterEach(() => {
  * Sends a same origin GET from the page, the way the browser does. Resolves with the worker's answer, or undefined
  * when the worker lets the request through, and after every `waitUntil` promise (the cache writes) has settled.
  */
-async function fromPage(path: string) {
+async function fromPage(path: string, init?: RequestInit) {
 	const pending: Promise<unknown>[] = [];
 	let answer: Promise<Response> | undefined;
 	worker.listeners.get('fetch')?.({
-		request: new Request(new URL(path, ORIGIN)),
+		request: new Request(new URL(path, ORIGIN), init),
 		respondWith: (promise: Promise<Response>) => {
 			answer = promise;
 		},
@@ -88,6 +88,17 @@ async function fromPage(path: string) {
 	const response = await answer;
 	await Promise.all(pending);
 	return response;
+}
+
+// Bodies shaped like SvelteKit's data responses: a load result, and the redirect a signed out user gets.
+const LOAD_A = '{"type":"data","nodes":[{"type":"data","data":{"day":"A"}}]}';
+const LOAD_B = '{"type":"data","nodes":[{"type":"data","data":{"day":"B"}}]}';
+const REDIRECT = '{"type":"redirect","status":302,"location":"/login"}';
+
+/** Stores a copy the way an earlier online visit would have. */
+async function prime(path: string, body: string) {
+	const cache = await caches.open(CACHE_NAME);
+	await cache.put(path, json(body));
 }
 
 const json = (body: string) =>
@@ -107,6 +118,36 @@ describe('service worker, client side data requests', () => {
 		expect(await response?.text()).toBe('{"type":"data"}');
 	});
 
+	it('answers from the network first, and the fresh copy replaces the stored one', async () => {
+		await prime('/weight/__data.json', LOAD_A);
+
+		network.mockResolvedValueOnce(json(LOAD_B));
+		const response = await fromPage('/weight/__data.json?x-sveltekit-invalidated=01');
+		expect(await response?.text()).toBe(LOAD_B);
+
+		const cache = await caches.open(CACHE_NAME);
+		expect(await (await cache.match('/weight/__data.json'))?.text()).toBe(LOAD_B);
+	});
+
+	it('lets a POST and a cross origin __data.json request pass the worker by', async () => {
+		const post = await fromPage('/weight/__data.json', { method: 'POST' });
+		const crossOrigin = await fromPage('https://other.test/weight/__data.json');
+		expect(post).toBeUndefined();
+		expect(crossOrigin).toBeUndefined();
+		expect(network).not.toHaveBeenCalled();
+	});
+
+	it('does not store a redirect, so a signed out response never replaces the last good copy', async () => {
+		await prime('/weight/__data.json', LOAD_A);
+
+		network.mockResolvedValueOnce(json(REDIRECT));
+		await fromPage('/weight/__data.json?x-sveltekit-invalidated=01');
+
+		network.mockImplementation(offline);
+		const offlineCopy = await fromPage('/weight/__data.json?x-sveltekit-invalidated=01');
+		expect(await offlineCopy?.text()).toBe(LOAD_A);
+	});
+
 	it('asks the server for every node, without the invalidation query', async () => {
 		network.mockResolvedValueOnce(json('{}'));
 		await fromPage('/weight/__data.json?x-sveltekit-invalidated=01');
@@ -124,7 +165,9 @@ describe('service worker, client side data requests', () => {
 	});
 
 	it('does not store a failed __data.json response', async () => {
-		network.mockResolvedValueOnce(new Response('server error', { status: 500 }));
+		network.mockResolvedValueOnce(
+			new Response(LOAD_A, { status: 500, headers: { 'content-type': 'application/json' } })
+		);
 		await fromPage('/weight/__data.json?x-sveltekit-invalidated=01');
 
 		const cache = await caches.open(CACHE_NAME);
