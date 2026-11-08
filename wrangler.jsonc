@@ -3,7 +3,8 @@
 	"name": "kcal",
 	"compatibility_date": "2026-11-04",
 	"compatibility_flags": ["nodejs_als"],
-	"main": ".svelte-kit/cloudflare/_worker.js",
+	// The wrapper in worker/index.ts re-exports the SvelteKit Worker's fetch and adds the backup cron.
+	"main": "worker/index.ts",
 	"assets": {
 		"binding": "ASSETS",
 		"directory": ".svelte-kit/cloudflare"
@@ -16,6 +17,10 @@
 			"migrations_dir": "drizzle"
 		}
 	],
+	// Weekly backups of the app tables (src/lib/server/backup). The bucket must exist before `wrangler deploy`.
+	"r2_buckets": [{ "binding": "BACKUPS", "bucket_name": "kcal-backups" }],
+	// Monday 03:00 UTC.
+	"triggers": { "crons": ["0 3 * * 1"] },
 	"ratelimits": [
 		// Throttles sign in and sign up attempts per client IP (checked in src/hooks.server.ts).
 		{

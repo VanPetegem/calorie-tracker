@@ -15,9 +15,17 @@ export type TestDb = {
 	dispose(): Promise<void>;
 };
 
+/** The table `wrangler d1 migrations apply` keeps, with the same DDL, so tests see what production has. */
+const CREATE_MIGRATIONS_TABLE = `CREATE TABLE IF NOT EXISTS "d1_migrations"(
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	name       TEXT UNIQUE,
+	applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+)`;
+
 /**
- * Applies one migration file the way `wrangler d1 migrations apply` does: its statements in one `batch`, which D1
- * runs as a single transaction with foreign keys enforced.
+ * Applies one migration file the way `wrangler d1 migrations apply` does: its statements and the
+ * `d1_migrations` row (named like the file, `.sql` included) in one `batch`, which D1 runs as a single
+ * transaction with foreign keys enforced.
  */
 async function applyMigration(d1: D1Database, file: string): Promise<void> {
 	const sql = await readFile(new URL(file, MIGRATIONS_DIR), 'utf8');
@@ -25,7 +33,10 @@ async function applyMigration(d1: D1Database, file: string): Promise<void> {
 		.split('--> statement-breakpoint')
 		.map((statement) => statement.trim())
 		.filter(Boolean);
-	await d1.batch(statements.map((statement) => d1.prepare(statement)));
+	await d1.batch([
+		...statements.map((statement) => d1.prepare(statement)),
+		d1.prepare('INSERT INTO d1_migrations (name) VALUES (?)').bind(file)
+	]);
 }
 
 /** The number of `files` up to and including migration `through`; all of them without `through`. */
@@ -50,6 +61,7 @@ export async function createTestDb(options: { through?: string } = {}): Promise<
 	});
 	try {
 		const d1 = proxy.env.DB;
+		await d1.prepare(CREATE_MIGRATIONS_TABLE).run();
 		const files = (await readdir(MIGRATIONS_DIR)).filter((name) => name.endsWith('.sql')).sort();
 		const { through } = options;
 		const split = splitAt(files, through);

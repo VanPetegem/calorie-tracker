@@ -39,6 +39,8 @@ Production: `https://kcal.avp.software` (Cloudflare Worker + D1 `kcal`). Pushing
 Other branches and pull requests only run the gate. Never deploy or migrate remotely from an agent session; the
 user does that. Details, secrets and the migration workflow: `docs/architecture.md`.
 
+- The Worker entry is `worker/index.ts` (`fetch` from the adapter plus the weekly backup `scheduled`). The adapter reads `wrangler.adapter.jsonc`, never `wrangler.jsonc`, or it would overwrite the entry.
+- The R2 bucket `kcal-backups` must exist before a deploy (`wrangler deploy` fails without it). R2 must be enabled in the dashboard first (a payment method is needed even on the free tier), and the deploy token needs Account "Workers R2 Storage: Edit"; commands in `docs/architecture.md`. Backup downloads and restore SQL go in `.backups/` (gitignored, health data).
 - `wrangler.jsonc` holds the production `ORIGIN`; local dev reads `ORIGIN` from `.env`, e2e passes `--var`.
 - Run `pnpm gen` after any `wrangler.jsonc` change; `pnpm check` and `pnpm build` fail on stale types.
 - `BETTER_AUTH_SECRET` in production is a Worker secret (`wrangler secret put`), never in config.

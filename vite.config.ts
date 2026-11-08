@@ -13,7 +13,12 @@ export default defineConfig({
 				runes: ({ filename }) =>
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
-			adapter: adapter(),
+			// A separate config, so the adapter does not overwrite worker/index.ts (see wrangler.adapter.jsonc). Dev
+			// bindings still come from wrangler.jsonc.
+			adapter: adapter({
+				config: 'wrangler.adapter.jsonc',
+				platformProxy: { configPath: 'wrangler.jsonc' }
+			}),
 			// Remote functions (`*.remote.ts`) are still experimental in SvelteKit 3. Commands need only this flag;
 			// `compilerOptions.experimental.async` is only for `await` in component markup.
 			experimental: { remoteFunctions: true }
@@ -47,7 +52,11 @@ export default defineConfig({
 					name: 'server',
 					environment: 'node',
 					hookTimeout: 30000,
-					include: ['src/**/*.{test,spec}.{js,ts}', 'scripts/**/*.{test,spec}.ts'],
+					include: [
+						'src/**/*.{test,spec}.{js,ts}',
+						'scripts/**/*.{test,spec}.ts',
+						'worker/**/*.{test,spec}.ts'
+					],
 					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
 				}
 			}

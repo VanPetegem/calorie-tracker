@@ -46,3 +46,6 @@ data/blv/
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 playwright/.auth/
+
+# Backup downloads and restore SQL (health data, never commit)
+/.backups/
