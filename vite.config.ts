@@ -52,7 +52,11 @@ export default defineConfig({
 					name: 'server',
 					environment: 'node',
 					hookTimeout: 30000,
-					include: ['src/**/*.{test,spec}.{js,ts}', 'scripts/**/*.{test,spec}.ts'],
+					include: [
+						'src/**/*.{test,spec}.{js,ts}',
+						'scripts/**/*.{test,spec}.ts',
+						'worker/**/*.{test,spec}.ts'
+					],
 					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
 				}
 			}

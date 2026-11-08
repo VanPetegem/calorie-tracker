@@ -272,27 +272,61 @@ A weekly cron copies every app table to R2, independent of D1 Time Travel (30 da
   output, so `pnpm check` passes with and without a build.
 - **Schedule.** Cron `0 3 * * 1` (Monday 03:00 UTC) calls `runBackup(env.DB, env.BACKUPS, scheduledTime)`, which writes
   `backups/YYYY-MM-DD.json` (`src/lib/server/backup/format.ts` describes the file). Auth tables are not included.
-  A failure throws, so it shows in Workers Logs; the same day overwrites its object.
+  A failure throws; the same day overwrites its object. The file's `migration` is the newest row of the database's
+  `d1_migrations` table (the file name, e.g. `0022_targets.sql`), so it is right even when the code is ahead of the
+  last migration. An empty `d1_migrations` fails the export.
 - **Retention.** An R2 lifecycle rule deletes objects after 90 days.
+- **Limits.** The free plan gives a cron invocation 10 ms of CPU. The export is about 586 KB and takes about 2 ms
+  today, so check the first Monday's cron event in the Cloudflare dashboard (the Worker's cron events): failures show only
+  there, nothing alerts.
+- **Health data.** A backup holds weights and food logs. Keep downloads and the restore SQL in `.backups/`, which
+  is gitignored (the repo is public). Delete them when done.
 
 One time setup, before the first deploy of this change (`wrangler deploy` fails without the bucket):
+
+1. Enable R2 in the Cloudflare dashboard (R2 Object Storage). It needs a payment method even on the free tier.
+2. Add Account "Workers R2 Storage: Edit" to the deploy token (see Secrets), local and CI.
+3. Create the bucket and the lifecycle rule:
 
 ```sh
 pnpm wrangler r2 bucket create kcal-backups
 pnpm wrangler r2 bucket lifecycle add kcal-backups expire-90d backups/ --expire-days 90
 ```
 
-Restore (refuses a file whose `version` or `migration` does not match the repo):
+### Restore into the existing database
+
+The auth tables are untouched, so the passkey keeps working. Check out the commit the backup was made at, or any
+commit whose newest migration is the same.
 
 ```sh
-pnpm wrangler r2 object get kcal-backups/backups/2026-11-09.json --remote --file backup.json
-pnpm backup:restore backup.json > restore.sql
-pnpm wrangler d1 execute DB --remote --file restore.sql
+# 1. The target must be at the backup's migration; both must print the same name.
+pnpm wrangler d1 execute DB --remote --command "SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1"
+# 2. Note the Time Travel bookmark: a remote file import may not roll back on an error halfway through.
+pnpm wrangler d1 time-travel info DB
+# 3. Download, build the SQL (it refuses another `version` or `migration`), run it.
+pnpm wrangler r2 object get kcal-backups/backups/2026-11-09.json --remote --file .backups/backup.json
+pnpm backup:restore .backups/backup.json .backups/restore.sql
+pnpm wrangler d1 execute DB --remote --file .backups/restore.sql
 ```
 
-Afterwards register a new passkey through `/setup`. Try the cron locally: `pnpm build`, then `pnpm preview
---test-scheduled`, `curl http://localhost:4173/cdn-cgi/handler/scheduled`, and read the object with `pnpm wrangler r2
-object get kcal-backups/backups/<date>.json --local --pipe`.
+If step 3 fails midway, `pnpm wrangler d1 time-travel restore DB --bookmark <bookmark>` returns to step 2.
+
+### Restore into a recreated database
+
+Only a lost database needs this. The auth tables are not in the backup, so the passkey is gone.
+
+1. `pnpm wrangler d1 create kcal`, then put the new `database_id` in `wrangler.jsonc`.
+2. Check out the commit the backup was made at (its `migration` names the newest file in `drizzle/`), then
+   `pnpm db:migrate:remote`.
+3. Download, `pnpm backup:restore` and `d1 execute --file` as above.
+4. Deploy the current code, open `/setup` and register a new passkey.
+
+### Trying it locally
+
+`pnpm db:migrate:local`, `pnpm build`, then `pnpm preview --test-scheduled` and `curl
+http://localhost:4173/cdn-cgi/handler/scheduled`. Read the object with `pnpm wrangler r2 object get
+kcal-backups/backups/<date>.json --local --file .backups/b.json`, restore with `pnpm backup:restore .backups/b.json
+.backups/restore.sql` and `pnpm wrangler d1 execute DB --local --file .backups/restore.sql`.
 
 ## Directory map
 
@@ -381,7 +415,7 @@ never lands between the remote migration and `wrangler deploy`. `unit` and `e2e`
 with apt. Its tag and digest must match the Playwright version in `pnpm-lock.yaml`: bump them together. A CI step
 in `unit` fails with that message when they drift.
 
-The `kcal-backups` R2 bucket must exist before a deploy (see Backups).
+The `kcal-backups` R2 bucket must exist before a deploy, and R2 must be enabled for the account (see Backups).
 
 Manual deploy, from a machine with `CLOUDFLARE_API_TOKEN` in `.env`:
 
@@ -403,5 +437,6 @@ pnpm build && pnpm wrangler deploy
 | `CLOUDFLARE_ACCOUNT_ID` | CI: GitHub Actions secret. Local: optional in `.env`.                                                                               |
 
 The `ORIGIN` variable is not secret; production sets it in `wrangler.jsonc`. The deploy token needs Account
-Workers Scripts: Edit, Account D1: Edit and Zone Workers Routes: Edit for `avp.software`. Never commit `.env` or
+Workers Scripts: Edit, Account D1: Edit, Account Workers R2 Storage: Edit and Zone Workers Routes: Edit for
+`avp.software`. Never commit `.env` or
 `.dev.vars`.

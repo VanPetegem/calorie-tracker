@@ -25,7 +25,7 @@ export type BackupRow = Record<string, string | number | null>;
 export type BackupFile = {
 	version: typeof BACKUP_VERSION;
 	createdAt: string;
-	/** The latest drizzle journal tag when the backup was made, e.g. `0022_targets`. */
+	/** The newest row of the database's `d1_migrations` when the backup was made, e.g. `0022_targets.sql`. */
 	migration: string;
 	tables: Record<BackupTable, BackupRow[]>;
 };

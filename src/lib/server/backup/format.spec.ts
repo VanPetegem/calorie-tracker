@@ -17,6 +17,15 @@ describe('BACKUP_TABLES', () => {
 		expect([...BACKUP_TABLES].sort()).toEqual(appTables.map(getTableName).sort());
 	});
 
+	it('lists every table that a foreign key of an app table points to', () => {
+		for (const table of appTables) {
+			for (const foreignKey of getTableConfig(table).foreignKeys) {
+				const target = getTableName(foreignKey.reference().foreignTable);
+				expect(BACKUP_TABLES, `${getTableName(table)} references ${target}`).toContain(target);
+			}
+		}
+	});
+
 	it('puts every table after the tables it references', () => {
 		for (const table of appTables) {
 			const name = getTableName(table);

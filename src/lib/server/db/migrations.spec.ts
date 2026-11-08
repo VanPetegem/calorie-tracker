@@ -50,12 +50,12 @@ async function all(test: TestDb, sql: string): Promise<Row[]> {
 	return (await test.d1.prepare(sql).all<Row>()).results;
 }
 
-/** Every table, index and trigger with its SQL, leaving out SQLite's and Miniflare's own. */
+/** Every table, index and trigger with its SQL, leaving out SQLite's, Miniflare's and wrangler's own. */
 async function objects(test: TestDb): Promise<Map<string, unknown>> {
 	const rows = await all(
 		test,
 		`SELECT type, name, sql FROM sqlite_master
-		 WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name`
+		 WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name <> 'd1_migrations' ORDER BY name`
 	);
 	return new Map(rows.map((row) => [`${row.type} ${row.name}`, row.sql]));
 }

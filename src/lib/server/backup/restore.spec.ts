@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { seedBackupRows, TRICKY_NAME, TRICKY_REAL } from '../test/backup-seed.ts';
 import { createTestDb } from '../test/d1.ts';
-import { LATEST_MIGRATION, readBackup } from './export.ts';
+import { readBackup } from './export.ts';
 import { BACKUP_TABLES, BACKUP_VERSION, type BackupFile } from './format.ts';
 import { restoreStatements } from './restore.ts';
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>;
 
 const NOW = new Date('2026-11-09T03:00:00.000Z');
+const LATEST_MIGRATION = '0022_targets.sql';
 
 describe('restore round trip', () => {
 	let source: TestDb;
@@ -22,16 +23,16 @@ describe('restore round trip', () => {
 	it('replaces the rows of another database with the backup, exactly', async () => {
 		await seedBackupRows(source.db, 'a');
 		await seedBackupRows(target.db, 'b');
-		const backup = await readBackup(source.d1, LATEST_MIGRATION, NOW);
-		const before = await readBackup(target.d1, LATEST_MIGRATION, NOW);
+		const backup = await readBackup(source.d1, NOW);
+		const before = await readBackup(target.d1, NOW);
 		expect(before.tables).not.toEqual(backup.tables);
 
 		// Through JSON, as the file travels through R2.
 		const file: unknown = JSON.parse(JSON.stringify(backup));
-		const statements = restoreStatements(file, LATEST_MIGRATION);
+		const statements = restoreStatements(file, backup.migration);
 		await target.d1.batch(statements.map((statement) => target.d1.prepare(statement)));
 
-		const after = await readBackup(target.d1, LATEST_MIGRATION, NOW);
+		const after = await readBackup(target.d1, NOW);
 		expect(after.tables).toEqual(backup.tables);
 		const food = after.tables.foods.find((row) => row.id === 'a-food');
 		expect(food).toMatchObject({ name: TRICKY_NAME, brand: null, kcal: TRICKY_REAL });
