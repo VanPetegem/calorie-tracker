@@ -2,12 +2,12 @@
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import KeyRound from '@lucide/svelte/icons/key-round';
 	import LogIn from '@lucide/svelte/icons/log-in';
-	import LogOut from '@lucide/svelte/icons/log-out';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button, EmptyState, IconButton, ListItem, Sheet } from '#lib/components/ui/index.ts';
+	import SignOutButton from '#lib/components/ui/SignOutButton.svelte';
 	import { authClient, deviceName, signOutOrWarn } from '#lib/auth-client.ts';
 	import { addPasskeyError } from '#lib/auth-errors.ts';
 	import { toasts, type ToastOptions } from '#lib/stores/toasts.svelte.ts';
@@ -23,7 +23,6 @@
 	/** Set when adding a passkey needs a fresh sign in first. */
 	let reauthMessage = $state<string>();
 	let reauthing = $state(false);
-	let signingOut = $state(false);
 	let toDelete = $state<Passkey>();
 	let confirmOpen = $state(false);
 	let deleting = $state(false);
@@ -86,11 +85,6 @@
 		reauthing = true;
 		const to = `/login?redirectTo=${encodeURIComponent('/settings/security')}`;
 		if (!(await signOutOrWarn(to))) reauthing = false;
-	}
-
-	async function handleSignOut() {
-		signingOut = true;
-		if (!(await signOutOrWarn())) signingOut = false;
 	}
 </script>
 
@@ -163,9 +157,7 @@
 
 	<section class="flex flex-col gap-3" aria-labelledby="session-heading">
 		<h2 id="session-heading" class="text-lg font-semibold text-text">This device</h2>
-		<Button variant="secondary" icon={LogOut} loading={signingOut} onclick={handleSignOut}>
-			Sign out
-		</Button>
+		<SignOutButton />
 	</section>
 </div>
 

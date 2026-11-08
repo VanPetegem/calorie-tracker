@@ -1,12 +1,11 @@
 <script lang="ts">
-	import LogOut from '@lucide/svelte/icons/log-out';
 	import { isHttpError } from '@sveltejs/kit';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button, SegmentedControl } from '#lib/components/ui/index.ts';
+	import SignOutButton from '#lib/components/ui/SignOutButton.svelte';
 	import ProfileForm from '#lib/components/settings/ProfileForm.svelte';
 	import TargetExplainer from '#lib/components/settings/TargetExplainer.svelte';
-	import { signOutOrWarn } from '#lib/auth-client.ts';
 	import { DEFAULT_GOAL_RATE, GOAL_RATES } from '#lib/domain/constants.ts';
 	import type { WeeklyTarget } from '#lib/server/db/schema.ts';
 	import { PROFILE_ALREADY_SET_UP, type ProfileInput } from '#lib/schemas/settings.ts';
@@ -14,8 +13,6 @@
 	import { completeOnboarding } from './onboarding.remote.ts';
 
 	let { data }: PageProps = $props();
-
-	let signingOut = $state(false);
 
 	// The goal rate is part of onboarding, not the profile: Settings sets it in its own section.
 	let goalRate = $state(String(DEFAULT_GOAL_RATE));
@@ -37,11 +34,6 @@
 			}
 			throw cause;
 		}
-	}
-
-	async function handleSignOut() {
-		signingOut = true;
-		if (!(await signOutOrWarn())) signingOut = false;
 	}
 
 	// The heading that replaces the form takes focus, so a screen reader announces the target.
@@ -96,9 +88,7 @@
 				extra={goal}
 			/>
 		{/if}
-		<Button variant="secondary" icon={LogOut} loading={signingOut} onclick={handleSignOut}>
-			Sign out
-		</Button>
+		<SignOutButton />
 	</div>
 </main>
 

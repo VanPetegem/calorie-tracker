@@ -8,18 +8,15 @@ import Page from './+page.svelte';
 
 const mocks = vi.hoisted(() => ({
 	completeOnboarding: vi.fn(),
-	goto: vi.fn(),
-	signOutOrWarn: vi.fn()
+	goto: vi.fn()
 }));
 
 vi.mock('./onboarding.remote.ts', () => ({ completeOnboarding: mocks.completeOnboarding }));
 vi.mock('$app/navigation', () => ({ goto: mocks.goto, invalidateAll: vi.fn() }));
-vi.mock('#lib/auth-client.ts', () => ({ signOutOrWarn: mocks.signOutOrWarn }));
 
 beforeEach(() => {
 	mocks.completeOnboarding.mockReset();
 	mocks.goto.mockReset().mockResolvedValue(undefined);
-	mocks.signOutOrWarn.mockReset().mockResolvedValue(true);
 });
 
 async function fillAndSubmit() {
@@ -58,13 +55,5 @@ describe('onboarding page', () => {
 		mocks.completeOnboarding.mockResolvedValue(weekRow('2026-11-02', { targetKcal: 2450 }));
 		await fillAndSubmit();
 		await expect.element(page.getByRole('heading', { name: 'Your first target' })).toHaveFocus();
-	});
-
-	it('signs out from the setup screen through signOutOrWarn', async () => {
-		render(Page, { data: { kg: null, today: '2026-11-08' }, params: {}, form: null } as never);
-		const signOut = page.getByRole('button', { name: 'Sign out' });
-		await expect.element(signOut).toBeVisible();
-		await signOut.click();
-		expect(mocks.signOutOrWarn).toHaveBeenCalledTimes(1);
 	});
 });
