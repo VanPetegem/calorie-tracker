@@ -30,6 +30,11 @@ async function fillAndSubmit() {
 }
 
 describe('onboarding page', () => {
+	it('offers sign out on the setup screen', async () => {
+		render(Page, { data: { kg: null, today: '2026-11-08' }, params: {}, form: null } as never);
+		await expect.element(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+	});
+
 	it('goes to Today when the profile is already set up', async () => {
 		mocks.completeOnboarding.mockImplementation(async () => error(400, PROFILE_ALREADY_SET_UP));
 		await fillAndSubmit();
