@@ -68,8 +68,8 @@ export type AdaptiveTdee = {
  * intake of the window. With at least MIN_VALID_DAYS valid days and MIN_WEIGH_INS weigh-ins in the window, observed
  * is the mean valid intake less the energy stored per day: the trend change over the window times `rho`, spread over
  * its days. The change runs from the trend on the day before the window to the trend on its last day; a series that
- * starts inside the window runs from its first weigh-in instead. Blended adds the formula as BLEND_PRIOR_DAYS days.
- * `intakes` maps dates to logged kcal; `series` is sorted by date, as `trendSeries` returns it. Not rounded.
+ * starts inside the window runs from the kg of its first weigh-in instead (not its trend, the seed mean). Blended adds
+ * the formula as BLEND_PRIOR_DAYS days. `intakes` maps dates to logged kcal; `series` is sorted by date, as `trendSeries` returns it. Not rounded.
  */
 export function adaptiveTdee(input: {
 	intakes: Record<string, number>;
@@ -97,12 +97,14 @@ export function adaptiveTdee(input: {
 	}
 	const dayBefore = addDays(first, -1);
 	const before = trendOn(series, dayBefore);
+	// Without a trend before the window, the first weigh-in's own kg: its trend is the seed mean, which already holds
+	// later weigh-ins and would hide part of the change.
 	const start =
 		before === null
-			? { date: windowPoints[0].date, trend: windowPoints[0].trend }
-			: { date: dayBefore, trend: before };
+			? { date: windowPoints[0].date, kg: windowPoints[0].kg }
+			: { date: dayBefore, kg: before };
 	const meanIntake = valid.reduce((sum, kcal) => sum + kcal, 0) / valid.length;
-	const observed = meanIntake - ((end - start.trend) * rho) / daysBetween(start.date, last);
+	const observed = meanIntake - ((end - start.kg) * rho) / daysBetween(start.date, last);
 	const blended =
 		(counts.validDays * observed + BLEND_PRIOR_DAYS * input.formulaTdee) /
 		(counts.validDays + BLEND_PRIOR_DAYS);

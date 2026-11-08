@@ -148,10 +148,16 @@ describe('adaptiveTdee', () => {
 		expect(result.observed).toBeCloseTo(2500, 10);
 	});
 
-	it('measures the trend change from the first weigh-in when the series starts inside the window', () => {
+	it('measures the change from the kg of the first weigh-in when the series starts inside the window', () => {
+		// Gaining from 70.0: the trend starts at the seed mean of the first three weigh-ins (70.3), which would hide
+		// 0.3 kg of the gain.
 		const series: TrendPoint[] = [
-			...[0, 4, 8, 12, 16].map((i, k) => ({ date: windowDays[i], kg: 70, trend: 70 + k * 0.1 })),
-			{ date: windowDays[20], kg: 70.5, trend: 70.5 }
+			{ date: windowDays[0], kg: 70, trend: 70.3 },
+			{ date: windowDays[4], kg: 70.3, trend: 70.3 },
+			{ date: windowDays[8], kg: 70.6, trend: 70.35 },
+			{ date: windowDays[12], kg: 70.6, trend: 70.4 },
+			{ date: windowDays[16], kg: 70.6, trend: 70.45 },
+			{ date: windowDays[20], kg: 70.6, trend: 70.5 }
 		];
 		const result = adaptiveTdee({
 			...base,
