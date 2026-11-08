@@ -1,0 +1,10 @@
+// Read only by @sveltejs/adapter-cloudflare (vite.config.ts). The adapter writes its Worker to this file's `main`;
+// wrangler.jsonc points `main` at worker/index.ts instead, so the adapter must not read that one or it would
+// overwrite the wrapper. Keep `assets` equal to wrangler.jsonc.
+{
+	"main": ".svelte-kit/cloudflare/_worker.js",
+	"assets": {
+		"binding": "ASSETS",
+		"directory": ".svelte-kit/cloudflare"
+	}
+}
