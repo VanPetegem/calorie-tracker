@@ -2,7 +2,7 @@
 	import { TARGETS_HISTORY_LATEST } from '#lib/domain/constants.ts';
 	import TdeeBasis from '#lib/components/targets/TdeeBasis.svelte';
 	import { Button } from '#lib/components/ui/index.ts';
-	import { formatDay, formatSigned } from '#lib/components/weight/chart.ts';
+	import { formatDay, formatSigned, formatWhole } from '#lib/components/weight/chart.ts';
 	import type { WeeklyTarget } from '#lib/server/db/schema.ts';
 
 	/**
@@ -20,7 +20,6 @@
 
 	let all = $state(false);
 	const shown = $derived(all ? rows : rows.slice(0, TARGETS_HISTORY_LATEST));
-	const kcal = (value: number) => Math.round(value).toLocaleString('en-US');
 </script>
 
 {#if rows.length === 0}
@@ -39,13 +38,13 @@
 							: `Week of ${formatDay(row.weekStart, { year: true })}`}
 					</span>
 					<span class="text-base font-semibold text-text tabular-nums">
-						{kcal(row.targetKcal)} kcal
+						{formatWhole(row.targetKcal)} kcal
 					</span>
 				</div>
 				<div
 					class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-text-muted tabular-nums"
 				>
-					<span>TDEE used {kcal(row.tdeeUsed)} kcal</span>
+					<span>TDEE used {formatWhole(row.tdeeUsed)} kcal</span>
 					<TdeeBasis adaptive={row.tdeeAdaptive} validDays={row.validDays} />
 					<span>
 						{row.rateKgPerWeek === null

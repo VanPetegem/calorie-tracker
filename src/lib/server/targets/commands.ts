@@ -14,6 +14,7 @@ import { loadWeight } from '../weights/commands.ts';
 import {
 	AgeOutOfRangeError,
 	NoWeighInError,
+	ProfileIncompleteError,
 	recomputeCurrentWeek,
 	saveOnboarding,
 	type TargetContext
@@ -21,13 +22,15 @@ import {
 
 /**
  * Runs a target write and maps the repository's refusals to 400s the person can act on, not 500s: no weigh-in to
- * compute from, or an age out of range on the settings timezone's day (the repository is the single age check).
+ * compute from, an incomplete profile, or an age out of range on the settings timezone's day (the repository is the
+ * single age check).
  */
 async function mapRefusals<T>(write: () => Promise<T>): Promise<T> {
 	try {
 		return await write();
 	} catch (cause) {
 		if (cause instanceof NoWeighInError) error(400, 'Log a weigh-in first');
+		if (cause instanceof ProfileIncompleteError) error(400, 'Finish setting up your profile first');
 		if (cause instanceof AgeOutOfRangeError) {
 			error(400, `Age must be ${MIN_AGE_YEARS} to ${MAX_AGE_YEARS}`);
 		}

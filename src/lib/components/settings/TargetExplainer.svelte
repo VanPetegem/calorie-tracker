@@ -2,6 +2,7 @@
 	import { ADAPTIVE_WINDOW_DAYS, MIN_VALID_DAYS, MIN_WEIGH_INS } from '#lib/domain/constants.ts';
 	import type { WeeklyTarget } from '#lib/server/db/schema.ts';
 	import { Card } from '#lib/components/ui/index.ts';
+	import { formatWhole } from '#lib/components/weight/chart.ts';
 
 	/** This week's target with its macros, and two sentences on where it comes from. */
 	type Props = { target: WeeklyTarget };
@@ -9,8 +10,6 @@
 	let { target }: Props = $props();
 
 	const uid = $props.id();
-
-	const round = (value: number) => Math.round(value).toLocaleString('en-US');
 
 	// Until the adaptive gate passes, the target rests on the formula alone.
 	const explanation = $derived(
@@ -31,7 +30,7 @@
 		<div class="flex flex-col gap-1">
 			<h2 id="{uid}-heading" class="text-lg font-semibold text-text">Your target</h2>
 			<p class="text-5xl font-semibold tracking-tight text-text tabular-nums">
-				{round(target.targetKcal)}
+				{formatWhole(target.targetKcal)}
 			</p>
 			<p class="text-base text-text-muted">kcal a day</p>
 		</div>
@@ -39,7 +38,7 @@
 			{#each macros as macro (macro.name)}
 				<div class="flex flex-col gap-0.5">
 					<dt class="text-sm text-text-muted">{macro.name}</dt>
-					<dd class="text-lg font-semibold text-text tabular-nums">{round(macro.grams)} g</dd>
+					<dd class="text-lg font-semibold text-text tabular-nums">{formatWhole(macro.grams)} g</dd>
 				</div>
 			{/each}
 		</dl>

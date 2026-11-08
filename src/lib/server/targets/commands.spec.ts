@@ -83,6 +83,16 @@ describe('target commands', () => {
 		expect((await getSettings(test.db)).heightCm).toBe(PROFILE.heightCm);
 	});
 
+	it('answers 400 "Finish setting up your profile first" when a goal save has no complete profile', async () => {
+		await saveWeight(test.db, { date: '2026-11-07', kg: 72 });
+
+		await expect(recomputeWeekOn(await ctx(TODAY), { goalRatePct: 0.5 })).rejects.toMatchObject({
+			status: 400,
+			body: { message: 'Finish setting up your profile first' }
+		});
+		expect((await getSettings(test.db)).goalRatePct).toBe(0.35);
+	});
+
 	it('maps a profile save with an age out of range to 400 and keeps the stored profile', async () => {
 		await completeOnboardingOn(await ctx(TODAY), ONBOARDING);
 		await expect(

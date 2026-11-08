@@ -68,11 +68,9 @@ export const ONBOARDING_PATH = '/onboarding';
 
 /**
  * Where a page goes while the profile is incomplete: every app page goes to onboarding, and onboarding goes to Today
- * once the profile is complete. Null when the path stays. Remote function calls never redirect: they are not pages,
- * and the page that made them has already been redirected.
+ * once the profile is complete. Null when the path stays.
  */
 export function onboardingRedirect(pathname: string, profileComplete: boolean): string | null {
-	if (pathname.startsWith(REMOTE_FUNCTIONS)) return null;
 	const onboarding = pathname === ONBOARDING_PATH || pathname.startsWith(`${ONBOARDING_PATH}/`);
 	if (onboarding) return profileComplete ? '/' : null;
 	return profileComplete ? null : ONBOARDING_PATH;

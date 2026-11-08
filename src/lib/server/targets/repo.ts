@@ -1,11 +1,10 @@
 import { asc, desc, eq, lt, lte } from 'drizzle-orm';
-import * as v from 'valibot';
 import { ADAPTIVE_WINDOW_DAYS, MAX_AGE_YEARS, MIN_AGE_YEARS } from '../../domain/constants.ts';
 import { addDays, weekStart } from '../../domain/dates.ts';
 import { weekTarget, type WeekTargetRow } from '../../domain/targets.ts';
 import { ageInRange } from '../../domain/tdee.ts';
 import { trendSeries, type WeighIn } from '../../domain/trend.ts';
-import { OnboardingInput } from '../../schemas/settings.ts';
+import type { OnboardingInput } from '../../schemas/settings.ts';
 import type { AppContext } from '../context.ts';
 import type { Db } from '../db/index.ts';
 import { weeklyTargets, type WeeklyTarget } from '../db/schema.ts';
@@ -54,6 +53,9 @@ export class AgeOutOfRangeError extends Error {
 	}
 }
 
+/** The settings a target's formula TDEE comes from. */
+const PROFILE_FIELDS = ['sex', 'birthDate', 'heightCm', 'activityLevel'] as const;
+
 /** The TDEE used of the latest row before `monday`, null without one. */
 async function previousUsed(db: Db, monday: string): Promise<number | null> {
 	const [row] = await db
@@ -68,20 +70,21 @@ async function previousUsed(db: Db, monday: string): Promise<number | null> {
 /**
  * The row of the week starting `monday` for `settings`, from `weighIns` (all of them: `trendSeries` and `weekTarget`
  * read only what is dated before the week, see `weekTarget`), the intake of the adaptive window before the week and
- * the previous row. Writes nothing.
+ * the previous row. With `smooth: false` the TDEE is not smoothed against the previous row. Writes nothing.
  */
 async function computeRow(
 	db: Db,
 	settings: Settings,
 	monday: string,
-	weighIns: WeighIn[]
+	weighIns: WeighIn[],
+	{ smooth = true }: { smooth?: boolean } = {}
 ): Promise<WeekTargetRow> {
 	if (!isProfileComplete(settings)) throw new ProfileIncompleteError();
 	if (weighIns.length === 0) throw new NoWeighInError(monday);
 	const sunday = addDays(monday, -1);
 	const [intakes, previous] = await Promise.all([
 		dailyIntakes(db, addDays(monday, -ADAPTIVE_WINDOW_DAYS), sunday),
-		previousUsed(db, monday)
+		smooth ? previousUsed(db, monday) : null
 	]);
 	return weekTarget({
 		weekStart: monday,
@@ -138,7 +141,8 @@ export async function currentTarget(ctx: TargetContext): Promise<WeeklyTarget> {
 export async function targetFor(ctx: TargetContext, date: string): Promise<WeeklyTarget> {
 	const monday = weekStart(date);
 	try {
-		await currentTarget(ctx);
+		const current = await currentTarget(ctx);
+		if (current.weekStart === monday) return current;
 	} catch (error) {
 		if (!(error instanceof NoWeighInError)) throw error;
 	}
@@ -162,8 +166,9 @@ export async function targetFor(ctx: TargetContext, date: string): Promise<Weekl
  * Writes a settings change and replaces this week's row computed with it, in one batch. The row uses the same
  * weigh-ins, window and previous row as `currentTarget`; earlier rows are not touched. The settings it merges
  * `patch` into are read from the database, not taken from `ctx`, which may be older than another save in flight.
- * `patch` needs at least one field and is validated by the caller. Throws `AgeOutOfRangeError` for a birth date out
- * of range on `ctx.today`.
+ * A patch that changes the profile (sex, birth date, height or activity level) is not smoothed against the previous
+ * row, so a corrected profile shows in this week's target in full; any other change is. `patch` needs at least one
+ * field and is validated by the caller. Throws `AgeOutOfRangeError` for a birth date out of range on `ctx.today`.
  */
 export async function recomputeCurrentWeek(
 	ctx: TargetContext,
@@ -174,7 +179,18 @@ export async function recomputeCurrentWeek(
 	}
 	const monday = weekStart(ctx.today);
 	const current = await getSettings(ctx.db);
-	const row = await computeRow(ctx.db, { ...current, ...patch }, monday, await listWeights(ctx.db));
+	const profileChanged = PROFILE_FIELDS.some(
+		(field) => patch[field] !== undefined && patch[field] !== current[field]
+	);
+	const row = await computeRow(
+		ctx.db,
+		{ ...current, ...patch },
+		monday,
+		await listWeights(ctx.db),
+		{
+			smooth: !profileChanged
+		}
+	);
 	const [, [saved]] = await ctx.db.batch([
 		settingsWrite(ctx.db, patch),
 		rowUpsert(ctx.db, row, ctx.now ?? new Date())
@@ -184,14 +200,14 @@ export async function recomputeCurrentWeek(
 
 /**
  * Saves the profile and goal rate, today's weigh-in (replacing one of today) and this week's row in one batch, and
- * returns the row. The other settings the row uses are read from the database, not `ctx`. Throws `AgeOutOfRangeError`
- * when the birth date is out of range on `ctx.today`, before any write.
+ * returns the row. The other settings the row uses are read from the database, not `ctx`. `input` is validated by the
+ * caller. Throws `AgeOutOfRangeError` when the birth date is out of range on `ctx.today`, before any write.
  */
 export async function saveOnboarding(
 	ctx: TargetContext,
 	input: OnboardingInput
 ): Promise<WeeklyTarget> {
-	const { kg, ...profile } = v.parse(OnboardingInput, input);
+	const { kg, ...profile } = input;
 	if (!ageInRange(profile.birthDate, ctx.today)) {
 		throw new AgeOutOfRangeError(profile.birthDate, ctx.today);
 	}

@@ -193,13 +193,4 @@ describe('onboardingRedirect', () => {
 	it('keeps /onboarding itself open while the profile is incomplete', () => {
 		expect(onboardingRedirect('/onboarding', false)).toBeNull();
 	});
-
-	it.each([true, false])(
-		'never redirects a remote function call (profile complete: %s)',
-		(profileComplete) => {
-			expect(
-				onboardingRedirect('/_app/remote/abc123/completeOnboarding', profileComplete)
-			).toBeNull();
-		}
-	);
 });

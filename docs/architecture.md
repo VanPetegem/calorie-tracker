@@ -240,7 +240,11 @@ settings write (saveGoal, saveMacroRules, profile) -> recomputeCurrentWeek -> on
   the Sunday before does not exist. The row then uses the kg of the earliest weigh-in as the trend, with a null rate
   (`weekTarget` falls back to `series[0].kg`); later weigh-ins in the week never change it.
 - Adaptive TDEE is used only when the gate passes (14 valid days and 6 weigh-ins); otherwise the formula TDEE is used
-  and `tdee_adaptive` is null. The target moves at most 150 kcal a week from the adaptive part.
+  and `tdee_adaptive` is null. The target moves at most 150 kcal a week from the adaptive part. A profile change
+  (sex, birth date, height or activity level) recomputes this week without that smoothing, so a corrected profile
+  shows in full; goal and macro rule saves keep it.
+- The adaptive window's weight change runs from the trend on the day before the window; when the series starts inside
+  the window, it runs from the kg of the first weigh-in, not its trend (the seed mean of later weigh-ins).
 - A day shows the row of its week, else the latest earlier row, else the earliest row. Weeks the app was not opened
   get no row, and nothing is backfilled.
 - The Settings page lists the stored rows (`targetsHistory`), marking formula and adaptive weeks. The Weight tab shows

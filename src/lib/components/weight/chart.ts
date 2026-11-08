@@ -143,6 +143,11 @@ export function formatKg(kg: number): string {
 	return kgFormat.format(kg);
 }
 
+/** A number rounded to a whole, with thousands separators: "2,450". Kcal and grams. */
+export function formatWhole(value: number): string {
+	return Math.round(value).toLocaleString('en-US');
+}
+
 /** A number with a sign for anything but zero and `digits` decimals: "+0.24", "-0.30", "0.00". */
 export function formatSigned(value: number, digits: number): string {
 	return new Intl.NumberFormat('en-GB', {

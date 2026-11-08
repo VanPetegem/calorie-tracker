@@ -208,6 +208,30 @@ describe('targets repository', () => {
 		expect(lastWeekAfter.results).toEqual(lastWeek.results);
 	});
 
+	describe('a profile save', () => {
+		beforeEach(async () => {
+			await withProfile();
+			await saveWeight(test.db, { date: '2026-10-20', kg: 72 });
+			await test.db.insert(weeklyTargets).values(storedRow(LAST_WEEK, { tdeeUsed: 2500 }));
+		});
+
+		it('that changes the profile recomputes this week without smoothing against last week', async () => {
+			const after = await recomputeCurrentWeek(await ctx(WED), {
+				...PROFILE,
+				activityLevel: 'active'
+			});
+
+			expect(after.tdeeAdaptive).toBeNull();
+			expect(after.tdeeUsed).toBe(after.tdeeFormula);
+		});
+
+		it('that changes nothing keeps smoothing against last week', async () => {
+			const after = await recomputeCurrentWeek(await ctx(WED), PROFILE);
+
+			expect(after.tdeeUsed).toBeCloseTo(smoothTdee(after.tdeeFormula, 2500), 9);
+		});
+	});
+
 	it('stamps the clock as computed_at when a row is replaced', async () => {
 		await withProfile();
 		await saveWeight(test.db, { date: '2026-10-30', kg: 72 });
