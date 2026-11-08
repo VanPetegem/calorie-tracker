@@ -38,6 +38,9 @@ trigger (`user_single_account`). Sessions last a year and slide daily.
 - Page navigations go network first. Each good (OK, not redirected) response is cached per URL. When the
   network fails, that URL's cached page is used; only `/` falls back to the cached home page; any other
   uncached URL gets a small 503 "This page is unavailable offline" page.
+- Client side navigations fetch `<path>/__data.json`. Those go network first into the same cache, one copy per path. The
+  worker drops `x-sveltekit-invalidated` (the server then loads every node, so one copy fits any request); with no copy
+  offline it answers 503, which makes SvelteKit do a full navigation. See `docs/decisions.md` (2026-11-08).
 - `/api/*` and anything that is not a same origin GET is never touched.
 - Caches are named `kcal-<version>`; old versions are deleted on activate.
 - Sign out (`src/lib/auth-client.ts`) deletes every `kcal-*` cache so pages rendered for the session cannot be
@@ -215,6 +218,8 @@ page -> saveWeight / deleteWeight (weight.remote.ts, shared schema src/lib/schem
   for tomorrow is kept but is not part of today's trend.
 - `WeightChart` is inline SVG without a library; its range (30 days, 90 days, 1 year, All) is stored per device in
   `localStorage`. `/design` shows each component in its states.
+- The history lists the newest `WEIGHT_HISTORY_PAGE` (30) weigh-ins; "Show more" adds 30 over the loaded series. The shown
+  count is page state, so a refresh after a write keeps it.
 
 ## Directory map
 

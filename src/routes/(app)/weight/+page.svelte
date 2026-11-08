@@ -10,6 +10,7 @@
 	import WeightRow from '#lib/components/weight/WeightRow.svelte';
 	import WeightSummary from '#lib/components/weight/WeightSummary.svelte';
 	import { formatDay, formatKg } from '#lib/components/weight/chart.ts';
+	import { WEIGHT_HISTORY_PAGE } from '#lib/domain/constants.ts';
 	import type { TrendPoint } from '#lib/domain/trend.ts';
 	import type { WeightInput } from '#lib/schemas/weight.ts';
 	import { toasts, withUndo } from '#lib/stores/toasts.svelte.ts';
@@ -19,6 +20,13 @@
 	let { data }: PageProps = $props();
 
 	const history = $derived([...data.series].reverse());
+	// How many of the newest weigh-ins the history lists. "Show more" adds a page; a write keeps the count.
+	let listed = $state(WEIGHT_HISTORY_PAGE);
+	const shownHistory = $derived(history.slice(0, listed));
+
+	function showMore() {
+		listed += WEIGHT_HISTORY_PAGE;
+	}
 
 	// The sheet is shared: a row edits its weigh-in, "Add weigh-in" opens it with no point.
 	let sheetOpen = $state(false);
@@ -139,12 +147,15 @@
 		</div>
 		{#if history.length > 0}
 			<ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
-				{#each history as point (point.date)}
+				{#each shownHistory as point (point.date)}
 					<li>
 						<WeightRow {point} onedit={edit} ondelete={remove} />
 					</li>
 				{/each}
 			</ul>
+			{#if history.length > listed}
+				<Button variant="secondary" onclick={showMore}>Show more</Button>
+			{/if}
 		{/if}
 	</section>
 </div>

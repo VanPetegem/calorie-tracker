@@ -9,10 +9,14 @@ import { assets, immutable } from '$app/manifest';
  *  - Page navigations go network first. Each good response is cached so the page can be reopened offline;
  *    when the network fails, that URL's cached page is used; only `/` falls back to the cached home page, any
  *    other URL gets a small 503 "unavailable offline" page.
+ *  - Client side navigations fetch `<path>/__data.json`. Those go network first into the same cache, so switching
+ *    tabs works offline; see `dataRequest` for the cache key.
  *  - `/api/*` and anything that is not a same origin GET is never touched.
  */
 
 const CACHE = `kcal-${version}`;
+const DATA_SUFFIX = '/__data.json';
+const INVALIDATED_PARAM = 'x-sveltekit-invalidated';
 
 // Manifest paths are relative to the base path. The app is served from the domain root, so this is `/` + path.
 // The zxing decoder's `.wasm` (about 1 MB, only needed once someone scans) is left out: the browser's HTTP cache keeps
@@ -65,6 +69,8 @@ self.addEventListener('fetch', (event) => {
 
 	if (request.mode === 'navigate') {
 		event.respondWith(networkFirst(request, event));
+	} else if (url.pathname.endsWith(DATA_SUFFIX)) {
+		event.respondWith(networkFirstData(request, event));
 	} else if (PRECACHED.has(url.pathname)) {
 		event.respondWith(cacheFirst(request, url.pathname));
 	}
@@ -86,6 +92,34 @@ async function networkFirst(request: Request, event: ExtendableEvent) {
 			if (home) return home;
 		}
 		return offlinePage();
+	}
+}
+
+/**
+ * SvelteKit's `x-sveltekit-invalidated` bitmap tells the server which layouts to load, and the server skips the rest.
+ * A response therefore depends on the bitmap, which changes from one navigation to the next, so a copy keyed by the
+ * full URL would rarely match offline. The worker drops the bitmap: the server then loads every node, the copy is
+ * complete, and one copy per path answers any bitmap. Cost: the layout loads run again on each tab switch while online.
+ */
+function dataRequest(url: URL) {
+	const data = new URL(url);
+	data.searchParams.delete(INVALIDATED_PARAM);
+	return data;
+}
+
+async function networkFirstData(request: Request, event: ExtendableEvent) {
+	const cache = await caches.open(CACHE);
+	const data = dataRequest(new URL(request.url));
+	const key = data.href;
+	try {
+		const response = await fetch(new Request(data, request));
+		if (cacheable(response)) event.waitUntil(cache.put(key, response.clone()));
+		return response;
+	} catch {
+		const cached = await cache.match(key, { ignoreVary: true });
+		if (cached) return cached;
+		// Not OK, so SvelteKit's client does a full navigation, which gets the cached page or the offline page.
+		return new Response(null, { status: 503 });
 	}
 }
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
+import { addDays } from '#lib/domain/dates.ts';
 import { trendSeries } from '#lib/domain/trend.ts';
 import { toasts } from '#lib/stores/toasts.svelte.ts';
 import Page from './+page.svelte';
@@ -35,18 +36,30 @@ afterEach(() => {
 	for (const toast of [...toasts.items]) toasts.dismiss(toast.id);
 });
 
-function show(weighIns: { date: string; kg: number }[], todayKg: number | null = null) {
+function pageData(weighIns: { date: string; kg: number }[], todayKg: number | null = null) {
 	const series = trendSeries(weighIns);
 	const last = series.filter((point) => point.date <= TODAY).at(-1);
+	return {
+		today: TODAY,
+		series,
+		todayKg,
+		lastKg: last?.kg ?? null,
+		trendKg: last?.trend ?? null,
+		rate: null
+	};
+}
+
+/** `count` consecutive weigh-ins ending on `last`, oldest first. */
+function weighIns(count: number, last: string) {
+	return Array.from({ length: count }, (_, i) => ({
+		date: addDays(last, i - count + 1),
+		kg: 70 + (i % 10) / 10
+	}));
+}
+
+function show(weighIns: { date: string; kg: number }[], todayKg: number | null = null) {
 	return render(Page, {
-		data: {
-			today: TODAY,
-			series,
-			todayKg,
-			lastKg: last?.kg ?? null,
-			trendKg: last?.trend ?? null,
-			rate: null
-		},
+		data: pageData(weighIns, todayKg),
 		params: {},
 		form: null
 	} as never);
@@ -183,5 +196,33 @@ describe('weight page', () => {
 		await vi.waitFor(() => expect(toastTexts()).toEqual(['Could not delete the weigh-in']));
 		expect(toasts.items[0].action?.label).toBe('Retry');
 		expect(mocks.invalidateAll).not.toHaveBeenCalled();
+	});
+
+	it('lists the newest 30 weigh-ins, and Show more adds the rest', async () => {
+		show(weighIns(31, '2026-11-01'));
+		const rows = () => page.getByRole('button', { name: /^Delete weigh-in of/ });
+		await vi.waitFor(() => expect(rows().elements()).toHaveLength(30));
+
+		await page.getByRole('button', { name: 'Show more' }).click();
+		await vi.waitFor(() => expect(rows().elements()).toHaveLength(31));
+		await expect
+			.element(page.getByRole('button', { name: 'Delete weigh-in of Fri 2 Oct 2026' }))
+			.toBeVisible();
+		expect(page.getByRole('button', { name: 'Show more' }).elements()).toHaveLength(0);
+	});
+
+	it('keeps the expanded list when a row past the first page is deleted', async () => {
+		const all = weighIns(61, '2026-11-01');
+		const view = show(all);
+		const rows = () => page.getByRole('button', { name: /^Delete weigh-in of/ });
+		await page.getByRole('button', { name: 'Show more' }).click();
+
+		await page.getByRole('button', { name: 'Delete weigh-in of Tue 15 Sept 2026' }).click();
+		await vi.waitFor(() => expect(mocks.invalidateAll).toHaveBeenCalled());
+		// The refresh after the delete loads the series without that day.
+		await view.rerender({ data: pageData(all.filter((point) => point.date !== '2026-09-15')) });
+
+		await vi.waitFor(() => expect(rows().elements()).toHaveLength(60));
+		expect(page.getByRole('button', { name: 'Show more' }).elements()).toHaveLength(0);
 	});
 });

@@ -44,6 +44,8 @@ foreign_keys=OFF/ON` became `PRAGMA defer_foreign_keys = on` as in 0020, and its
 - **The manual target is gone ahead of the weekly targets.** `ManualTargetInput`, `saveManualTarget`,
   `target.remote.ts`, `MAX_MANUAL_TARGET_KCAL`, the Settings card and its two e2e tests are removed; `loadDay` returns
   `target: null` until it reads `weekly_targets`.
+- **The worker caches `__data.json` by path with `x-sveltekit-invalidated` removed from both the cache key and the network request, so the server loads every node.** SvelteKit sends a bitmap of the nodes to load and the server skips the rest, so a response depends on the bitmap. The bitmap changes from one navigation to the next, so a key that kept it would rarely match offline. Without the bitmap, each response is complete and one copy per path answers any later request. The cost is that the layout loads run again on each tab switch while online. A data request with no cached copy offline gets a 503, which makes SvelteKit's client do a full navigation (it then gets the cached page or the offline page). Sign out already deletes every `kcal-*` cache, which covers these entries. No browser test covers the offline tab switch (dropped by request); the worker spec covers the cache, not SvelteKit's reaction to the 503.
+- **The weight history lists the newest 30 weigh-ins (`WEIGHT_HISTORY_PAGE`), and "Show more" adds 30 over the loaded series.** The shown count is page state, so the refresh after a write keeps the rows already shown. The chart and its "All" table are unchanged.
 
 ## 2026-11-07
 
