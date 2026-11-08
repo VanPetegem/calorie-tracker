@@ -68,6 +68,27 @@
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
 	import TabBar from '#lib/components/shell/TabBar.svelte';
 	import Section from './Section.svelte';
+	import ProfileForm from '#lib/components/settings/ProfileForm.svelte';
+	import TargetExplainer from '#lib/components/settings/TargetExplainer.svelte';
+	import type { WeeklyTarget } from '#lib/server/db/schema.ts';
+
+	/** One week's row for the TargetExplainer states: formula only, adaptive, and carbs at zero. */
+	const explainerRow: WeeklyTarget = {
+		weekStart: '2026-11-02',
+		tdeeFormula: 2600,
+		tdeeAdaptive: null,
+		tdeeUsed: 2600,
+		targetKcal: 2900,
+		proteinG: 130,
+		carbsG: 400,
+		fatG: 80,
+		carbsFloored: false,
+		trendKg: 72,
+		rateKgPerWeek: null,
+		validDays: 0,
+		weighIns: 1,
+		computedAt: '2026-11-08T10:00:00.000Z'
+	};
 
 	const colorTokens = Object.keys(themes.dark) as ColorToken[];
 
@@ -1469,5 +1490,53 @@
 			preview
 			onadd={() => addSheet.show()}
 		/>
+	</Section>
+
+	<Section
+		name="ProfileForm"
+		description="The profile behind the formula TDEE. Fields check when they lose focus and on submit; the age must be 16 to 100 on the day shown. Settings shows it without weight. Onboarding adds today's weight and, above Save, the goal rate. Try a height under 100 or a birth date that makes you under 16."
+	>
+		<div class="flex flex-col gap-4">
+			<Card>
+				<ProfileForm
+					withWeight={false}
+					today="2026-11-08"
+					submitLabel="Save profile"
+					value={{ sex: 'female', birthDate: '1990-11-04', heightCm: 165, activityLevel: 'light' }}
+					onsubmit={async () => {}}
+				/>
+			</Card>
+			<Card>
+				<ProfileForm
+					withWeight
+					today="2026-11-08"
+					submitLabel="Calculate my target"
+					value={{ kg: 72 }}
+					onsubmit={async () => {}}
+				/>
+			</Card>
+		</div>
+	</Section>
+
+	<Section
+		name="TargetExplainer"
+		description="This week's target with its macros and the reason for it: the formula until the adaptive gate passes, then the days it used. Carbs read 0 g with a note when protein and fat use the whole target."
+	>
+		<div class="flex flex-col gap-4">
+			<TargetExplainer target={explainerRow} />
+			<TargetExplainer
+				target={{
+					...explainerRow,
+					tdeeAdaptive: 2450,
+					tdeeUsed: 2450,
+					validDays: 16,
+					weighIns: 7,
+					targetKcal: 2650
+				}}
+			/>
+			<TargetExplainer
+				target={{ ...explainerRow, carbsG: 0, carbsFloored: true, targetKcal: 1500 }}
+			/>
+		</div>
 	</Section>
 </div>

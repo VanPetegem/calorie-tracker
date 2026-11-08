@@ -15,11 +15,14 @@
 		Sheet
 	} from '#lib/components/ui/index.ts';
 	import ContainerForm from '#lib/components/recipes/ContainerForm.svelte';
+	import ProfileForm from '#lib/components/settings/ProfileForm.svelte';
 	import type { ContainerInput } from '#lib/schemas/batch.ts';
+	import type { ProfileInput } from '#lib/schemas/settings.ts';
 	import type { Container } from '#lib/server/db/schema.ts';
 	import { signOutOrWarn } from '#lib/auth-client.ts';
 	import { toasts } from '#lib/stores/toasts.svelte.ts';
 	import { deleteContainer, saveContainer } from '../recipes/batches.remote.ts';
+	import { saveProfile } from './profile.remote.ts';
 
 	let { data } = $props();
 
@@ -42,6 +45,13 @@
 		} catch {
 			// ignored on purpose
 		}
+	}
+
+	// Saving recalculates this week's target, so Today and this page show the new one after the refresh.
+	async function saveProfileSection({ profile }: { profile: ProfileInput }) {
+		await saveProfile(profile);
+		toasts.show({ message: 'Profile saved', tone: 'success' });
+		await refresh();
 	}
 
 	async function saveEdit(input: ContainerInput) {
@@ -80,6 +90,23 @@
 
 <div class="flex flex-col gap-6">
 	<h1 class="text-3xl font-semibold tracking-tight text-text">Settings</h1>
+	<section class="flex flex-col gap-3" aria-labelledby="profile-heading">
+		<div class="flex flex-col gap-1">
+			<h2 id="profile-heading" class="text-lg font-semibold text-text">Profile</h2>
+			<p class="text-sm text-text-muted">
+				Your target is worked out from these. Saving recalculates this week's target.
+			</p>
+		</div>
+		<Card>
+			<ProfileForm
+				value={data.profile}
+				withWeight={false}
+				today={data.today}
+				submitLabel="Save profile"
+				onsubmit={saveProfileSection}
+			/>
+		</Card>
+	</section>
 	<section class="flex flex-col gap-3" aria-labelledby="containers-heading">
 		<div class="flex flex-col gap-1">
 			<h2 id="containers-heading" class="text-lg font-semibold text-text">Containers</h2>

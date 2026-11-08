@@ -64,6 +64,20 @@ export function decideAccess(input: AccessInput): AccessDecision {
 	return { kind: 'deny', status: 401 };
 }
 
+export const ONBOARDING_PATH = '/onboarding';
+
+/**
+ * Where a page goes while the profile is incomplete: every app page goes to onboarding, and onboarding goes to Today
+ * once the profile is complete. Null when the path stays. Remote function calls never redirect: they are not pages,
+ * and the page that made them has already been redirected.
+ */
+export function onboardingRedirect(pathname: string, profileComplete: boolean): string | null {
+	if (pathname.startsWith(REMOTE_FUNCTIONS)) return null;
+	const onboarding = pathname === ONBOARDING_PATH || pathname.startsWith(`${ONBOARDING_PATH}/`);
+	if (onboarding) return profileComplete ? '/' : null;
+	return profileComplete ? null : ONBOARDING_PATH;
+}
+
 /** A placeholder origin: whatever resolves against it and keeps it is a path on our own origin. */
 const SELF = 'http://self.invalid';
 

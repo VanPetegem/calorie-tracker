@@ -3,6 +3,16 @@ import { appContext } from '#lib/server/context.ts';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => {
-	const { db } = await appContext();
-	return { containers: await listContainers(db) };
+	const ctx = await appContext();
+	const { settings } = ctx;
+	return {
+		containers: await listContainers(ctx.db),
+		today: ctx.today,
+		profile: {
+			sex: settings.sex,
+			birthDate: settings.birthDate,
+			heightCm: settings.heightCm,
+			activityLevel: settings.activityLevel
+		}
+	};
 };

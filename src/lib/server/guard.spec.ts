@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideAccess, safeRedirect } from './guard.ts';
+import { decideAccess, onboardingRedirect, safeRedirect } from './guard.ts';
 
 type Input = Parameters<typeof decideAccess>[0];
 
@@ -169,4 +169,37 @@ describe('safeRedirect', () => {
 		expect(safeRedirect('/a/../weight')).toBe('/weight');
 		expect(safeRedirect('/../../evil.com')).toBe('/evil.com');
 	});
+});
+
+describe('onboardingRedirect', () => {
+	it.each(['/', '/weight', '/settings', '/design', '/day/2026-11-07', '/recipes/batches/new'])(
+		'sends %s to onboarding while the profile is incomplete',
+		(pathname) => {
+			expect(onboardingRedirect(pathname, false)).toBe('/onboarding');
+		}
+	);
+
+	it.each(['/', '/weight', '/settings', '/day/2026-11-07'])(
+		'leaves %s alone once the profile is complete',
+		(pathname) => {
+			expect(onboardingRedirect(pathname, true)).toBeNull();
+		}
+	);
+
+	it('sends /onboarding to Today once the profile is complete', () => {
+		expect(onboardingRedirect('/onboarding', true)).toBe('/');
+	});
+
+	it('keeps /onboarding itself open while the profile is incomplete', () => {
+		expect(onboardingRedirect('/onboarding', false)).toBeNull();
+	});
+
+	it.each([true, false])(
+		'never redirects a remote function call (profile complete: %s)',
+		(profileComplete) => {
+			expect(
+				onboardingRedirect('/_app/remote/abc123/completeOnboarding', profileComplete)
+			).toBeNull();
+		}
+	);
 });
