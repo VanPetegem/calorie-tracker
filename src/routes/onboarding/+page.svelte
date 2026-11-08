@@ -87,8 +87,8 @@
 				onsubmit={submit}
 				extra={goal}
 			/>
+			<SignOutButton />
 		{/if}
-		<SignOutButton />
 	</div>
 </main>
 

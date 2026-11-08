@@ -6,7 +6,7 @@ import { logEntries, settings, weeklyTargets, weights, type WeeklyTarget } from 
 import { addQuickEntry } from '../log/repo.ts';
 import { getSettings, settingsWrite, type TargetSettingsPatch } from '../settings/repo.ts';
 import { createTestDb } from '../test/d1.ts';
-import { interleaved } from '../test/interleave.ts';
+import { beforeSettingsRead, interleaved } from '../test/interleave.ts';
 import { listWeights, saveWeight } from '../weights/repo.ts';
 import {
 	AgeOutOfRangeError,
@@ -309,6 +309,20 @@ describe('targets repository', () => {
 		expect(saved.tdeeUsed).toBe(saved.tdeeFormula);
 		const again = await recomputeCurrentWeek(await ctx(WED), { goalRatePct: 0.5 });
 		expect(withoutComputedAt(saved)).toEqual(withoutComputedAt(again));
+	});
+
+	it('reads this week’s row after the settings, so a profile change landing before the settings read is not smoothed away', async () => {
+		await withProfile();
+		await saveWeight(test.db, { date: '2026-10-20', kg: 72 });
+		await test.db.insert(weeklyTargets).values(storedRow(LAST_WEEK, { tdeeUsed: 2000 }));
+		await currentTarget(await ctx(WED));
+		const db = beforeSettingsRead(test.db, async () =>
+			recomputeCurrentWeek(await ctx(WED), { heightCm: 170 })
+		);
+
+		const saved = await recomputeCurrentWeek({ ...(await ctx(WED)), db }, { goalRatePct: 0.5 });
+
+		expect(saved.tdeeUsed).toBe(saved.tdeeFormula);
 	});
 
 	describe('when the row write fails', () => {

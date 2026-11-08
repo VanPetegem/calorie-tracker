@@ -54,6 +54,7 @@ describe('onboarding page', () => {
 		await fillAndSubmit();
 		await expect.element(page.getByRole('heading', { name: 'Your first target' })).toBeVisible();
 		expect(mocks.goto).not.toHaveBeenCalled();
+		expect(page.getByRole('button', { name: 'Sign out' }).elements()).toHaveLength(0);
 	});
 
 	it('moves focus to the first target heading after a save', async () => {

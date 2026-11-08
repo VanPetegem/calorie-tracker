@@ -221,8 +221,9 @@ async function trySettingsSave(
 	patch: TargetSettingsPatch
 ): Promise<WeeklyTarget | undefined> {
 	const monday = weekStart(ctx.today);
-	const [current, existing, previous, weighIns] = await Promise.all([
-		getSettings(ctx.db),
+	// Settings first: a save landing after this read fails the swap, and one landing before it is in every read below.
+	const current = await getSettings(ctx.db);
+	const [existing, previous, weighIns] = await Promise.all([
 		rowOf(ctx.db, monday),
 		previousUsed(ctx.db, monday),
 		listWeights(ctx.db)
