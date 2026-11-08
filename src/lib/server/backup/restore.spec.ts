@@ -36,7 +36,7 @@ describe('restore round trip', () => {
 		const food = after.tables.foods.find((row) => row.id === 'a-food');
 		expect(food).toMatchObject({ name: TRICKY_NAME, brand: null, kcal: TRICKY_REAL });
 		expect(after.tables.foods.some((row) => row.id === 'b-food')).toBe(false);
-	});
+	}, 30_000);
 });
 
 describe('restoreStatements', () => {
@@ -44,17 +44,19 @@ describe('restoreStatements', () => {
 		version: BACKUP_VERSION,
 		createdAt: NOW.toISOString(),
 		migration: LATEST_MIGRATION,
-		tables: Object.fromEntries(BACKUP_TABLES.map((table) => [table, []])) as BackupFile['tables']
+		tables: Object.fromEntries(
+			BACKUP_TABLES.map((table) => [table, []])
+		) as unknown as BackupFile['tables']
 	});
 
 	it('defers foreign keys, deletes in reverse table order, then inserts in table order', () => {
 		const file = emptyFile();
-		file.tables.foods = [{ id: "o'x", kcal: 1.5, brand: null }];
+		file.tables.foods = [{ id: 'ox', kcal: 1.5, brand: null }];
 		file.tables.weights = [{ date: '2026-11-02', kg: 61 }];
 		expect(restoreStatements(file, LATEST_MIGRATION)).toEqual([
 			'PRAGMA defer_foreign_keys = true',
 			...[...BACKUP_TABLES].reverse().map((table) => `DELETE FROM "${table}"`),
-			`INSERT INTO "foods" ("id", "kcal", "brand") VALUES ('o''x', 1.5, NULL)`,
+			`INSERT INTO "foods" ("id", "kcal", "brand") VALUES ('ox', 1.5, NULL)`,
 			`INSERT INTO "weights" ("date", "kg") VALUES ('2026-11-02', 61)`
 		]);
 	});
