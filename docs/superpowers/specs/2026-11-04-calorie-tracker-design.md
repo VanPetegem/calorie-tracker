@@ -106,8 +106,8 @@ All ids are text (UUIDv7). Times are UTC ISO strings; `date` columns are the use
 | `batch_ingredients` | id, batch_id, food_id (nullable), name, amount, unit (`g` / `ml` / `serving`, as entered), grams (gram equivalent), kcal, protein, carbs, fat, fiber (per 100 g snapshot), position |
 | `log_entries` | id, date, logged_at, kind (`food` / `batch` / `quick`), food_id, batch_id, amount, unit (`g` / `ml` / `portion` / `serving`), grams (nullable gram equivalent), label, kcal, protein, carbs, fat, fiber (snapshot of this entry), deleted_at (soft delete for Undo) |
 | `weights` | date (pk), kg, created_at, updated_at |
-| `settings` | single row: sex, birth_date, height_cm, activity_level, goal_rate_pct, protein_g_per_kg, fat_pct, energy_density_kcal_per_kg, timezone, theme. Phase 2 has only timezone, manual_target_kcal and manual_weight_kg; phase 4 adds the rest |
-| `weekly_targets` | week_start (pk, Monday), tdee_formula, tdee_adaptive (nullable), tdee_used, target_kcal, protein_g, carbs_g, fat_g, trend_kg, rate_kg_per_week, data_days |
+| `settings` | single row: timezone, sex, birth_date, height_cm, activity_level, goal_rate_pct, protein_g_per_kg, fat_pct, energy_density_kcal_per_kg. Theme stays a per device preference, not stored. Phase 4 removes the manual target |
+| `weekly_targets` | week_start (pk, Monday), tdee_formula, tdee_adaptive (nullable), tdee_used, target_kcal, protein_g, carbs_g, fat_g, carbs_floored, trend_kg, rate_kg_per_week (nullable), valid_days, weigh_ins, computed_at |
 
 `quick` entries are manual kcal and macros without a food (e.g. restaurant estimate).
 
@@ -124,17 +124,18 @@ All in `src/lib/domain/`, pure functions, no I/O, fully unit tested. Constants l
 4. **Goal rate**: presets 0.25, 0.35 (default), 0.5 percent bodyweight per week (Iraki et al. 2019).
    `goal_kg_per_week = trend_kg x pct / 100`.
 5. **Energy density** rho = 5000 kcal/kg (mixed lean and fat gain; configurable, Hall 2011 basis).
-6. **Adaptive TDEE**, recomputed when a week starts (on first app load of the week, server side):
-   - Window: last 21 days (excluding today). Valid days: intake logged and at least 50 percent of the
-     median logged intake of the window.
+6. **Adaptive TDEE**, one row per week. The first load that needs a week makes its row (server side), and a settings
+   change recomputes this week's row. Past rows never change; weeks the app was not opened get no row (no backfill).
+   - Window: the 21 days ending the day before the week's Monday, so the row does not depend on the day that
+     computes it. Valid days: intake logged and at least 50 percent of the median logged intake of the window.
    - Gate: at least 14 valid days and at least 6 weigh-ins in the window; otherwise use formula TDEE.
    - `tdee_obs = mean_valid_intake - (T_end - T_start) x rho / window_days`.
    - Blend: `(n x tdee_obs + 7 x tdee_formula) / (n + 7)`, n = valid days.
    - Smooth: `0.7 x previous_tdee_used + 0.3 x blended`, then clamp change to +/-150 kcal per week.
 7. **Target kcal** = `tdee_used + goal_kg_per_week x rho / 7`, clamped to 1.05 to 1.20 x tdee_used,
    rounded to 10 kcal.
-8. **Macros**: protein = 1.8 g/kg trend weight (Morton et al. 2018), fat = max(25 percent of kcal / 9,
-   0.6 g/kg), carbs = remainder / 4 (floored at 0, with a warning if hit).
+8. **Macros**: protein = 1.8 g/kg trend weight by default (Morton et al. 2018), fat = max(25 percent of kcal / 9,
+   0.6 g/kg), both rules set in Settings; carbs = remainder / 4 (floored at 0, with a warning if hit).
 
 Sources: Mifflin 1990 (PMID 2305711), Iraki et al. 2019 (PMC6680710), Hall 2011 (PMID 21872750),
 Morton et al. 2018 (PMID 28698222), MacroFactor expenditure method, The Hacker's Diet trend.

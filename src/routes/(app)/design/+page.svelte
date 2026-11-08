@@ -54,9 +54,15 @@
 		draftTotals,
 		type DraftIngredient
 	} from '#lib/components/recipes/draft.ts';
-	import { addDays } from '#lib/domain/dates.ts';
+	import { addDays, weekStart } from '#lib/domain/dates.ts';
 	import { trendSeries, weeklyRate, type TrendPoint, type WeighIn } from '#lib/domain/trend.ts';
 	import EditWeightSheet from '#lib/components/weight/EditWeightSheet.svelte';
+	import WeekTargetCard from '#lib/components/weight/WeekTargetCard.svelte';
+	import GoalPicker from '#lib/components/settings/GoalPicker.svelte';
+	import MacroRulesForm from '#lib/components/settings/MacroRulesForm.svelte';
+	import TargetsHistory from '#lib/components/settings/TargetsHistory.svelte';
+	import TdeeBasis from '#lib/components/targets/TdeeBasis.svelte';
+	import { weekRow } from '#lib/components/targets/week.fixture.ts';
 	import WeightChart from '#lib/components/weight/WeightChart.svelte';
 	import WeightEntry from '#lib/components/weight/WeightEntry.svelte';
 	import WeightRow from '#lib/components/weight/WeightRow.svelte';
@@ -68,6 +74,27 @@
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
 	import TabBar from '#lib/components/shell/TabBar.svelte';
 	import Section from './Section.svelte';
+	import ProfileForm from '#lib/components/settings/ProfileForm.svelte';
+	import TargetExplainer from '#lib/components/settings/TargetExplainer.svelte';
+	import type { WeeklyTarget } from '#lib/server/db/schema.ts';
+
+	/** One week's row for the TargetExplainer states: formula only, adaptive, and carbs at zero. */
+	const explainerRow: WeeklyTarget = {
+		weekStart: '2026-11-02',
+		tdeeFormula: 2600,
+		tdeeAdaptive: null,
+		tdeeUsed: 2600,
+		targetKcal: 2900,
+		proteinG: 130,
+		carbsG: 400,
+		fatG: 80,
+		carbsFloored: false,
+		trendKg: 72,
+		rateKgPerWeek: null,
+		validDays: 0,
+		weighIns: 1,
+		computedAt: '2026-11-08T10:00:00.000Z'
+	};
 
 	const colorTokens = Object.keys(themes.dark) as ColorToken[];
 
@@ -168,6 +195,32 @@
 	const weightSteady = trendSeries(weighIns(20));
 	const weightRateNow = weeklyRate(weightDense, weightToday);
 	const weightRows: TrendPoint[] = weightSteady.slice(-3).reverse();
+	// Targets: this week and two before it, the middle one on the adaptive estimate.
+	const thisWeekStart = weekStart(weightToday);
+	const targetRows = [
+		weekRow(thisWeekStart, { targetKcal: 2450, tdeeUsed: 2600, rateKgPerWeek: 0.25 }),
+		weekRow(addDays(thisWeekStart, -7), {
+			targetKcal: 2380,
+			tdeeUsed: 2412,
+			tdeeAdaptive: 2412,
+			validDays: 16,
+			rateKgPerWeek: 0.18
+		}),
+		weekRow(addDays(thisWeekStart, -14), { rateKgPerWeek: null })
+	];
+	async function saveGoalDemo(rate: number): Promise<void> {
+		toasts.show({ message: `Goal ${rate} % a week saved` });
+	}
+	async function saveGoalFails(): Promise<void> {
+		throw new Error('offline');
+	}
+	async function saveRulesDemo(): Promise<void> {
+		toasts.show({ message: 'Macro rules saved' });
+	}
+	async function saveRulesFails(): Promise<void> {
+		throw new Error('offline');
+	}
+	const rulesSample = { proteinGPerKg: 1.8, fatPct: 0.25, energyDensity: 5000 };
 	let weightLog = $state('Change the weight and press Save.');
 	let weightRowLog = $state('Tap a row to edit it, or the bin to delete it.');
 	let weightSheetOpen = $state(false);
@@ -1427,6 +1480,57 @@
 	</Section>
 
 	<Section
+		name="TdeeBasis"
+		description="How a week's TDEE was set: the formula, or the adaptive estimate with the valid days it rests on."
+	>
+		<div class="flex flex-wrap gap-3">
+			<TdeeBasis adaptive={null} validDays={9} />
+			<TdeeBasis adaptive={2412} validDays={16} />
+		</div>
+	</Section>
+
+	<Section
+		name="WeekTargetCard"
+		description="This week's target on the Weight tab: the kcal, the TDEE used and whether that TDEE is the formula or the adaptive estimate. Shown only for this week's row."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<WeekTargetCard week={targetRows[0]} />
+			<WeekTargetCard week={targetRows[1]} />
+		</div>
+	</Section>
+
+	<Section
+		name="GoalPicker"
+		description="The goal rate in percent of trend weight per week, each with the kg per week it means at the trend. Save goal is off until another rate is picked. A failed save keeps the choice and offers Retry."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<Card><GoalPicker value={0.35} trendKg={70.4} onsave={saveGoalDemo} /></Card>
+			<Card><GoalPicker value={0.35} trendKg={null} onsave={saveGoalDemo} /></Card>
+			<Card><GoalPicker value={0.35} trendKg={70.4} onsave={saveGoalFails} /></Card>
+		</div>
+	</Section>
+
+	<Section
+		name="MacroRulesForm"
+		description="Protein per kg of trend weight and fat as a percent of kcal, checked on blur and on Save with the server's schema. Energy density sits under Advanced, which opens by itself when its value is out of range. A failed save keeps the values and offers Retry."
+	>
+		<div class="grid gap-6 md:grid-cols-2">
+			<Card><MacroRulesForm value={rulesSample} onsave={saveRulesDemo} /></Card>
+			<Card><MacroRulesForm value={rulesSample} onsave={saveRulesFails} /></Card>
+		</div>
+	</Section>
+
+	<Section
+		name="TargetsHistory"
+		description="One row per stored week, newest first: the target, the TDEE used, its basis and the rate. The latest 26 weeks show, then Show all. Before the first week it says there are no targets yet."
+	>
+		<div class="flex flex-col gap-6">
+			<TargetsHistory rows={targetRows} currentWeekStart={thisWeekStart} />
+			<TargetsHistory rows={[]} currentWeekStart={thisWeekStart} />
+		</div>
+	</Section>
+
+	<Section
 		name="AddSheet"
 		description="Search field, then active batches (portions left, kcal per portion), Quick add, New food and Scan, recents and frequents; typing searches the library after 200 ms, Enter or the Open Food Facts row searches OFF. Opens from the add button, the sidebar and Cmd or Ctrl K."
 	>
@@ -1469,5 +1573,53 @@
 			preview
 			onadd={() => addSheet.show()}
 		/>
+	</Section>
+
+	<Section
+		name="ProfileForm"
+		description="The profile behind the formula TDEE. Fields check when they lose focus and on submit; the age must be 16 to 100 on the day shown. Settings shows it without weight. Onboarding adds today's weight and, above Save, the goal rate. Try a height under 100 or a birth date that makes you under 16."
+	>
+		<div class="flex flex-col gap-4">
+			<Card>
+				<ProfileForm
+					withWeight={false}
+					today="2026-11-08"
+					submitLabel="Save profile"
+					value={{ sex: 'female', birthDate: '1990-11-04', heightCm: 165, activityLevel: 'light' }}
+					onsubmit={async () => {}}
+				/>
+			</Card>
+			<Card>
+				<ProfileForm
+					withWeight
+					today="2026-11-08"
+					submitLabel="Calculate my target"
+					value={{ kg: 72 }}
+					onsubmit={async () => {}}
+				/>
+			</Card>
+		</div>
+	</Section>
+
+	<Section
+		name="TargetExplainer"
+		description="This week's target with its macros and the reason for it: the formula until the adaptive gate passes, then the days it used. Carbs read 0 g with a note when protein and fat use the whole target."
+	>
+		<div class="flex flex-col gap-4">
+			<TargetExplainer target={explainerRow} />
+			<TargetExplainer
+				target={{
+					...explainerRow,
+					tdeeAdaptive: 2450,
+					tdeeUsed: 2450,
+					validDays: 16,
+					weighIns: 7,
+					targetKcal: 2650
+				}}
+			/>
+			<TargetExplainer
+				target={{ ...explainerRow, carbsG: 0, carbsFloored: true, targetKcal: 1500 }}
+			/>
+		</div>
 	</Section>
 </div>

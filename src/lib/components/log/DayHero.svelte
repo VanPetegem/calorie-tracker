@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Nutrients } from '#lib/domain/nutrition.ts';
 	import { Card, MacroBar, ProgressBar } from '#lib/components/ui/index.ts';
+	import { formatWhole } from '#lib/components/weight/chart.ts';
 
 	type Props = {
 		totals: Pick<Nutrients, 'kcal' | 'protein' | 'carbs' | 'fat'>;
@@ -15,8 +16,6 @@
 	};
 
 	let { totals, target }: Props = $props();
-
-	const format = (value: number) => Math.round(value).toLocaleString('en-US');
 
 	const eaten = $derived(Math.round(totals.kcal));
 	const remaining = $derived(target ? Math.round(target.kcal) - eaten : 0);
@@ -35,17 +34,17 @@
 			<div class="flex flex-col gap-1">
 				{#if over}
 					<p class="text-5xl font-semibold tracking-tight text-success tabular-nums">
-						Over by {format(-remaining)}
+						Over by {formatWhole(-remaining)}
 					</p>
 					<p class="text-base text-text-muted">
-						kcal, {format(eaten)} of {format(target.kcal)} eaten
+						kcal, {formatWhole(eaten)} of {formatWhole(target.kcal)} eaten
 					</p>
 				{:else}
 					<p class="text-5xl font-semibold tracking-tight text-text tabular-nums">
-						{format(remaining)}
+						{formatWhole(remaining)}
 					</p>
 					<p class="text-base text-text-muted">
-						kcal remaining, {format(eaten)} of {format(target.kcal)} eaten
+						kcal remaining, {formatWhole(eaten)} of {formatWhole(target.kcal)} eaten
 					</p>
 				{/if}
 			</div>
@@ -62,7 +61,9 @@
 			{/if}
 		{:else}
 			<div class="flex flex-col gap-1">
-				<p class="text-5xl font-semibold tracking-tight text-text tabular-nums">{format(eaten)}</p>
+				<p class="text-5xl font-semibold tracking-tight text-text tabular-nums">
+					{formatWhole(eaten)}
+				</p>
 				<p class="text-base text-text-muted">kcal eaten</p>
 			</div>
 			<ul class="grid grid-cols-3 gap-3">
@@ -72,7 +73,9 @@
 							<span class={['size-2 rounded-full', item.dot]} aria-hidden="true"></span>
 							{item.name}
 						</span>
-						<span class="text-lg font-medium text-text tabular-nums">{format(item.grams)} g</span>
+						<span class="text-lg font-medium text-text tabular-nums"
+							>{formatWhole(item.grams)} g</span
+						>
 					</li>
 				{/each}
 			</ul>

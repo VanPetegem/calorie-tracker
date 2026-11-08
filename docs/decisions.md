@@ -2,6 +2,79 @@
 
 Living record of decisions. Newest first. Each entry: date, decision, reason.
 
+## 2026-11-08
+
+- **A profile change recomputes this week's TDEE without smoothing.** Settings said saving the profile recalculates the target, but `recomputeCurrentWeek` smoothed the new TDEE against last week's `tdee_used` and capped the move at 150 kcal, so correcting the activity level, sex or height barely changed it. When the patch changes a profile field (compared with the stored settings), the row is computed with `previousUsed = null`; goal and macro rule saves, and a profile save that changes nothing, still smooth. The decision lasts the week: a later save recomputes unsmoothed too when the existing row was (`wasSmoothed`: its `tdee_used` differs from `smoothTdee` of its own adaptive or formula TDEE and last week's `tdee_used`, exact since all are stored unrounded doubles), so a goal save cannot pull a corrected profile back; no column is needed. Next week smooths from the new value as usual.
+- **The adaptive window starts from the first weigh-in's kg when no trend exists before it.** `adaptiveTdee` used that point's trend, which is the seed mean of up to three weigh-ins, so a gain (70.0, 70.3, 70.6) was understated by the later weigh-ins already in the seed. It now uses the raw kg of the first weigh-in in the window; the end stays the trend on the window's last day.
+- **Review fixes for phase 4b.** `ProfileIncompleteError` maps to 400 "Finish setting up your profile first". `targetFor` returns `currentTarget`'s row for a date in this week instead of querying again. Settings reads the trend with `trendOn` over the series instead of the whole `loadWeight`. The kcal and gram formatter is one helper, `formatWhole`, next to `formatKg`. `onboardingRedirect` lost its remote function branch (remote calls never reach the `(app)` layout). `saveOnboarding` no longer parses its input again; the remote command validates it. The concurrency findings (onboarding double submit, overlapping settings saves) go to an issue.
+- **A drizzle rebuild's CHECKs name their columns bare, never as `"__new_<table>"."col"`.** drizzle-kit writes the temporary table's name into each CHECK of the rebuilt table (`CHECK("__new_settings"."id" = 1)`). That only works because SQLite rewrites the references when `__new_settings` is renamed, which holds today but is an engine detail the migration should not rest on. 0022 now uses `CHECK("id" = 1)` and so on for all eight settings checks. Rule for every future rebuild: after `pnpm db:generate`, strip the `"__new_<table>".` prefix from CHECKs, and keep the other hand edits (`defer_foreign_keys`, the explicit copy columns). Proved with system `sqlite3` 3.51 on a scratch copy (0000 to 0022 apply, the stored `settings` SQL has no `__new`, each of the eight checks rejects a bad value), `pnpm db:generate` reports no changes, and `migrations.spec.ts` now has one case per settings check (dropping a check fails its case). The local D1 was reset (it held only the seeded foods) and migrated again.
+- **Onboarding does not call `invalidateAll` after its write.** Its own load redirects to Today once the profile is complete, so a refresh would skip the result screen ("Your first target"); the Start link navigates instead. This is the one exception to "a write is followed by `invalidateAll`" in `AGENTS.md`. A second submit (another tab, a replay) gets 400 "The profile is already set up" (`PROFILE_ALREADY_SET_UP`, shared with the page); the page treats exactly that message as done and goes to Today, and shows any other 400 message in the form.
+- **Forms show the server's 400 reason, else "Could not save. Try again."** `ProfileForm`, `GoalPicker` and `MacroRulesForm` use the `AmountStep` pattern (`isHttpError(cause, 400) ? cause.body.message : ...`), so "Log a weigh-in first" reaches the person who can act on it.
+- **The worker also refuses a data response with an error node.** A failed load comes back as 200 with a node of `type: 'error'`; storing it would replace the last good copy like a redirect does.
+- **Radio names and heading ids in the Settings components come from `$props.id()`,** so two instances on a page (Goal in Settings, the explainer on the result screen) never share a group or an id.
+- **The age limit is checked once, in the repository.** `saveOnboarding` and `recomputeCurrentWeek` throw `AgeOutOfRangeError` (via `ageInRange`, counted on the settings timezone's day); the commands map it to 400 "Age must be 16 to 100" and the profile form calls the same `ageInRange` on blur. The command layer has no age check of its own (an `assertAgeOn` in the onboarding task duplicated it and was removed); boundary tests live in `repo.spec.ts` and `tdee.spec.ts`, and `commands.spec.ts` keeps one test per mapping.
+- **A week row with no weigh-in before its week uses the earliest weigh-in's kg as the trend.** `currentTarget` passes
+  all weigh-ins to `trendSeries(weighIns, sunday)`, where `seedUntil` keeps weigh-ins after the Sunday out of the seed,
+  and `weekTarget` reads only the trend on that Sunday (`trendOn`) and the adaptive window before the week, so in-week
+  weigh-ins never change the row. In the user's first week the onboarding weigh-in is today, so nothing is dated
+  before the week: `trendOn` is null and `weekTarget` falls back to `series[0].kg`, the kg of the earliest weigh-in
+  (not its trend), with a null rate. This differs from the plan's before-only rule, which left an empty series and a
+  `weekTarget` RangeError, and needs no separate weigh-in filter (a first draft had a `rowWeighIns` helper; review
+  showed it redundant). Tested: a first-week row stays the same after a later weigh-in, also when recomputed.
+- **Settings writes that recompute the week answer 400 "Log a weigh-in first" when there is no weigh-in.** `recomputeWeekOn` (`server/targets/commands.ts`) maps `NoWeighInError` to a 400 and writes nothing; `saveGoal` and `saveMacroRules` (`settings/targets.remote.ts`) both call it. `commands.spec.ts` proves the goal rate stays as it was.
+- **Goal and macro rules have their own Save, and a failed save keeps the choice with Retry.** This matches the other Settings forms. Save goal is off until the rate changes; the submit guard was dropped because the disabled button already stops that path. Macro rules validate on blur with `MacroRulesInput`.
+- **Fat is typed as a percent and stored as a share.** `MacroRulesForm` divides the typed percent by 100 before the schema checks it. Its range message says "Enter a percent from 15 to 40"; the schema's own message would name 0.15. Advanced (energy density) opens by itself when its value is out of range, so a failed save is never hidden inside it.
+- **The Weight tab shows this week's target only when the stored row is this week's.** An earlier row (a week with no weigh-in) is not shown as this week's target. The goal slope starts at this week's trend and runs at the goal rate; the chart's dashed line carries a title with its kg per week, which the page spec reads.
+- **Settings lists stored rows and creates none.** `targetsHistory` loads every stored row (one a week), the list shows the latest 26 (`TARGETS_HISTORY_LATEST`), and "Show all" lists the rest. A week's row is still made by the first load that needs it (Today, day pages, Weight). The Profile card (Task 8) goes above Goal.
+- **Targets e2e: one test, in the chromium project only.** The goal rate is shared, so a save from the other project could land between this test's save and its read; the file skips every other project. `e2e/targets.e2e.ts` picks a goal rate other than the stored one (Save goal is off until the rate changes, and any rate may be stored), waits for the Settings data reload, then reads Today's target and this week's history row from fresh page loads and compares them. It never compares with the target before the save: a new rate can give the same kcal when the trend moved in between. The "no target" hero assertions in `log.e2e.ts`, `log-batches.e2e.ts` and `batches.e2e.ts` now expect a target, since `auth.setup.ts` onboards.
+- **`TdeeBasis` has no spec of its own.** The formula or adaptive label is tested where a user reads it: the targets history and this week's card. A break of the label fails both, which is the intended coverage at two entry points.
+- **The goal's kg per week is one domain function, `goalKgPerWeek`.** `targetKcal` and the Settings and Weight displays all use it, so the formula lives in one place; the `targetKcal` tests in `targets.spec.ts` cover it.
+- **Weekly target rows (Task 7).** `currentTarget` inserts with `ON CONFLICT DO NOTHING` and reads back, so two loads
+  of a new week leave one row. `recomputeCurrentWeek` (settings patch plus this week's row) and `saveOnboarding`
+  (profile, goal rate, today's weigh-in, row) each run in one `db.batch`; a test with a failing trigger on
+  `weekly_targets` proves nothing else is written. A replaced row gets a new `computed_at`. `targetFor` makes this
+  week's row first, then reads the date's week, else the latest earlier, else the earliest row. With no weigh-in at
+  all `currentTarget` throws `NoWeighInError` (separate from `ProfileIncompleteError`) and `targetFor` falls back to
+  the stored rows, so deleting every weigh-in does not break Today. `loadDay` returns `target: null` while the profile
+  is incomplete instead of throwing; Task 8's redirect keeps those pages away.
+- **`recomputeCurrentWeek` and `saveOnboarding` re-read the settings row inside the function** instead of merging the
+  patch into `ctx.settings`, which was read at the start of the request. This narrows the race of two overlapping
+  settings saves rather than closing it: the read and the batch are separate statements, so a save landing between
+  them is still lost from the row (the settings themselves stay right, as each patch writes only its own fields).
+  Closing it needs the row computed in one statement with the write; not worth it for one user.
+- **Migration 0022 (`0022_targets.sql`) rebuilds `settings` and creates `weekly_targets`; the migration check passes.**
+  Dropping `settings_manual_target_pair` forces a rebuild. drizzle-kit's rebuild was hand edited (and, since the final review, its CHECKs unprefixed, see the entry above): `PRAGMA
+foreign_keys=OFF/ON` became `PRAGMA defer_foreign_keys = on` as in 0020, and its copy `INSERT ... SELECT "id",
+"timezone", "sex", ... FROM settings` became `SELECT "id", "timezone"`. The old table has no `sex`, and SQLite reads
+  an unknown double quoted name as text, so the generated copy wrote `'sex'` into `sex` and only the new check stopped
+  it. `migrations.spec.ts` applies up to 0021, writes settings (timezone `America/New_York`, a manual target), the 3a
+  rows and a weigh-in, applies 0022, and checks the row keeps id and timezone with every default and null profile, and
+  that every other table, index, trigger and row is unchanged. Applied locally with `pnpm db:migrate:local`.
+- **No migration test runs `PRAGMA foreign_key_check`.** Both copies (3a and 4b) could not fail: with keys enforced,
+  a migration that leaves a broken key fails at its commit, so the check never sees one (tried on 0021 and 0022).
+  `run with foreign keys enforced, as on D1` carries that guarantee. `migrateRest({ through })` lets the 3a check stop
+  at 0021, because 0022 changes `settings` on purpose.
+- **Settings checks come from the constants.** `settings_sex`, `settings_activity_level` (from the new `SEXES` and
+  `ACTIVITY_LEVELS`, which `BMR_SEX_OFFSET` and `PAL` must cover), `settings_height_cm_range`, `settings_goal_rate`
+  (`IN` the presets), `settings_protein_g_per_kg_range`, `settings_fat_pct_range`, `settings_energy_density_range`.
+  Profile columns are nullable until onboarding; goal and rules are `NOT NULL` with the defaults. Birth date has no SQL
+  check; the age limit needs a today. Fat is a share (0.15 to 0.40), not a percent.
+- **`weekly_targets` stores values as `weekTarget` computes them**: kcal, TDEE and grams as `real`, counts as
+  `integer`, `carbs_floored` as a boolean, `week_start` checked to be a real date on a Monday
+  (`date(week_start) IS week_start` and `strftime('%w') = '1'`; `=` alone let text through, because a CHECK passes
+  on NULL). A type check in `schema.spec.ts` keeps `WeeklyTarget` minus `computedAt` equal to `WeekTargetRow`.
+- **The age limit (16 to 100) is checked on the server against the local today, not in the schemas.** `ageInRange(birthDate,
+today)` in `domain/tdee.ts` is inclusive on both ends. `saveOnboarding` and `recomputeCurrentWeek` (when the patch has a birth
+  date) check it against `ctx.today`, the day in the settings timezone, and throw `AgeOutOfRangeError` before any write.
+  `ProfileInput` and `OnboardingInput` check only the birth date format: a UTC check in the shared schema could disagree with
+  the server's day near a birthday. The profile form calls `ageInRange` on the same day and shows "Age must be 16 to 100" when the
+  birth date loses focus; the commands map `AgeOutOfRangeError` to the same 400. The 15, 16, 100 and 101 boundary days are tested through both functions in `repo.spec.ts`.
+- **The manual target is gone ahead of the weekly targets.** `ManualTargetInput`, `saveManualTarget`,
+  `target.remote.ts`, `MAX_MANUAL_TARGET_KCAL`, the Settings card and its two e2e tests are removed; `loadDay` returns
+  `target: null` until it reads `weekly_targets`.
+- **The worker caches `__data.json` by path with `x-sveltekit-invalidated` removed from both the cache key and the network request, so the server loads every node.** SvelteKit sends a bitmap of the nodes to load and the server skips the rest, so a response depends on the bitmap. The bitmap changes from one navigation to the next, so a key that kept it would rarely match offline. Without the bitmap, each response is complete and one copy per path answers any later request. The cost is that the layout loads run again on each tab switch while online. A data request with no cached copy offline gets a 503. SvelteKit's client turns that into a full navigation (which then gets the cached page or the offline page) only when the root layout has a server load: `load_root_error_page` checks `app.server_loads[0] === 0`. So `src/routes/+layout.server.ts` exists for that reason and must stay; without it the client renders its bare error page. The worker stores only load results (`"type": "data"`), never a redirect, which SvelteKit sends with status 200 to a signed out user and which would replace the last good copy. Sign out already deletes every `kcal-*` cache, which covers these entries. No browser test covers the offline tab switch (dropped by request); the worker spec covers the cache, not SvelteKit's reaction to the 503.
+- **The weight history lists the newest 30 weigh-ins (`WEIGHT_HISTORY_PAGE`), and "Show more" adds 30 over the loaded series.** The shown count is page state, so the refresh after a write keeps the rows already shown. The chart and its "All" table are unchanged.
+
 ## 2026-11-07
 
 - **The entry card saves through `logWeightToday({ kg })`, which uses the server's today; the sheet keeps `saveWeight`

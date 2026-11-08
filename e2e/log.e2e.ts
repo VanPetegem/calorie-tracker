@@ -41,11 +41,11 @@ function dayAfter(date: string): string {
 	return d.toISOString().slice(0, 10);
 }
 
-test('a day without entries shows the empty state and the no target hero', async ({ page }) => {
+test('a day without entries shows the empty state and the target hero', async ({ page }) => {
 	await gotoHydrated(page, `/day/${EMPTY_DATE}`);
 	await expect(page.getByRole('heading', { name: 'Nothing logged yet' })).toBeVisible();
-	// "kcal eaten" without a target, "kcal remaining, ..." with one: the target test in this file sets it briefly.
-	await expect(page.getByText(/^kcal (eaten|remaining)/)).toBeVisible();
+	// Every day has a target after onboarding: nothing eaten, so the whole target is remaining.
+	await expect(page.getByText(/^kcal remaining, 0 of [\d,]+ eaten/)).toBeVisible();
 	await expect(page.getByRole('button', { name: /^More actions/ })).toHaveCount(0);
 });
 
@@ -289,7 +289,7 @@ test('Ctrl+K opens the add sheet on desktop', async ({ page }) => {
 	await expect(page.getByRole('searchbox', { name: 'Search foods' })).toBeFocused();
 });
 
-// Custom foods, quick add and the temporary target.
+// Custom foods and quick add.
 
 test('a custom food can be created from the add sheet and logged', async ({ page }, testInfo) => {
 	const date = foodDate(testInfo.project.name);
@@ -373,43 +373,4 @@ test('quick add logs 650 kcal with a label and the entry can be edited to 700', 
 	await page.reload();
 	await page.waitForLoadState('networkidle');
 	await expect(row).toContainText('700 kcal');
-});
-
-test('a manual target in Settings shows remaining kcal on Today, and clearing it brings the plain hero back', async ({
-	page
-}, testInfo) => {
-	// The target lives in the one settings row, shared by both browser projects and every other test that opens
-	// Today. Only one project may set it, or the two would clear each other's target mid test.
-	test.skip(
-		!testInfo.project.name.startsWith('chromium'),
-		'the target is global; one project sets it'
-	);
-	await gotoHydrated(page, '/settings');
-	await page.getByLabel('Calories per day').fill('3000');
-	await page.getByLabel('Body weight').fill('70');
-	// The macros show up live: protein 1.8 g/kg is 126 g.
-	await expect(page.getByLabel('Macros for this target').getByText('126 g')).toBeVisible();
-	await page.getByRole('button', { name: 'Save target' }).click();
-	await expect(page.getByText('Target saved')).toBeVisible();
-
-	try {
-		await gotoHydrated(page, '/');
-		await expect(page.getByText(/kcal remaining/)).toBeVisible();
-		await expect(page.getByText(/ \/ 126 g/)).toBeVisible();
-	} finally {
-		await gotoHydrated(page, '/settings');
-		await page.getByRole('button', { name: 'Clear' }).click();
-		await expect(page.getByText('Target cleared')).toBeVisible();
-	}
-
-	await gotoHydrated(page, '/');
-	await expect(page.getByText('kcal eaten', { exact: true })).toBeVisible();
-	await expect(page.getByText(/kcal remaining/)).toHaveCount(0);
-});
-
-test('a target needs both kcal and weight', async ({ page }) => {
-	await gotoHydrated(page, '/settings');
-	await page.getByLabel('Calories per day').fill('2800');
-	await page.getByRole('button', { name: 'Save target' }).click();
-	await expect(page.getByText('Enter both kcal and weight, or neither')).toBeVisible();
 });

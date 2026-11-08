@@ -38,6 +38,11 @@ trigger (`user_single_account`). Sessions last a year and slide daily.
 - Page navigations go network first. Each good (OK, not redirected) response is cached per URL. When the
   network fails, that URL's cached page is used; only `/` falls back to the cached home page; any other
   uncached URL gets a small 503 "This page is unavailable offline" page.
+- Client side navigations fetch `<path>/__data.json`. Those go network first into the same cache, one copy per path. The
+  worker drops `x-sveltekit-invalidated` (the server then loads every node, so one copy fits any request). Only load
+  results are stored, never a redirect or a response with an error node. With no copy offline it answers 503; SvelteKit turns that into a full navigation
+  only because the root layout has a server load (`src/routes/+layout.server.ts`, keep it). See `docs/decisions.md`
+  (2026-11-08).
 - `/api/*` and anything that is not a same origin GET is never touched.
 - Caches are named `kcal-<version>`; old versions are deleted on activate.
 - Sign out (`src/lib/auth-client.ts`) deletes every `kcal-*` cache so pages rendered for the session cannot be
@@ -49,7 +54,7 @@ Data flow of the log screens:
 
 ```
 page load (src/routes/(app)/+page.server.ts, day/[date]) -> loadDay -> entries, totals, target, recents, frequents
-add sheet / forms / edit sheet -> remote command (foods.remote.ts, log.remote.ts, settings/target.remote.ts)
+add sheet / forms / edit sheet -> remote command (foods.remote.ts, log.remote.ts)
                                -> Valibot schema (src/lib/schemas) -> repo (src/lib/server/*/repo.ts) -> D1
                                -> await invalidateAll() -> the page load runs again
 ```
@@ -66,8 +71,8 @@ add sheet / forms / edit sheet -> remote command (foods.remote.ts, log.remote.ts
 - Foods: `custom`, `blv` (generics) and `off` (cached products), unique on barcode and on `(source, source_ref)`.
   Library search is `LIKE` over `search_text` (lowercased, diacritics stripped, German and French names included).
   Values are per 100 g or per 100 ml (`nutrition_basis`). Foods are archived, never deleted, once logged.
-- Today's hero shows eaten kcal and macros; with a manual target (settings columns `manual_target_kcal`,
-  `manual_weight_kg`, set in Settings) it shows remaining kcal and macro bars from `macroTargets`.
+- Today's hero shows the remaining kcal and macro bars against the target of its week (see Targets below), and
+  flags carbs when protein and fat already use the whole target (`carbs_floored`).
 
 ### Open Food Facts
 
@@ -215,29 +220,70 @@ page -> saveWeight / deleteWeight (weight.remote.ts, shared schema src/lib/schem
   for tomorrow is kept but is not part of today's trend.
 - `WeightChart` is inline SVG without a library; its range (30 days, 90 days, 1 year, All) is stored per device in
   `localStorage`. `/design` shows each component in its states.
+- The history lists the newest `WEIGHT_HISTORY_PAGE` (30) weigh-ins; "Show more" adds 30 over the loaded series. The shown
+  count is page state, so a refresh after a write keeps it.
+
+## Targets
+
+Each week has one stored target row in `weekly_targets` (keyed by its Monday). Pure math is in `src/lib/domain/`
+(`tdee.ts`, `targets.ts`); the repository is `src/lib/server/targets/repo.ts`.
+
+```
+any load that needs a target -> targetFor(ctx, date) -> this week's row, computed and inserted when missing (currentTarget)
+settings write (saveGoal, saveMacroRules, profile) -> recomputeCurrentWeek -> one db.batch: settings + this week's row
+```
+
+- A row is built from the days before its Monday only: the trend and rate on the Sunday before, and the adaptive
+  window of 21 days ending that Sunday. Weigh-ins and log edits never change a stored row, so the row is the same
+  whichever day of the week builds it. Past rows never change.
+- In a user's first week the onboarding weigh-in is dated today, so nothing is dated before the Monday and the trend on
+  the Sunday before does not exist. The row then uses the kg of the earliest weigh-in as the trend, with a null rate
+  (`weekTarget` falls back to `series[0].kg`); later weigh-ins in the week never change it.
+- Adaptive TDEE is used only when the gate passes (14 valid days and 6 weigh-ins); otherwise the formula TDEE is used
+  and `tdee_adaptive` is null. The target moves at most 150 kcal a week from the adaptive part. A profile change
+  (sex, birth date, height or activity level) recomputes this week without that smoothing, so a corrected profile
+  shows in full, and later saves that week keep it unsmoothed (`wasSmoothed`); otherwise goal and macro rule saves
+  keep the smoothing.
+- The adaptive window's weight change runs from the trend on the day before the window; when the series starts inside
+  the window, it runs from the kg of the first weigh-in, not its trend (the seed mean of later weigh-ins).
+- A day shows the row of its week, else the latest earlier row, else the earliest row. Weeks the app was not opened
+  get no row, and nothing is backfilled.
+- The Settings page lists the stored rows (`targetsHistory`), marking formula and adaptive weeks. The Weight tab shows
+  this week's target and the goal slope on the chart.
+- Onboarding: until the profile is complete (`isProfileComplete`), every `(app)` page redirects (303) to `/onboarding`
+  (`src/routes/(app)/+layout.server.ts`, rule in `onboardingRedirect`, `src/lib/server/guard.ts`); a complete profile
+  sends `/onboarding` back to `/`. Remote functions are not under the layout, so they are not redirected. Onboarding does
+  not `invalidateAll` after its write (its load would redirect past the result screen); a second submit answers 400
+  "The profile is already set up" and the page goes to Today.
+  `completeOnboardingOn` saves the profile, today's weigh-in and this week's row in one batch and refuses a second run.
+- The age limit (16 to 100, counted on the settings timezone's day) is checked once, in the repository
+  (`ageInRange`; `AgeOutOfRangeError`). The commands map it to 400 "Age must be 16 to 100"; the profile form checks
+  the same function on blur.
+- Settings writes that recompute the week answer 400 "Log a weigh-in first" when there is no weigh-in, and write nothing.
 
 ## Directory map
 
-| Path                           | Contents                                                                                                                                                |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/hooks.server.ts`          | Request guard (rate limit, session, access)                                                                                                             |
-| `src/routes/(app)`             | Signed in pages inside the app shell (tab bar, sidebar)                                                                                                 |
-| `src/routes/(auth)`            | `/login` and `/setup` without the shell                                                                                                                 |
-| `src/lib/server`               | Better Auth setup, guard rules, rate limits, Drizzle schema, `off/` client, `foods/`, `log/`, `recipes/`, `batches/`, `weights/`, `settings/` repos     |
-| `src/lib/schemas`              | Valibot schemas shared by forms and remote commands                                                                                                     |
-| `src/lib/domain`               | Pure domain math: nutrition, recipes (`batch.ts`), weight trend (`trend.ts`), targets, dates, search text, barcodes, limits                             |
-| `src/lib/scanner`              | Barcode detector factory (native API or lazy zxing-wasm ponyfill)                                                                                       |
-| `src/lib/components`           | `shell/` (navigation), `ui/` (design system), `log/` (add sheet, forms, day view), `recipes/` (editors, ingredients, batches), `weight/` (entry, chart) |
-| `src/lib/stores`               | Shared client state (add sheet, toasts, unsaved changes guard)                                                                                          |
-| `src/routes/(app)/*.remote.ts` | Remote commands and queries: `foods`, `log`, `recipes/recipes`, `recipes/batches`, `weight/weight`, `settings/target`                                   |
-| `scripts/import-blv.ts`        | Generates the BLV foods migration                                                                                                                       |
-| `src/service-worker`           | Offline app shell                                                                                                                                       |
-| `drizzle/`                     | Generated SQL migrations, applied with wrangler                                                                                                         |
-| `e2e/`                         | Playwright tests (Chromium desktop, WebKit iPhone)                                                                                                      |
-| `scripts/e2e-db-reset.sh`      | Fresh migrated local D1 (plus the batches of `e2e/seed.sql`) and a `BETTER_AUTH_SECRET` for e2e                                                         |
-| `e2e/off-stub.mjs`             | Local Open Food Facts stand in (port 4174) serving recorded fixtures                                                                                    |
-| `wrangler.jsonc`               | Worker config: D1, rate limit bindings, custom domain, production vars                                                                                  |
-| `worker-configuration.d.ts`    | Generated by `pnpm gen`; `pnpm check` and `pnpm build` fail when it is stale                                                                            |
+| Path                           | Contents                                                                                                                                                        |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/hooks.server.ts`          | Request guard (rate limit, session, access)                                                                                                                     |
+| `src/routes/(app)`             | Signed in pages inside the app shell (tab bar, sidebar)                                                                                                         |
+| `src/routes/(auth)`            | `/login` and `/setup` without the shell                                                                                                                         |
+| `src/routes/onboarding`        | First run profile, goal rate and weight, without the shell                                                                                                      |
+| `src/lib/server`               | Better Auth setup, guard rules, rate limits, Drizzle schema, `off/` client, `foods/`, `log/`, `recipes/`, `batches/`, `weights/`, `targets/`, `settings/` repos |
+| `src/lib/schemas`              | Valibot schemas shared by forms and remote commands                                                                                                             |
+| `src/lib/domain`               | Pure domain math: nutrition, recipes (`batch.ts`), weight trend (`trend.ts`), targets, dates, search text, barcodes, limits                                     |
+| `src/lib/scanner`              | Barcode detector factory (native API or lazy zxing-wasm ponyfill)                                                                                               |
+| `src/lib/components`           | `shell/` (navigation), `ui/` (design system), `log/` (add sheet, forms, day view), `recipes/` (editors, ingredients, batches), `weight/` (entry, chart)         |
+| `src/lib/stores`               | Shared client state (add sheet, toasts, unsaved changes guard)                                                                                                  |
+| `src/routes/(app)/*.remote.ts` | Remote commands and queries: `foods`, `log`, `recipes/recipes`, `recipes/batches`, `weight/weight`, `settings/targets`, `settings/profile`                      |
+| `scripts/import-blv.ts`        | Generates the BLV foods migration                                                                                                                               |
+| `src/service-worker`           | Offline app shell                                                                                                                                               |
+| `drizzle/`                     | Generated SQL migrations, applied with wrangler                                                                                                                 |
+| `e2e/`                         | Playwright tests (Chromium desktop, WebKit iPhone)                                                                                                              |
+| `scripts/e2e-db-reset.sh`      | Fresh migrated local D1 (plus the batches of `e2e/seed.sql`) and a `BETTER_AUTH_SECRET` for e2e                                                                 |
+| `e2e/off-stub.mjs`             | Local Open Food Facts stand in (port 4174) serving recorded fixtures                                                                                            |
+| `wrangler.jsonc`               | Worker config: D1, rate limit bindings, custom domain, production vars                                                                                          |
+| `worker-configuration.d.ts`    | Generated by `pnpm gen`; `pnpm check` and `pnpm build` fail when it is stale                                                                                    |
 
 ## Run locally
 
@@ -275,7 +321,8 @@ inside a transaction. When drizzle-kit rebuilds a table it writes `PRAGMA foreig
 hand with `PRAGMA defer_foreign_keys = on` before the rebuild (see `drizzle/0020_batches.sql`), check that the copy
 names every column and every index is recreated, and extend `src/lib/server/db/migrations.spec.ts`, which applies the
 migrations to a database that already holds data. The test helper (`src/lib/server/test/d1.ts`) applies a file the
-way `wrangler d1 migrations apply` does: its statements in one D1 `batch`.
+way `wrangler d1 migrations apply` does: its statements in one D1 `batch`. Also strip the `"__new_<table>".` prefix
+from the CHECKs of the rebuilt table, so they do not depend on SQLite rewriting them on rename (see `docs/decisions.md`).
 
 `drizzle/0001_single_account.sql` is hand written: a trigger on `user` that aborts a second insert (the database
 level backstop for single account sign up). SQLite drops a table's triggers when the table is rebuilt, which

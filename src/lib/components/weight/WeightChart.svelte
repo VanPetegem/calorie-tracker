@@ -7,6 +7,7 @@
 		RANGES,
 		formatDay,
 		formatKg,
+		formatSigned,
 		formatTick,
 		goalLine,
 		linePath,
@@ -304,7 +305,7 @@
 							{tick.label}
 						</text>
 					{/each}
-					{#if goalSegment}
+					{#if goalSegment && goal}
 						<line
 							data-testid="goal-line"
 							clip-path="url(#{clipId})"
@@ -315,7 +316,9 @@
 							stroke-width="2"
 							stroke-dasharray="6 4"
 							class="stroke-success"
-						/>
+						>
+							<title>Goal {formatSigned(goal.kgPerWeek, 2)} kg/week</title>
+						</line>
 					{/if}
 					{#if active}
 						<line

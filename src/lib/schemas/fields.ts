@@ -21,6 +21,14 @@ export function decimalIn(min: number, max: number) {
 	);
 }
 
+/** A number equal to one of `values`, such as a preset. */
+export function decimalOneOf(values: readonly number[], message: string) {
+	return v.pipe(
+		decimal,
+		v.check((value) => values.includes(value), message)
+	);
+}
+
 /** A number greater than zero and at most `max`. */
 export function positiveUpTo(max: number) {
 	return v.pipe(

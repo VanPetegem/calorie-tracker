@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from 'vitest';
+import type { WeekTargetRow } from '../../domain/targets.ts';
 import { createTestDb } from '../test/d1.ts';
 import {
 	batches,
@@ -11,7 +12,9 @@ import {
 	recipes,
 	settings,
 	user,
-	weights
+	weeklyTargets,
+	weights,
+	type WeeklyTarget
 } from './schema.ts';
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>;
@@ -32,6 +35,9 @@ const food = (overrides: Partial<typeof foods.$inferInsert> = {}): typeof foods.
 const failedOn = (constraint: string) => ({
 	cause: { message: expect.stringContaining(constraint) }
 });
+
+// Checked by `pnpm check`, not at run time: the table and `weekTarget` agree on every field.
+expectTypeOf<Omit<WeeklyTarget, 'computedAt'>>().toEqualTypeOf<WeekTargetRow>();
 
 describe('schema constraints', () => {
 	let test: TestDb;
@@ -62,26 +68,91 @@ describe('schema constraints', () => {
 		expect(await test.db.$count(foods, eq(foods.source, 'custom'))).toBe(2);
 	});
 
-	it('rejects settings with a manual target but no weight', async () => {
-		await expect(
-			test.db.insert(settings).values({ id: 1, manualTargetKcal: 2800 })
-		).rejects.toMatchObject(failedOn('CHECK constraint failed: settings_manual_target_pair'));
-	});
-
 	it('rejects a second settings row', async () => {
 		await expect(test.db.insert(settings).values({ id: 2 })).rejects.toMatchObject(
 			failedOn('CHECK constraint failed: settings_single_row')
 		);
 	});
 
-	it('accepts settings with both manual values or neither', async () => {
-		await test.db.insert(settings).values({ id: 1 });
-		await test.db.update(settings).set({ manualTargetKcal: 2800, manualWeightKg: 72.5 });
-		const [row] = await test.db.select().from(settings);
-		expect(row).toMatchObject({
-			timezone: 'Europe/Zurich',
-			manualTargetKcal: 2800,
-			manualWeightKg: 72.5
+	it('rejects settings outside the enums and limits', async () => {
+		// Raw SQL, because the Drizzle types already refuse the enum values these checks are for.
+		const cases = [
+			['sex', "'other'", 'settings_sex'],
+			['activity_level', "'extreme'", 'settings_activity_level'],
+			['height_cm', '99.9', 'settings_height_cm_range'],
+			['height_cm', '250.1', 'settings_height_cm_range'],
+			['goal_rate_pct', '0.4', 'settings_goal_rate'],
+			['protein_g_per_kg', '1.19', 'settings_protein_g_per_kg_range'],
+			['protein_g_per_kg', '3.01', 'settings_protein_g_per_kg_range'],
+			['fat_pct', '0.149', 'settings_fat_pct_range'],
+			['fat_pct', '0.401', 'settings_fat_pct_range'],
+			['energy_density_kcal_per_kg', '2999', 'settings_energy_density_range'],
+			['energy_density_kcal_per_kg', '7701', 'settings_energy_density_range']
+		];
+		for (const [column, value, constraint] of cases) {
+			await expect(
+				test.d1.prepare(`INSERT INTO settings (id, ${column}) VALUES (1, ${value})`).run(),
+				`${column} = ${value}`
+			).rejects.toThrow(`CHECK constraint failed: ${constraint}`);
+		}
+	});
+
+	it('accepts a complete profile and rules at their limits', async () => {
+		const profile = {
+			id: 1,
+			sex: 'female',
+			birthDate: '1990-05-01',
+			heightCm: 100,
+			activityLevel: 'very_active',
+			goalRatePct: 0.5,
+			proteinGPerKg: 3,
+			fatPct: 0.15,
+			energyDensity: 7700
+		} as const;
+		await test.db.insert(settings).values(profile);
+		await test.db.update(settings).set({
+			heightCm: 250,
+			goalRatePct: 0.25,
+			proteinGPerKg: 1.2,
+			fatPct: 0.4,
+			energyDensity: 3000
+		});
+		expect(await test.db.$count(settings)).toBe(1);
+	});
+
+	describe('weekly targets', () => {
+		const row = (weekStart: string): typeof weeklyTargets.$inferInsert => ({
+			weekStart,
+			tdeeFormula: 2650.4,
+			tdeeAdaptive: null,
+			tdeeUsed: 2650.4,
+			targetKcal: 2950,
+			proteinG: 130,
+			carbsG: 380,
+			fatG: 82,
+			carbsFloored: false,
+			trendKg: 72.1,
+			rateKgPerWeek: null,
+			validDays: 0,
+			weighIns: 1
+		});
+
+		it('start on a Monday date, one row per week', async () => {
+			// 2026-02-30 is no date, but SQLite's date() reads it as 2026-03-02, a Monday.
+			for (const weekStart of ['2026-11-08', 'garbage', '2026-02-30']) {
+				await expect(
+					test.db.insert(weeklyTargets).values(row(weekStart)),
+					weekStart
+				).rejects.toMatchObject(
+					failedOn('CHECK constraint failed: weekly_targets_week_start_monday')
+				);
+			}
+			await test.db.insert(weeklyTargets).values(row('2026-11-09'));
+			const [stored] = await test.db.select().from(weeklyTargets);
+			expect(stored).toMatchObject({ ...row('2026-11-09'), computedAt: expect.any(String) });
+			await expect(test.db.insert(weeklyTargets).values(row('2026-11-09'))).rejects.toMatchObject(
+				failedOn('UNIQUE constraint failed: weekly_targets.week_start')
+			);
 		});
 	});
 

@@ -1,18 +1,25 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestDb, type TestDb } from '../test/d1.ts';
 
-/** The last migration before batches. Everything after it must keep the data written up to here. */
+/** The last migration before batches. Everything up to 4a must keep the data written up to here. */
 const BEFORE_BATCHES = '0019';
+/** The last migration of 4a (weights). 4b rebuilds settings after it. */
+const BEFORE_TARGETS = '0021';
 
 const FOOD_ID = '019a5b2e-0000-7000-8000-000000000001';
 const ARCHIVED_FOOD_ID = '019a5b2e-0000-7000-8000-000000000002';
 const RECIPE_ID = '019a5b2e-0000-7000-8000-000000000003';
 
-/** Rows as phase 3a wrote them, in plain SQL so they do not depend on the current Drizzle schema. */
+/** The settings row with a manual target, as phases 2 to 4a wrote it. */
+const manualTargetSettings = (timezone: string) =>
+	`INSERT INTO settings (id, timezone, manual_target_kcal, manual_weight_kg) VALUES (1, '${timezone}', 2800, 72.5)`;
+
+/**
+ * Rows as phase 3a wrote them, settings aside, in plain SQL so they do not depend on the current Drizzle schema.
+ */
 const SEED = [
 	`INSERT INTO user (id, name, email, email_verified, created_at, updated_at)
 	 VALUES ('u1', 'A', 'a@example.com', 0, 1762400000000, 1762400000000)`,
-	`INSERT INTO settings (id, timezone, manual_target_kcal, manual_weight_kg) VALUES (1, 'Europe/Zurich', 2800, 72.5)`,
 	`INSERT INTO foods (id, source, name, brand, nutrition_basis, kcal, protein, carbs, fat, fiber, serving_g, search_text,
 	   created_at, updated_at)
 	 VALUES ('${FOOD_ID}', 'custom', 'Oats', 'Mill', 'g', 370, 13, 59, 7, 10, 40, 'oats mill',
@@ -66,24 +73,27 @@ async function contents(test: TestDb): Promise<Record<string, Row[]>> {
 	return result;
 }
 
-describe('migrations after 3a', () => {
+describe('migrations after 3a, up to 4a', () => {
 	let test: TestDb;
 	let before: { objects: Map<string, unknown>; contents: Record<string, Row[]>; columns: Row[] };
 
 	beforeAll(async () => {
 		test = await createTestDb({ through: BEFORE_BATCHES });
-		await test.d1.batch(SEED.map((sql) => test.d1.prepare(sql)));
+		const seed = [manualTargetSettings('Europe/Zurich'), ...SEED];
+		await test.d1.batch(seed.map((sql) => test.d1.prepare(sql)));
 		before = {
 			objects: await objects(test),
 			contents: await contents(test),
 			columns: await all(test, 'PRAGMA table_info(log_entries)')
 		};
-		await test.migrateRest();
+		await test.migrateRest({ through: BEFORE_TARGETS });
 	});
 	afterAll(async () => {
 		await test.dispose();
 	});
 
+	// With keys enforced, a migration that leaves a broken key fails as a whole at its commit, so no test runs
+	// `PRAGMA foreign_key_check` afterwards: it could not fail.
 	it('run with foreign keys enforced, as on D1', async () => {
 		expect(await all(test, 'PRAGMA foreign_keys')).toEqual([{ foreign_keys: 1 }]);
 	});
@@ -133,8 +143,70 @@ describe('migrations after 3a', () => {
 			])
 		);
 	});
+});
 
-	it('leave no broken foreign key', async () => {
-		expect(await all(test, 'PRAGMA foreign_key_check')).toEqual([]);
+describe('migrations after 4a', () => {
+	let test: TestDb;
+	let before: { objects: Map<string, unknown>; contents: Record<string, Row[]> };
+
+	beforeAll(async () => {
+		test = await createTestDb({ through: BEFORE_TARGETS });
+		// Not the default timezone, so a row recreated with defaults cannot pass for the kept one.
+		const seed = [
+			manualTargetSettings('America/New_York'),
+			...SEED,
+			`INSERT INTO weights (date, kg, created_at, updated_at)
+			 VALUES ('2026-11-06', 72.4, '2026-11-06T07:00:00.000Z', '2026-11-06T07:00:00.000Z')`
+		];
+		await test.d1.batch(seed.map((sql) => test.d1.prepare(sql)));
+		before = { objects: await objects(test), contents: await contents(test) };
+		await test.migrateRest();
+	});
+	afterAll(async () => {
+		await test.dispose();
+	});
+
+	it('keep the settings row and its timezone, drop the manual target and add the defaults', async () => {
+		expect(await all(test, 'SELECT * FROM settings')).toEqual([
+			{
+				id: 1,
+				timezone: 'America/New_York',
+				sex: null,
+				birth_date: null,
+				height_cm: null,
+				activity_level: null,
+				goal_rate_pct: 0.35,
+				protein_g_per_kg: 1.8,
+				fat_pct: 0.25,
+				energy_density_kcal_per_kg: 5000
+			}
+		]);
+	});
+
+	it.each([
+		['settings_single_row', 'id = 2'],
+		['settings_sex', "sex = 'other'"],
+		['settings_activity_level', "activity_level = 'extreme'"],
+		['settings_height_cm_range', 'height_cm = 50'],
+		['settings_goal_rate', 'goal_rate_pct = 0.4'],
+		['settings_protein_g_per_kg_range', 'protein_g_per_kg = 5'],
+		['settings_fat_pct_range', 'fat_pct = 0.9'],
+		['settings_energy_density_range', 'energy_density_kcal_per_kg = 9000']
+	])('keep the rebuilt settings check %s', async (name, change) => {
+		await expect(test.d1.prepare(`UPDATE settings SET ${change}`).run()).rejects.toThrow(name);
+	});
+
+	it('keep every other table, its rows and every index and trigger as they were', async () => {
+		expect(before.contents.weights).toHaveLength(1);
+		const after = await contents(test);
+		const afterObjects = await objects(test);
+		for (const [table, rows] of Object.entries(before.contents)) {
+			if (table === 'settings') continue;
+			expect(after[table], table).toEqual(rows);
+		}
+		for (const [key, sql] of before.objects) {
+			if (key === 'table settings') continue;
+			expect(afterObjects.get(key), key).toEqual(sql);
+		}
 	});
 });

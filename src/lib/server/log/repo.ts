@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { and, asc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import { batchEntrySnapshot } from '../../domain/batch.ts';
 import { isAllowedLogDate, loggedAtFor } from '../../domain/dates.ts';
 import {
@@ -106,6 +106,23 @@ export async function dayEntries(db: Db, date: string): Promise<LogEntry[]> {
 
 export function dayTotals(entries: LogEntry[]): Nutrients {
 	return sumNutrients(entries);
+}
+
+/** Logged kcal per date from `from` to `to` (both included), live entries only. Dates without entries are absent. */
+export async function dailyIntakes(
+	db: Db,
+	from: string,
+	to: string
+): Promise<Record<string, number>> {
+	const rows = await db
+		.select({
+			date: logEntries.date,
+			kcal: sql<number>`sum(${logEntries.kcal})`.mapWith(Number)
+		})
+		.from(logEntries)
+		.where(and(gte(logEntries.date, from), lte(logEntries.date, to), isNull(logEntries.deletedAt)))
+		.groupBy(logEntries.date);
+	return Object.fromEntries(rows.map((row) => [row.date, row.kcal]));
 }
 
 /** A g or ml amount must match the food's basis. Servings fit any food. */

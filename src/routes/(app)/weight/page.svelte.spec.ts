@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
+import { weekRow } from '#lib/components/targets/week.fixture.ts';
+import { addDays, weekStart } from '#lib/domain/dates.ts';
 import { trendSeries } from '#lib/domain/trend.ts';
 import { toasts } from '#lib/stores/toasts.svelte.ts';
 import Page from './+page.svelte';
@@ -35,18 +37,40 @@ afterEach(() => {
 	for (const toast of [...toasts.items]) toasts.dismiss(toast.id);
 });
 
-function show(weighIns: { date: string; kg: number }[], todayKg: number | null = null) {
+function pageData(
+	weighIns: { date: string; kg: number }[],
+	todayKg: number | null = null,
+	target: { week?: ReturnType<typeof weekRow> | null; goalRatePct?: number } = {}
+) {
 	const series = trendSeries(weighIns);
 	const last = series.filter((point) => point.date <= TODAY).at(-1);
+	return {
+		today: TODAY,
+		series,
+		todayKg,
+		lastKg: last?.kg ?? null,
+		trendKg: last?.trend ?? null,
+		rate: null,
+		week: target.week ?? null,
+		goalRatePct: target.goalRatePct ?? 0.35
+	};
+}
+
+/** `count` consecutive weigh-ins ending on `last`, oldest first. */
+function weighIns(count: number, last: string) {
+	return Array.from({ length: count }, (_, i) => ({
+		date: addDays(last, i - count + 1),
+		kg: 70 + (i % 10) / 10
+	}));
+}
+
+function show(
+	weighIns: { date: string; kg: number }[],
+	todayKg: number | null = null,
+	target?: Parameters<typeof pageData>[2]
+) {
 	return render(Page, {
-		data: {
-			today: TODAY,
-			series,
-			todayKg,
-			lastKg: last?.kg ?? null,
-			trendKg: last?.trend ?? null,
-			rate: null
-		},
+		data: pageData(weighIns, todayKg, target),
 		params: {},
 		form: null
 	} as never);
@@ -183,5 +207,78 @@ describe('weight page', () => {
 		await vi.waitFor(() => expect(toastTexts()).toEqual(['Could not delete the weigh-in']));
 		expect(toasts.items[0].action?.label).toBe('Retry');
 		expect(mocks.invalidateAll).not.toHaveBeenCalled();
+	});
+
+	it('pages the history 30 at a time: one Show more click shows 60, a second shows all 61', async () => {
+		show(weighIns(61, '2026-11-01'));
+		const rows = () => page.getByRole('button', { name: /^Delete weigh-in of/ });
+		const showMore = () => page.getByRole('button', { name: 'Show more' });
+		await vi.waitFor(() => expect(rows().elements()).toHaveLength(30));
+
+		await showMore().click();
+		await vi.waitFor(() => expect(rows().elements()).toHaveLength(60));
+		expect(showMore().elements()).toHaveLength(1);
+
+		await showMore().click();
+		await vi.waitFor(() => expect(rows().elements()).toHaveLength(61));
+		expect(showMore().elements()).toHaveLength(0);
+	});
+
+	it('keeps the expanded list when a row past the first page is deleted', async () => {
+		const all = weighIns(61, '2026-11-01');
+		const view = show(all);
+		const rows = () => page.getByRole('button', { name: /^Delete weigh-in of/ });
+		await page.getByRole('button', { name: 'Show more' }).click();
+
+		await page.getByRole('button', { name: 'Delete weigh-in of Tue 15 Sept 2026' }).click();
+		await vi.waitFor(() => expect(mocks.invalidateAll).toHaveBeenCalled());
+		// The refresh after the delete loads the series without that day.
+		await view.rerender({ data: pageData(all.filter((point) => point.date !== '2026-09-15')) });
+
+		await vi.waitFor(() => expect(rows().elements()).toHaveLength(60));
+		expect(page.getByRole('button', { name: 'Show more' }).elements()).toHaveLength(0);
+	});
+
+	it("shows this week's target and its TDEE used under the summary", async () => {
+		show(weighIns(3, TODAY), null, {
+			week: weekRow(weekStart(TODAY), { targetKcal: 2450, tdeeUsed: 2600 }),
+			goalRatePct: 0.35
+		});
+		const card = page.getByRole('region', { name: "This week's target" });
+		await expect.element(card).toHaveTextContent('2,450 kcal');
+		await expect.element(card).toHaveTextContent('TDEE used 2,600 kcal');
+	});
+
+	it("draws the goal slope from this week's start, at the row's trend and the goal rate", async () => {
+		// The row's trend (80 kg) is far from the series trend (about 70 kg), so a slope that took its start kg
+		// from the series, or its start day from today, would start somewhere else.
+		show(
+			[
+				{ date: '2026-11-05', kg: 70 },
+				{ date: '2026-11-06', kg: 70.2 },
+				{ date: '2026-11-07', kg: 70.1 }
+			],
+			null,
+			{ week: weekRow(weekStart(TODAY), { trendKg: 80 }), goalRatePct: 0.5 }
+		);
+		// 80 kg at 0.5 percent a week is 0.4 kg a week.
+		const line = page.getByTestId('goal-line');
+		await expect.element(line).toHaveTextContent('Goal +0.40 kg/week');
+
+		const dots = [...document.querySelectorAll('[data-dot]')].map((dot) =>
+			Number(dot.getAttribute('cx'))
+		);
+		const perDay = dots[1] - dots[0];
+		const element = line.element();
+		// Monday 2 Nov is three days before the first dot, 5 Nov.
+		expect(Number(element.getAttribute('x1'))).toBeCloseTo(dots[0] - 3 * perDay, 1);
+		// 80 kg is far above the chart, whose scale fits the weigh-ins near 70 kg.
+		expect(Number(element.getAttribute('y1'))).toBeLessThan(0);
+	});
+
+	it('shows neither the week card nor the goal line for an earlier week', async () => {
+		show(weighIns(3, TODAY), null, { week: weekRow(addDays(weekStart(TODAY), -7)) });
+		expect(page.getByRole('region', { name: "This week's target" }).elements()).toHaveLength(0);
+		expect(page.getByTestId('goal-line').elements()).toHaveLength(0);
 	});
 });

@@ -1,5 +1,7 @@
 /** Dates are `YYYY-MM-DD` strings. Times are UTC ISO strings. */
 
+import { DAYS_PER_WEEK, MONDAY_OFFSET } from './constants';
+
 const DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/;
 
 type WallClock = {
@@ -72,6 +74,12 @@ export function addDays(date: string, n: number): string {
 	const d = parseDate(date);
 	d.setUTCDate(d.getUTCDate() + n);
 	return formatDate(d);
+}
+
+/** The Monday on or before a `YYYY-MM-DD` date. */
+export function weekStart(date: string): string {
+	// getUTCDay counts from Sunday (0); shifting by MONDAY_OFFSET counts days since Monday instead.
+	return addDays(date, -((parseDate(date).getUTCDay() + MONDAY_OFFSET) % DAYS_PER_WEEK));
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

@@ -83,9 +83,9 @@ async function finish(page: Page, url: string) {
 /** The number in "123 kcal". */
 const kcalOf = (text: string) => Number(/(\d+)/.exec(text)![1]);
 
-/** Day pages show the day's total as "750" (no target) or "kcal remaining, 750 of ..." (with one). */
+/** Day pages show the day's total as "kcal remaining, 750 of ..." (or "kcal, 750 of ..." when over the target). */
 const heroTotal = (page: Page, kcal: number) =>
-	page.getByText(new RegExp(`^${kcal}$|kcal( remaining)?, ${kcal} of`));
+	page.getByText(new RegExp(`kcal( remaining)?, ${kcal} of`));
 
 test('cooks a batch from a recipe with a new container and gross weight, logs portions and grams, and the days match', async ({
 	page
@@ -346,6 +346,8 @@ test('Settings renames and deletes a container', async ({ page }, testInfo) => {
 	await field(page, 'Weight of the empty container').fill('1200');
 	await page.getByRole('button', { name: 'Save container' }).click();
 	await expect(field(page, 'Container')).toHaveText(new RegExp(name));
+	// The save refreshes the page's data; leaving while that runs can fail the next goto as interrupted.
+	await page.waitForLoadState('networkidle');
 
 	await gotoHydrated(page, '/settings');
 	const section = page.getByRole('region', { name: 'Containers' });

@@ -12,7 +12,7 @@ import {
 } from './log.ts';
 import { fitsUnit, LOG_UNITS } from './fields.ts';
 import { ArchiveRecipeInput, RecipeInput } from './recipe.ts';
-import { ManualTargetInput } from './settings.ts';
+import { GoalInput, MacroRulesInput, OnboardingInput, ProfileInput } from './settings.ts';
 import { DeleteWeightInput, WeightInput } from './weight.ts';
 
 const foodId = '019a5b2e-8f3c-7d4a-9b1e-2c3d4e5f6a7b';
@@ -223,23 +223,105 @@ describe('QuickInput', () => {
 	});
 });
 
-describe('ManualTargetInput', () => {
-	it('accepts both values', () => {
-		expect(v.parse(ManualTargetInput, { kcal: '2800', weightKg: '72,5' })).toEqual({
-			kcal: 2800,
-			weightKg: 72.5
-		});
+describe('ProfileInput', () => {
+	const profile = {
+		sex: 'male',
+		birthDate: '1990-05-01',
+		heightCm: '180,5',
+		activityLevel: 'light'
+	};
+
+	it('accepts a profile with a comma decimal height', () => {
+		expect(v.parse(ProfileInput, profile)).toEqual({ ...profile, heightCm: 180.5 });
 	});
 
-	it('accepts neither value', () => {
-		expect(v.parse(ManualTargetInput, { kcal: '', weightKg: null })).toEqual({
-			kcal: null,
-			weightKg: null
-		});
+	it('checks the birth date format, not the age, which the server checks on its own day', () => {
+		const ok = (birthDate: string) => v.safeParse(ProfileInput, { ...profile, birthDate }).success;
+		expect(ok('2010-11-09')).toBe(true);
+		expect(ok('1925-11-08')).toBe(true);
+		expect(ok('1990-5-1')).toBe(false);
 	});
 
-	it('rejects only one value', () => {
-		expect(v.safeParse(ManualTargetInput, { kcal: '2800', weightKg: '' }).success).toBe(false);
+	it('accepts heights 100 and 250 cm and rejects 99 and 250.1', () => {
+		const ok = (heightCm: unknown) => v.safeParse(ProfileInput, { ...profile, heightCm }).success;
+		expect(ok(100)).toBe(true);
+		expect(ok('250')).toBe(true);
+		expect(ok(99)).toBe(false);
+		expect(ok('250,1')).toBe(false);
+	});
+
+	it('rejects an unknown sex or activity level, a bad date and extra keys', () => {
+		expect(v.safeParse(ProfileInput, { ...profile, sex: 'other' }).success).toBe(false);
+		expect(v.safeParse(ProfileInput, { ...profile, activityLevel: 'extreme' }).success).toBe(false);
+		expect(v.safeParse(ProfileInput, { ...profile, birthDate: '1990-02-30' }).success).toBe(false);
+		expect(v.safeParse(ProfileInput, { ...profile, kg: 72 }).success).toBe(false);
+	});
+});
+
+describe('OnboardingInput', () => {
+	const input = {
+		sex: 'female',
+		birthDate: '1995-03-10',
+		heightCm: 165,
+		activityLevel: 'moderate',
+		kg: '58,4',
+		goalRatePct: 0.35
+	};
+
+	it('takes the profile, the weight and the goal rate', () => {
+		expect(v.parse(OnboardingInput, input)).toEqual({ ...input, kg: 58.4 });
+		expect(v.safeParse(OnboardingInput, { ...input, kg: '' }).success).toBe(false);
+		expect(v.safeParse(OnboardingInput, { ...input, date: '2026-11-08' }).success).toBe(false);
+	});
+
+	it('checks the profile and the goal rate as ProfileInput and GoalInput do', () => {
+		expect(v.safeParse(OnboardingInput, { ...input, heightCm: 99 }).success).toBe(false);
+		expect(v.safeParse(OnboardingInput, { ...input, goalRatePct: 0.4 }).success).toBe(false);
+	});
+});
+
+describe('GoalInput', () => {
+	it('accepts the presets 0.25, 0.35 and 0.5, also as text', () => {
+		expect(v.parse(GoalInput, { goalRatePct: 0.25 })).toEqual({ goalRatePct: 0.25 });
+		expect(v.parse(GoalInput, { goalRatePct: '0,35' })).toEqual({ goalRatePct: 0.35 });
+		expect(v.parse(GoalInput, { goalRatePct: '0.5' })).toEqual({ goalRatePct: 0.5 });
+	});
+
+	it('rejects any other rate and extra keys', () => {
+		expect(v.safeParse(GoalInput, { goalRatePct: 0.4 }).success).toBe(false);
+		expect(v.safeParse(GoalInput, { goalRatePct: 0.35, kg: 72 }).success).toBe(false);
+	});
+});
+
+describe('MacroRulesInput', () => {
+	const rules = { proteinGPerKg: '1,8', fatPct: 0.25, energyDensity: '5000' };
+
+	it('accepts the limits of each rule', () => {
+		expect(v.parse(MacroRulesInput, rules)).toEqual({
+			proteinGPerKg: 1.8,
+			fatPct: 0.25,
+			energyDensity: 5000
+		});
+		const limits = [
+			{ proteinGPerKg: 1.2, fatPct: 0.15, energyDensity: 3000 },
+			{ proteinGPerKg: 3, fatPct: 0.4, energyDensity: 7700 }
+		];
+		for (const value of limits) expect(v.parse(MacroRulesInput, value)).toEqual(value);
+	});
+
+	it.each([
+		['proteinGPerKg', 1.19],
+		['proteinGPerKg', 3.01],
+		['fatPct', 0.149],
+		['fatPct', 0.401],
+		['energyDensity', 2999],
+		['energyDensity', 7701]
+	])('rejects %s = %s', (key, value) => {
+		expect(v.safeParse(MacroRulesInput, { ...rules, [key]: value }).success).toBe(false);
+	});
+
+	it('rejects extra keys', () => {
+		expect(v.safeParse(MacroRulesInput, { ...rules, goalRatePct: 0.35 }).success).toBe(false);
 	});
 });
 

@@ -1,5 +1,11 @@
 import { addDays, daysBetween } from './dates';
-import { DAYS_PER_WEEK, RATE_WINDOW_DAYS, TREND_ALPHA, TREND_SEED_WEIGH_INS } from './constants';
+import {
+	DAYS_PER_WEEK,
+	PERCENT,
+	RATE_WINDOW_DAYS,
+	TREND_ALPHA,
+	TREND_SEED_WEIGH_INS
+} from './constants';
 
 /** A weigh-in: a local calendar date (`YYYY-MM-DD`) and the weight in kg. */
 export type WeighIn = { date: string; kg: number };
@@ -53,5 +59,5 @@ export function weeklyRate(
 	const now = trendOn(series, today);
 	if (earlier === null || now === null) return null;
 	const kg = (DAYS_PER_WEEK * (now - earlier)) / RATE_WINDOW_DAYS;
-	return { kg, pct: (kg / now) * 100 };
+	return { kg, pct: (kg / now) * PERCENT };
 }

@@ -58,8 +58,8 @@ test('logs 1.5 portions of a batch, the day total matches, and the entry edits t
 	const entry = page.getByRole('button', { name: new RegExp(`^${name}`) });
 	await expect(entry).toContainText('1.5 portions');
 	await expect(entry).toContainText('750 kcal');
-	// With a target the hero reads "kcal remaining, 750 of ... eaten", without one it shows 750 and "kcal eaten".
-	await expect(page.getByText(/^750$|kcal( remaining)?, 750 of/)).toBeVisible();
+	// The hero reads "kcal remaining, 750 of ... eaten", or "kcal, 750 of ... eaten" when the day is over the target.
+	await expect(page.getByText(/kcal( remaining)?, 750 of/)).toBeVisible();
 
 	// Tapping the entry opens the batch amount step in edit mode.
 	await entry.click();
