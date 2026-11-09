@@ -1,11 +1,16 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { online } from 'svelte/reactivity/window';
 	import * as v from 'valibot';
+	import Camera from '@lucide/svelte/icons/camera';
 	import { invalidateAll } from '$app/navigation';
+	import { resizeToJpegDataUri } from '#lib/client/resize-image.ts';
 	import { FoodInput } from '#lib/schemas/food.ts';
+	import type { LabelValues } from '#lib/schemas/label.ts';
 	import type { Food } from '#lib/server/db/schema.ts';
+	import { parseDecimal } from '#lib/utils/decimal.ts';
 	import { Button, Input, SegmentedControl } from '#lib/components/ui/index.ts';
-	import { createFood, updateFood } from '../../../routes/(app)/foods.remote.ts';
+	import { createFood, readLabel, updateFood } from '../../../routes/(app)/foods.remote.ts';
 
 	/**
 	 * Creates or edits a food: name, nutrition per 100 g (or ml) and an optional serving weight and barcode.
@@ -14,6 +19,9 @@
 	 * when saving. Without `foodId` it creates a custom food; with it, it edits that food (an OFF or BLV food keeps
 	 * the fix through refreshes). `initial` prefills, e.g. the barcode of an unknown product from the scanner's
 	 * miss flow. `onsaved` receives the saved food. With `preview` (the /design route) nothing is sent.
+	 *
+	 * A new food (no `foodId`) can be filled from a photo of the nutrition label: the values read are written into the
+	 * form, each changed field says "From photo" until it is edited, and nothing is saved until the user taps Save.
 	 */
 	type Props = {
 		initial?: Partial<FoodInput>;
@@ -62,6 +70,20 @@
 	// The food that already has the barcode, when a save was refused for it. The message goes when the barcode changes.
 	let barcodeOwner = $state<{ name: string; barcode: string } | null>(null);
 
+	// Values the label photo wrote, with what the field held before ('' when empty). A marker shows while the field
+	// still holds the value the photo wrote, so editing the field removes it.
+	let fromPhoto = $state<Partial<Record<Field, { value: string; was: string }>>>({});
+	let reading = $state(false);
+	let fileInput = $state<HTMLInputElement>();
+	let labelMessage = $state('');
+
+	const LABEL_FIELDS = ['kcal', 'protein', 'carbs', 'fat', 'fiber', 'servingG'] as const;
+	const LABEL_ERRORS = {
+		unreadable: "Couldn't read the label. It needs a per 100 g column.",
+		rate_limited: 'Too many photos, try again in a minute.',
+		unavailable: "Couldn't reach the label reader. Try again."
+	} as const;
+
 	const result = $derived(v.safeParse(FoodInput, { ...values, nutritionBasis: basis }));
 	const errors = $derived.by(() => {
 		const found: Partial<Record<Field, string>> = {};
@@ -79,6 +101,73 @@
 			return `This barcode is already in your library as ${barcodeOwner.name}.`;
 		}
 		return touched[field] || submitted ? errors[field] : undefined;
+	}
+
+	function photoHint(field: Field): string | undefined {
+		const marker = fromPhoto[field];
+		if (!marker || marker.value !== values[field]) return undefined;
+		return marker.was ? `From photo, was ${marker.was}` : 'From photo';
+	}
+
+	const sameNumber = (a: string, b: string) => {
+		const x = parseDecimal(a);
+		return x !== null && x === parseDecimal(b);
+	};
+
+	function applyLabel(label: LabelValues) {
+		basis = label.nutritionBasis;
+		for (const field of LABEL_FIELDS) {
+			const read = label[field];
+			if (read === null) {
+				// An earlier photo's value, still unedited, does not belong to this label: put back what was there.
+				const marker = fromPhoto[field];
+				if (marker && marker.value === values[field]) {
+					values[field] = marker.was;
+					delete fromPhoto[field];
+				}
+				continue;
+			}
+			const current = values[field];
+			const value = String(read);
+			if (current.trim() !== '' && sameNumber(current, value)) continue;
+			// Over an unedited earlier photo value, keep pointing at what the user had before any photo.
+			const marker = fromPhoto[field];
+			const was = marker && marker.value === current ? marker.was : current.trim();
+			values[field] = value;
+			fromPhoto[field] = { value, was };
+		}
+	}
+
+	async function pickLabel(event: Event & { currentTarget: HTMLInputElement }) {
+		const input = event.currentTarget;
+		const file = input.files?.[0];
+		// Reset so the same photo can be picked again.
+		input.value = '';
+		if (!file || reading) return;
+		if (preview) {
+			labelMessage = 'Preview only, no photo was sent.';
+			return;
+		}
+		reading = true;
+		labelMessage = '';
+		try {
+			let photo: string;
+			try {
+				photo = await resizeToJpegDataUri(file);
+			} catch {
+				labelMessage = "Couldn't open that photo.";
+				return;
+			}
+			try {
+				const outcome = await readLabel(photo);
+				if (outcome.ok) applyLabel(outcome.values);
+				else labelMessage = LABEL_ERRORS[outcome.reason];
+			} catch {
+				labelMessage = LABEL_ERRORS.unavailable;
+			}
+		} finally {
+			reading = false;
+		}
 	}
 
 	const blur = (field: Field) => () => (touched[field] = true);
@@ -119,6 +208,39 @@
 </script>
 
 <form class="flex flex-col gap-5" onsubmit={submit} novalidate>
+	{#if !foodId}
+		<div class="flex flex-col gap-1.5">
+			<input
+				bind:this={fileInput}
+				type="file"
+				accept="image/*"
+				capture="environment"
+				class="hidden"
+				tabindex="-1"
+				aria-hidden="true"
+				onchange={pickLabel}
+			/>
+			<Button
+				variant="secondary"
+				icon={Camera}
+				loading={reading}
+				disabled={online.current === false}
+				onclick={() => fileInput?.click()}
+			>
+				{reading ? 'Reading label…' : 'Photograph label'}
+			</Button>
+			{#if online.current === false}
+				<p class="text-sm text-text-muted">Needs a connection</p>
+			{/if}
+			<p
+				aria-live="polite"
+				class={labelMessage ? ['text-sm', preview ? 'text-text-muted' : 'text-danger'] : 'sr-only'}
+			>
+				{labelMessage}
+			</p>
+		</div>
+	{/if}
+
 	<div class="flex flex-col gap-3">
 		<Input
 			label="Name"
@@ -152,6 +274,7 @@
 			inputmode="decimal"
 			autocomplete="off"
 			suffix="kcal"
+			hint={photoHint('kcal')}
 			error={shown('kcal')}
 			onblur={blur('kcal')}
 		/>
@@ -162,6 +285,7 @@
 				inputmode="decimal"
 				autocomplete="off"
 				suffix="g"
+				hint={photoHint('protein')}
 				error={shown('protein')}
 				onblur={blur('protein')}
 			/>
@@ -171,6 +295,7 @@
 				inputmode="decimal"
 				autocomplete="off"
 				suffix="g"
+				hint={photoHint('carbs')}
 				error={shown('carbs')}
 				onblur={blur('carbs')}
 			/>
@@ -180,6 +305,7 @@
 				inputmode="decimal"
 				autocomplete="off"
 				suffix="g"
+				hint={photoHint('fat')}
 				error={shown('fat')}
 				onblur={blur('fat')}
 			/>
@@ -189,6 +315,7 @@
 				inputmode="decimal"
 				autocomplete="off"
 				suffix="g"
+				hint={photoHint('fiber')}
 				error={shown('fiber')}
 				onblur={blur('fiber')}
 			/>
@@ -202,7 +329,7 @@
 			inputmode="decimal"
 			autocomplete="off"
 			suffix="g"
-			hint="Lets you log it in servings."
+			hint={photoHint('servingG') ?? 'Lets you log it in servings.'}
 			error={shown('servingG')}
 			onblur={blur('servingG')}
 		/>

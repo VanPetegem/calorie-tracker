@@ -16,6 +16,7 @@ $pushes_commits || exit 0
 export ORIGIN="${ORIGIN:-http://localhost:4173}"
 export BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-build-validation-only}"
 export OFF_CONTACT_EMAIL="${OFF_CONTACT_EMAIL:-build-validation-only@example.invalid}"
+export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-build-validation-only}"
 
 echo 'pre-push: running pnpm verify (skip with git push --no-verify)'
 exec pnpm verify

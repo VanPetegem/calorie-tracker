@@ -53,7 +53,8 @@ vi.mock('../../../routes/(app)/foods.remote.ts', () => ({
 	pickOff: vi.fn(),
 	lookupBarcode: vi.fn(),
 	createFood: vi.fn(),
-	updateFood: vi.fn()
+	updateFood: vi.fn(),
+	readLabel: vi.fn()
 }));
 
 const beef = {

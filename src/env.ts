@@ -12,6 +12,9 @@ export const variables = defineEnvVars({
 		description:
 			'Contact in the Open Food Facts User-Agent (`kcal-avp/<version> (<email>)`). A Worker secret in production.'
 	},
+	ANTHROPIC_API_KEY: {
+		description: 'Claude API key for reading nutrition label photos. A Worker secret in production.'
+	},
 	OFF_BASE_URL: {
 		description:
 			'Open Food Facts product API host. Defaults to the real API; e2e points it at e2e/off-stub.mjs.',

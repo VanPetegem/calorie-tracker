@@ -21,6 +21,7 @@ env:
   ORIGIN: http://localhost:4173
   BETTER_AUTH_SECRET: build-validation-only
   OFF_CONTACT_EMAIL: build-validation-only@example.invalid
+  ANTHROPIC_API_KEY: build-validation-only
 
 jobs:
   # Types and lint need no browser, so no container: the fastest job, about a minute.
@@ -138,6 +139,7 @@ jobs:
       ORIGIN: https://kcal.avp.software
       BETTER_AUTH_SECRET: build-validation-only
       OFF_CONTACT_EMAIL: build-validation-only@example.invalid
+      ANTHROPIC_API_KEY: build-validation-only
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

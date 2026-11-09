@@ -23,7 +23,8 @@ vi.mock('../../foods.remote.ts', () => ({
 	pickOff: vi.fn(),
 	lookupBarcode: vi.fn(),
 	createFood: vi.fn(),
-	updateFood: vi.fn()
+	updateFood: vi.fn(),
+	readLabel: vi.fn()
 }));
 
 const RECIPE_ID = '0198a000-0000-7000-8000-0000000000aa';

@@ -9,6 +9,8 @@ import { decideAccess } from '#lib/server/guard.ts';
 import { isRateLimitedPath, rateLimitKey } from '#lib/server/rate-limit.ts';
 import { TOO_MANY_ATTEMPTS } from '#lib/auth-rules.ts';
 
+export { handleError } from '#lib/server/handle-error.ts';
+
 let instance: Auth | undefined;
 
 /**
