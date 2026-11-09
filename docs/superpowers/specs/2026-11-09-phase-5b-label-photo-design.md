@@ -37,7 +37,7 @@ covers accuracy.
 
 - `FoodForm` without `foodId` shows "Photograph label" (barcode miss, manual new food, recipe ingredient). It opens
   `<input type="file" accept="image/*" capture="environment">`. Off while offline, with a hint.
-- The client downsizes to a 1568 px long edge (Claude's native size) JPEG at quality 0.85 (`createImageBitmap` and a canvas) and sends a
+- The client downsizes to a 1568 px long edge (a cost choice: Opus 5.5 reads up to 2576 px) JPEG at quality 0.85 (`createImageBitmap` and a canvas) and sends a
   data URI. The button shows "Reading label…" and the form stays editable.
 - The server: requires a signed in user (existing guard), `LABEL_LIMITER` 6 a minute, rejects a payload over 1.5 MB
   or not `data:image/jpeg;base64,`. The prompt asks for the per 100 g (or 100 ml) column and the serving

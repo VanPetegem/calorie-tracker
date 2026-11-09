@@ -1,4 +1,4 @@
-/** Longest edge Claude reads an image at natively; larger images are only downscaled server side. */
+/** Longest edge sent. A cost choice: Opus 5.5 reads up to 2576 px, but a label stays legible at 1568 px with fewer image tokens. */
 export const LABEL_MAX_EDGE = 1568;
 
 const JPEG_QUALITY = 0.85;
@@ -46,6 +46,8 @@ function draw(
 	height: number
 ): void {
 	if (!ctx) throw new Error('2D canvas unavailable');
+	ctx.imageSmoothingEnabled = true;
+	ctx.imageSmoothingQuality = 'high';
 	ctx.drawImage(source, 0, 0, width, height);
 }
 

@@ -49,6 +49,9 @@ function getLabel(): LabelReader {
 	label ??= createLabelReader({
 		client: new Anthropic({
 			apiKey: ANTHROPIC_API_KEY,
+			// A photo read takes seconds; fail well before the Worker does and retry once.
+			timeout: 60_000,
+			maxRetries: 1,
 			// Same detached `fetch` rule as getOff.
 			fetch: (input, init) => fetch(input, init)
 		}),

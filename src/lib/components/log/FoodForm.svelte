@@ -137,11 +137,20 @@
 		reading = true;
 		labelMessage = '';
 		try {
-			const outcome = await readLabel(await resizeToJpegDataUri(file));
-			if (outcome.ok) applyLabel(outcome.values);
-			else labelMessage = LABEL_ERRORS[outcome.reason];
-		} catch {
-			labelMessage = LABEL_ERRORS.unavailable;
+			let photo: string;
+			try {
+				photo = await resizeToJpegDataUri(file);
+			} catch {
+				labelMessage = "Couldn't open that photo.";
+				return;
+			}
+			try {
+				const outcome = await readLabel(photo);
+				if (outcome.ok) applyLabel(outcome.values);
+				else labelMessage = LABEL_ERRORS[outcome.reason];
+			} catch {
+				labelMessage = LABEL_ERRORS.unavailable;
+			}
 		} finally {
 			reading = false;
 		}

@@ -195,6 +195,34 @@ describe('FoodForm label photo', () => {
 		await expect.element(field('Calories')).toHaveValue('120');
 	});
 
+	it('switches the basis to ml when the label is per 100 ml', async () => {
+		mocks.readLabel.mockResolvedValue({
+			ok: true,
+			values: { ...labelValues, nutritionBasis: 'ml' }
+		});
+		render(FoodForm, { onsaved: vi.fn() });
+		await expect.element(page.getByRole('radio', { name: 'g', exact: true })).toBeChecked();
+		await pickPhoto();
+		await expect.element(page.getByRole('radio', { name: 'ml', exact: true })).toBeChecked();
+	});
+
+	it('says the reader is unavailable when the call is rejected', async () => {
+		mocks.readLabel.mockRejectedValue(new Error('offline'));
+		render(FoodForm, { onsaved: vi.fn() });
+		await pickPhoto();
+		await expect
+			.element(page.getByText("Couldn't reach the label reader. Try again."))
+			.toBeVisible();
+	});
+
+	it('says the photo could not be opened when the resize fails, without calling the reader', async () => {
+		mocks.resizeToJpegDataUri.mockRejectedValue(new Error('decode failed'));
+		render(FoodForm, { onsaved: vi.fn() });
+		await pickPhoto();
+		await expect.element(page.getByText("Couldn't open that photo.")).toBeVisible();
+		expect(mocks.readLabel).not.toHaveBeenCalled();
+	});
+
 	it('shows no photo button when editing a food', async () => {
 		render(FoodForm, { onsaved: vi.fn(), foodId: 'food-1' });
 		await expect.element(field('Name')).toBeVisible();

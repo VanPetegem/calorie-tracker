@@ -121,12 +121,17 @@ browser project for that reason.
 ### Label photo
 
 `FoodForm` (new foods only) has "Photograph label". The client shrinks the photo to a 1568 px long edge JPEG
+(a cost choice: Opus 5.5 reads up to 2576 px)
 (`src/lib/client/resize-image.ts`) and calls the `readLabel` command, which sends it to the Claude API
 (`src/lib/server/label/read.ts`: `claude-opus-5-5`, effort `medium`, structured JSON output, server side refusal
 fallback). Only a per 100 g or per 100 ml column is read. `normalize.ts` drops values outside the `FoodInput`
 ranges. Every failure is a `reason` (`unreadable`, `rate_limited`, `unavailable`), never a throw. Filled fields
 show "From photo, was X" until edited; nothing is saved until Save. The photo is never stored or logged. Tests use
 a fake client; nothing calls the API from CI.
+The Anthropic client has a 60 s timeout and one retry. Failures are logged without content: the `unreadable` branch
+(`stop_reason`, `no_text`, `bad_json`, `bad_shape`, `not_found`), or the error name, status and request id.
+A remote function validation failure logs only issue paths and messages (`src/lib/server/handle-error.ts`),
+because valibot issues carry the input, which is the photo.
 
 ### BLV generics migration
 
