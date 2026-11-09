@@ -1,10 +1,15 @@
 import * as v from 'valibot';
 
-/** A JPEG data URI from the client resize, at most about 1.5 MB of image (2,000,000 base64 chars). */
+export const JPEG_DATA_URI_PREFIX = 'data:image/jpeg;base64,';
+
+/** Longest label photo data URI accepted: about 1.5 MB of image. */
+export const LABEL_PHOTO_MAX_CHARS = 2_000_000;
+
+/** A JPEG data URI from the client resize. */
 export const ReadLabelInput = v.pipe(
 	v.string(),
-	v.maxLength(2_000_000),
-	v.startsWith('data:image/jpeg;base64,')
+	v.maxLength(LABEL_PHOTO_MAX_CHARS),
+	v.startsWith(JPEG_DATA_URI_PREFIX)
 );
 
 /** Values read from a per 100 g (or 100 ml) column. Null: not printed or out of range. */

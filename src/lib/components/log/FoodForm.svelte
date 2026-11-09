@@ -8,6 +8,7 @@
 	import { FoodInput } from '#lib/schemas/food.ts';
 	import type { LabelValues } from '#lib/schemas/label.ts';
 	import type { Food } from '#lib/server/db/schema.ts';
+	import { parseDecimal } from '#lib/utils/decimal.ts';
 	import { Button, Input, SegmentedControl } from '#lib/components/ui/index.ts';
 	import { createFood, readLabel, updateFood } from '../../../routes/(app)/foods.remote.ts';
 
@@ -108,19 +109,32 @@
 		return marker.was ? `From photo, was ${marker.was}` : 'From photo';
 	}
 
-	const sameNumber = (a: string, b: string) =>
-		Number(a.trim().replace(',', '.')) === Number(b.trim().replace(',', '.'));
+	const sameNumber = (a: string, b: string) => {
+		const x = parseDecimal(a);
+		return x !== null && x === parseDecimal(b);
+	};
 
 	function applyLabel(label: LabelValues) {
 		basis = label.nutritionBasis;
 		for (const field of LABEL_FIELDS) {
 			const read = label[field];
-			if (read === null) continue;
-			const was = values[field];
+			if (read === null) {
+				// An earlier photo's value, still unedited, does not belong to this label: put back what was there.
+				const marker = fromPhoto[field];
+				if (marker && marker.value === values[field]) {
+					values[field] = marker.was;
+					delete fromPhoto[field];
+				}
+				continue;
+			}
+			const current = values[field];
 			const value = String(read);
-			if (was.trim() !== '' && sameNumber(was, value)) continue;
+			if (current.trim() !== '' && sameNumber(current, value)) continue;
+			// Over an unedited earlier photo value, keep pointing at what the user had before any photo.
+			const marker = fromPhoto[field];
+			const was = marker && marker.value === current ? marker.was : current.trim();
 			values[field] = value;
-			fromPhoto[field] = { value, was: was.trim() };
+			fromPhoto[field] = { value, was };
 		}
 	}
 

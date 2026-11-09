@@ -4,7 +4,7 @@ import type {
 	MessageCreateParamsNonStreaming
 } from '@anthropic-ai/sdk/resources/beta/messages/messages';
 import * as v from 'valibot';
-import type { ReadLabelResult } from '../../schemas/label.ts';
+import { JPEG_DATA_URI_PREFIX, type ReadLabelResult } from '../../schemas/label.ts';
 import { ModelLabel, normalizeLabel } from './normalize.ts';
 
 export const LABEL_MODEL = 'claude-opus-5-5';
@@ -25,7 +25,6 @@ export type LabelReader = { read(dataUri: string): Promise<ReadLabelResult> };
 
 // All photos count under one key: the cost is on one account, and the app has one user.
 const LIMIT_KEY = 'label';
-const DATA_URI_PREFIX = 'data:image/jpeg;base64,';
 
 /** Structured output schema; keep it in step with `ModelLabel`. */
 export const LABEL_JSON_SCHEMA = {
@@ -82,7 +81,7 @@ export function createLabelReader({ client, limiter }: LabelReaderDeps): LabelRe
 							source: {
 								type: 'base64',
 								media_type: 'image/jpeg',
-								data: dataUri.slice(DATA_URI_PREFIX.length)
+								data: dataUri.slice(JPEG_DATA_URI_PREFIX.length)
 							}
 						},
 						{ type: 'text', text: PROMPT }

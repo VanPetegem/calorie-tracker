@@ -183,6 +183,18 @@ describe('FoodForm label photo', () => {
 		await expect.element(page.getByText('From photo', { exact: true }).first()).toBeVisible();
 	});
 
+	it('undoes a value from an earlier photo when the next photo does not print it', async () => {
+		mocks.readLabel.mockResolvedValueOnce({ ok: true, values: labelValues });
+		mocks.readLabel.mockResolvedValueOnce({ ok: true, values: { ...labelValues, fat: null } });
+		render(FoodForm, { onsaved: vi.fn(), initial: { kcal: 120 } });
+		await pickPhoto();
+		await expect.element(field('Fat')).toHaveValue('7');
+		await pickPhoto();
+		await expect.poll(() => mocks.readLabel.mock.calls.length).toBe(2);
+		await expect.element(field('Fat')).toHaveValue('');
+		await expect.element(field('Calories')).toHaveValue('250');
+	});
+
 	it.each([
 		['unreadable', "Couldn't read the label. It needs a per 100 g column."],
 		['rate_limited', 'Too many photos, try again in a minute.'],
