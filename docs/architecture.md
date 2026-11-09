@@ -112,10 +112,21 @@ chunks are not among them. e2e replaces `getUserMedia` and `BarcodeDetector` in 
 | `AUTH_LIMITER`        | 1001      | 10 a min | credential POSTs per `cf-connecting-ip` (see request flow) |
 | `OFF_PRODUCT_LIMITER` | 1002      | 12 a min | outgoing OFF product reads, one shared key (OFF allows 15) |
 | `OFF_SEARCH_LIMITER`  | 1003      | 8 a min  | outgoing OFF searches, one shared key (OFF allows 10)      |
+| `LABEL_LIMITER`       | 1004      | 6 a min  | label photos sent to the Claude API, one shared key        |
 
-All three count per Cloudflare location and are eventually consistent, so the caps are approximate. The OFF ones
+All four count per Cloudflare location and are eventually consistent, so the caps are approximate. The OFF ones
 are shared by the whole Worker, because OFF limits our egress, not our user. e2e keeps to two OFF searches per
 browser project for that reason.
+
+### Label photo
+
+`FoodForm` (new foods only) has "Photograph label". The client shrinks the photo to a 1568 px long edge JPEG
+(`src/lib/client/resize-image.ts`) and calls the `readLabel` command, which sends it to the Claude API
+(`src/lib/server/label/read.ts`: `claude-opus-5-5`, effort `medium`, structured JSON output, server side refusal
+fallback). Only a per 100 g or per 100 ml column is read. `normalize.ts` drops values outside the `FoodInput`
+ranges. Every failure is a `reason` (`unreadable`, `rate_limited`, `unavailable`), never a throw. Filled fields
+show "From photo, was X" until edited; nothing is saved until Save. The photo is never stored or logged. Tests use
+a fake client; nothing calls the API from CI.
 
 ### BLV generics migration
 
@@ -435,6 +446,7 @@ pnpm build && pnpm wrangler deploy
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `BETTER_AUTH_SECRET`    | Production: Worker secret, set once with `pnpm wrangler secret put BETTER_AUTH_SECRET`. Local: `.env` and `.dev.vars` (gitignored). |
 | `OFF_CONTACT_EMAIL`     | Production: Worker secret, `pnpm wrangler secret put OFF_CONTACT_EMAIL`. Local: `.env`. e2e writes a fixed value to `.dev.vars`.    |
+| `ANTHROPIC_API_KEY`     | Production: Worker secret, `pnpm wrangler secret put ANTHROPIC_API_KEY`. Local: `.env`. CI, pre-push and e2e use a placeholder.     |
 | `CLOUDFLARE_API_TOKEN`  | Local: `.env`, read by wrangler. CI: GitHub Actions secret.                                                                         |
 | `CLOUDFLARE_ACCOUNT_ID` | CI: GitHub Actions secret. Local: optional in `.env`.                                                                               |
 
