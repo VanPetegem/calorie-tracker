@@ -27,7 +27,8 @@ vi.mock('../../../routes/(app)/log.remote.ts', () => ({
 vi.mock('../../../routes/(app)/foods.remote.ts', () => ({
 	loadFood: mocks.loadFood,
 	createFood: vi.fn(),
-	updateFood: vi.fn()
+	updateFood: vi.fn(),
+	readLabel: vi.fn()
 }));
 
 const entry: LogEntry = {
