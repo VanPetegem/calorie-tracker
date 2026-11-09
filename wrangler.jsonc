@@ -39,10 +39,16 @@
 			"name": "OFF_SEARCH_LIMITER",
 			"namespace_id": "1003",
 			"simple": { "limit": 8, "period": 60 }
+		},
+		// Nutrition label photos sent to the Claude API (src/lib/server/label): each call costs money, so 6 a minute.
+		{
+			"name": "LABEL_LIMITER",
+			"namespace_id": "1004",
+			"simple": { "limit": 6, "period": 60 }
 		}
 	],
 	// Declared so `wrangler types` does not infer the Env type from whatever .env or .dev.vars holds locally.
-	"secrets": { "required": ["BETTER_AUTH_SECRET", "OFF_CONTACT_EMAIL"] },
+	"secrets": { "required": ["BETTER_AUTH_SECRET", "OFF_CONTACT_EMAIL", "ANTHROPIC_API_KEY"] },
 	// Production only. Local dev and e2e override ORIGIN and the OFF hosts (see .env.example and playwright.config.ts).
 	"vars": {
 		"ORIGIN": "https://kcal.avp.software",

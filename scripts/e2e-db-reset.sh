@@ -18,6 +18,8 @@ fi
 
 # Fixed value: e2e never reaches Open Food Facts (playwright.config.ts points the Worker at e2e/off-stub.mjs).
 grep -q '^OFF_CONTACT_EMAIL=' .dev.vars 2>/dev/null || echo 'OFF_CONTACT_EMAIL=e2e@example.invalid' >> .dev.vars
+# Fixed value: e2e never calls the Claude API.
+grep -q '^ANTHROPIC_API_KEY=' .dev.vars 2>/dev/null || echo 'ANTHROPIC_API_KEY=e2e-unused' >> .dev.vars
 
 rm -rf .wrangler/e2e
 pnpm wrangler d1 migrations apply DB --local --persist-to .wrangler/e2e

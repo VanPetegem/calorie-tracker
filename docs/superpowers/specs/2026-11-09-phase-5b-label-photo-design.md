@@ -74,5 +74,5 @@ numbers inside schema ranges come back, and the user confirms).
 - `read.spec.ts`: fake client returning valid, malformed and empty JSON, a refusal, an API error; payload limits; rate limit.
 - `FoodForm.svelte.spec.ts`: fill and "From photo" markers, error keeps values, button hidden with `foodId`,
   offline state.
-- `resize-image.spec.ts` (browser project): long edge and output type.
+- `resize-image.svelte.spec.ts` (client browser project): long edge and output type.
 - No e2e (the API is not called from tests). Manual check on a phone before merge.

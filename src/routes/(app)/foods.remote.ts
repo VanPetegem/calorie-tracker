@@ -3,6 +3,7 @@ import { waitUntil } from 'cloudflare:workers';
 import * as v from 'valibot';
 import { id } from '#lib/schemas/fields.ts';
 import { BarcodeLookupInput, FoodInput, UpdateFoodInput } from '#lib/schemas/food.ts';
+import { ReadLabelInput } from '#lib/schemas/label.ts';
 import { appContext } from '#lib/server/context.ts';
 import type { Food } from '#lib/server/db/schema.ts';
 import {
@@ -89,4 +90,13 @@ export const updateFood = command(
 		}
 		return { ok: true, food: await saveFood(db, foodId, input) };
 	}
+);
+
+/**
+ * Reads kcal, macros and serving weight from a photo of a nutrition label (a resized JPEG data URI). The photo is
+ * sent to the Claude API and never stored. A command, not a query: every call costs money and counts against
+ * `LABEL_LIMITER`.
+ */
+export const readLabel = command(ReadLabelInput, async (dataUri) =>
+	(await appContext()).label.read(dataUri)
 );
