@@ -1,4 +1,9 @@
-# kcal
+<a href="https://kcal.avp.software"><img src="docs/assets/banner.svg" alt="kcal: eat more, on purpose" width="100%" /></a>
+
+[![license](https://img.shields.io/github/license/VanPetegem/calorie-tracker?color=4f46e5)](LICENSE)
+[![CI](https://github.com/VanPetegem/calorie-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/VanPetegem/calorie-tracker/actions/workflows/ci.yml)
+
+## What is kcal?
 
 A fast, ad free calorie tracker for one person, built for Swiss supermarket products. Installable PWA on
 SvelteKit 3, Cloudflare Workers and D1, running for free on the Cloudflare free plan.

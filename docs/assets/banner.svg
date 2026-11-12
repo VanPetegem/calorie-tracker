@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="440" viewBox="0 0 1600 440">
+	<title>kcal: eat more, on purpose</title>
+	<defs>
+		<path
+			id="flame"
+			d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"
+		/>
+	</defs>
+	<rect width="1600" height="440" fill="#09090b" />
+	<text
+		x="88"
+		y="246"
+		fill="#fafafa"
+		font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
+		font-size="184"
+		font-weight="200"
+		letter-spacing="14"
+	>KCAL</text>
+	<text
+		x="94"
+		y="328"
+		fill="#d4d4d8"
+		font-family="Georgia, 'Times New Roman', serif"
+		font-size="54"
+		font-weight="700"
+	>eat more, on purpose</text>
+	<!-- Lucide "flame" (ISC), drawn as a double outline: a wide brand stroke with a narrower background stroke on top. -->
+	<g
+		transform="translate(1180 22) scale(16)"
+		fill="none"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	>
+		<use href="#flame" stroke="#818cf8" stroke-width="2.4" />
+		<use href="#flame" stroke="#09090b" stroke-width="1.6" />
+	</g>
+</svg>
